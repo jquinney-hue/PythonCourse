@@ -1,0 +1,87 @@
+{
+  "id": "python-print",
+  "title": "Print & Output",
+  "description": "Learn how to display text and data in Python using the print() function.",
+  "steps": [
+    {
+      "id": "intro",
+      "title": "What is print()?",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>What is <code class='bg-gray-100 px-1 rounded'>print()</code>?</h2><p class='mb-4 text-gray-700'>In Python, <code class='bg-gray-100 px-1 rounded'>print()</code> is a built-in function that displays output to the screen. It's one of the first things every Python programmer learns.</p><p class='mb-4 text-gray-700'>Whenever you want to show something — a message, a number, or a result — you use <code class='bg-gray-100 px-1 rounded'>print()</code>.</p><div class='bg-gray-800 rounded-lg p-4 mb-4'><pre class='text-green-400 font-mono text-sm'>print(\"Hello, World!\")</pre></div><p class='text-gray-700 mb-3'>Running the code above would display:</p><div class='bg-gray-100 rounded-lg p-4 mb-5'><pre class='text-gray-800 font-mono text-sm'>Hello, World!</pre></div><p class='text-gray-700'>Use the editor below to run it yourself. Click <strong>Run</strong> and see the output appear.</p><div id='editor-intro' class='mt-3'></div>",
+      "css": "",
+      "js": "PyLearn.createEditor({ containerId: 'editor-intro', initialCode: 'print(\"Hello, World!\")', label: 'Try it out' });"
+    },
+    {
+      "id": "strings",
+      "title": "Printing Text",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Printing Text (Strings)</h2><p class='mb-4 text-gray-700'>Text in Python is called a <strong>string</strong>. Strings must be wrapped in quotes — either single <code class='bg-gray-100 px-1 rounded'>'</code> or double <code class='bg-gray-100 px-1 rounded'>\"</code> quotes.</p><div class='bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4'><p class='text-yellow-800 text-sm'><strong>Tip:</strong> Use double quotes when your text contains an apostrophe, so Python doesn't get confused.</p></div><p class='text-gray-700 mb-3'>Try editing the code below and running it:</p><div id='editor-strings' class='mt-3'></div>",
+      "css": "",
+      "js": "PyLearn.createEditor({ containerId: 'editor-strings', initialCode: 'print(\"Hello, World!\")\nprint(\\'Python is fun\\')\nprint(\"I\\'m learning Python\")', label: 'Strings' });"
+    },
+    {
+      "id": "numbers",
+      "title": "Printing Numbers",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Printing Numbers</h2><p class='mb-4 text-gray-700'>Numbers don't need quotes. You can print integers and floats directly, and Python will evaluate expressions before printing.</p><div id='editor-numbers'></div><div class='bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3'><p class='text-blue-800 text-sm'><strong>Note:</strong> <code class='bg-blue-100 px-1 rounded'>100 + 200</code> prints <code class='bg-blue-100 px-1 rounded'>300</code> — Python does the maths first.</p></div>",
+      "css": "",
+      "js": "PyLearn.createEditor({ containerId: 'editor-numbers', initialCode: 'print(42)\nprint(3.14)\nprint(100 + 200)\nprint(10 * 5)', label: 'Numbers' });"
+    },
+    {
+      "id": "multiple",
+      "title": "Multiple Values",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Printing Multiple Values</h2><p class='mb-4 text-gray-700'>Separate items with commas — Python adds a space between each one automatically.</p><div id='editor-multi'></div>",
+      "css": "",
+      "js": "PyLearn.createEditor({ containerId: 'editor-multi', initialCode: 'print(\"My name is\", \"Alice\")\nprint(\"I am\", 25, \"years old\")\nprint(\"Pi is approximately\", 3.14159)', label: 'Multiple values' });"
+    },
+    {
+      "id": "separator",
+      "title": "sep and end",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Customising with <code class='bg-gray-100 px-1 rounded'>sep</code> and <code class='bg-gray-100 px-1 rounded'>end</code></h2><p class='mb-3 text-gray-700'><code class='bg-gray-100 px-1 rounded'>sep</code> controls what goes <em>between</em> items. <code class='bg-gray-100 px-1 rounded'>end</code> controls what's printed at the <em>end</em> of the line (default is a newline).</p><div id='editor-sep'></div>",
+      "css": "",
+      "js": "PyLearn.createEditor({ containerId: 'editor-sep', initialCode: 'print(\"2024\", \"01\", \"15\", sep=\"-\")\nprint(\"a\", \"b\", \"c\", sep=\", \")\nprint(\"Hello\", end=\" \")\nprint(\"World!\")', label: 'sep and end' });"
+    },
+    {
+      "id": "fstrings",
+      "title": "f-Strings",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>f-Strings</h2><p class='mb-4 text-gray-700'>Put <code class='bg-gray-100 px-1 rounded'>f</code> before the opening quote, then use <code class='bg-gray-100 px-1 rounded'>{}</code> to embed variables or expressions directly in the string.</p><div id='editor-fstr'></div>",
+      "css": "",
+      "js": "PyLearn.createEditor({ containerId: 'editor-fstr', initialCode: 'name = \"Alice\"\nage = 25\nprint(f\"My name is {name} and I am {age} years old.\")\n\nwidth = 5\nheight = 3\nprint(f\"The area is {width * height} square metres.\")', label: 'f-Strings' });"
+    },
+    {
+      "id": "challenge-hello",
+      "title": "Challenge: Hello",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Challenge 1 — Say Hello</h2><p class='mb-4 text-gray-700'>Write a line of Python that prints exactly:</p><div class='bg-gray-100 rounded-lg p-4 mb-4 font-mono text-sm text-gray-800'>Hello, Python!</div><p class='text-gray-600 text-sm mb-4'>Your output must match exactly, including the comma and exclamation mark. Click <strong>Run</strong> to check.</p><div id='editor-ch1'></div>",
+      "css": "",
+      "js": "(function(){\n  PyLearn.createEditor({\n    containerId: 'editor-ch1',\n    initialCode: '# Write your print() statement below\\n',\n    label: 'Challenge 1',\n    validate: async function(output, error, code) {\n      if (error) return { pass: false, message: '\\u274c There is an error in your code: ' + error };\n      var trimmed = output.replace(/\\n$/,'');\n      if (trimmed === 'Hello, Python!') {\n        return { pass: true, message: '\\u2705 Perfect! Your output matches exactly.' };\n      }\n      if (!output.trim()) return { pass: false, message: '\\u26a0\\ufe0f Nothing was printed yet. Try writing a print() statement.' };\n      return { pass: false, message: '\\u274c Output was: \"' + trimmed + '\" — check spelling, punctuation and capitalisation.' };\n    },\n    onPass: async function() {\n      await window.__markStepComplete();\n    }\n  });\n})();"
+    },
+    {
+      "id": "challenge-calc",
+      "title": "Challenge: Calculate",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Challenge 2 — Calculate and Print</h2><p class='mb-4 text-gray-700'>Use <code class='bg-gray-100 px-1 rounded'>print()</code> to display the result of <strong>17 multiplied by 6</strong>. Don't type the answer directly — let Python calculate it.</p><div class='bg-gray-100 rounded-lg p-4 mb-4 font-mono text-sm text-gray-800'>102</div><p class='text-gray-600 text-sm mb-4'>Hint: the multiplication operator in Python is <code class='bg-gray-100 px-1 rounded'>*</code>.</p><div id='editor-ch2'></div>",
+      "css": "",
+      "js": "(function(){\n  PyLearn.createEditor({\n    containerId: 'editor-ch2',\n    initialCode: '# Print the result of 17 * 6\\n',\n    label: 'Challenge 2',\n    validate: async function(output, error, code) {\n      if (error) return { pass: false, message: '\\u274c Error: ' + error };\n      if (output.trim() === '102') {\n        if (/102/.test(code) && !/\\*/.test(code)) {\n          return { pass: false, message: '\\u26a0\\ufe0f Close! But use Python to calculate it rather than typing the answer.' };\n        }\n        return { pass: true, message: '\\u2705 Correct! 17 \\u00d7 6 = 102.' };\n      }\n      if (!output.trim()) return { pass: false, message: '\\u26a0\\ufe0f Nothing printed yet.' };\n      return { pass: false, message: '\\u274c Got ' + output.trim() + ' \\u2014 expected 102. Remember: 17 * 6.' };\n    },\n    onPass: async function() {\n      await window.__markStepComplete();\n    }\n  });\n})();"
+    },
+    {
+      "id": "challenge-fstr",
+      "title": "Challenge: f-String",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Challenge 3 — Build an f-String</h2><p class='mb-4 text-gray-700'>Two variables are already defined. Use an f-string to print:</p><div class='bg-gray-100 rounded-lg p-4 mb-4 font-mono text-sm text-gray-800'>My favourite language is Python and it is 34 years old.</div><p class='text-gray-600 text-sm mb-4'>You must use an f-string (not string concatenation). The numbers must come from the variables.</p><div id='editor-ch3'></div>",
+      "css": "",
+      "js": "(function(){\n  PyLearn.createEditor({\n    containerId: 'editor-ch3',\n    initialCode: 'language = \"Python\"\\nage = 34\\n# Write your f-string print() below\\n',\n    label: 'Challenge 3',\n    validate: async function(output, error, code) {\n      if (error) return { pass: false, message: '\\u274c Error: ' + error };\n      var expected = 'My favourite language is Python and it is 34 years old.';\n      var trimmed  = output.replace(/\\n$/,'');\n      if (trimmed !== expected) {\n        if (!output.trim()) return { pass: false, message: '\\u26a0\\ufe0f Nothing printed yet.' };\n        return { pass: false, message: '\\u274c Output was: \"' + trimmed + '\" \\u2014 check it matches the target exactly.' };\n      }\n      if (!/f[\"\\']/.test(code)) {\n        return { pass: false, message: '\\u26a0\\ufe0f Output is correct, but please use an f-string (start your string with f\"...).' };\n      }\n      return { pass: true, message: '\\u2705 Excellent! That is a perfect f-string.' };\n    },\n    onPass: async function() {\n      await window.__markStepComplete();\n    }\n  });\n})();"
+    },
+    {
+      "id": "quiz",
+      "title": "Quick Quiz",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-semibold mb-3 text-gray-800'>Quick Quiz</h2><p class='mb-5 text-gray-700'>Four questions — select the correct answer for each, then click Submit.</p><div id='quiz-container'></div><div id='quiz-result' class='hidden mt-4 p-4 rounded-lg'></div>",
+      "css": "#quiz-container .q-block { margin-bottom: 1.5rem; } #quiz-container .q-block p { font-weight: 600; margin-bottom: 0.5rem; color: #374151; } #quiz-container .option { display: block; width: 100%; text-align: left; padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; border: 1px solid #d1d5db; border-radius: 0.375rem; cursor: pointer; background: #f9fafb; font-size: 0.9rem; transition: background 0.15s; } #quiz-container .option:hover:not(:disabled) { background: #e5e7eb; } #quiz-container .option.correct { background: #d1fae5; border-color: #10b981; color: #065f46; } #quiz-container .option.wrong { background: #fee2e2; border-color: #ef4444; color: #991b1b; } #quiz-submit { margin-top: 1rem; padding: 0.4rem 1.5rem; background: #2563eb; color: white; border-radius: 0.375rem; cursor: pointer; border: none; font-size: 0.9rem; }",
+      "js": "(function(){\n  var questions = [\n    { q: 'Which of the following correctly prints: Hello, World!', options: ['print(Hello, World!)', 'print(\"Hello, World!\")', 'PRINT(\"Hello, World!\")', 'echo \"Hello, World!\"'], answer: 1 },\n    { q: 'What does print(3 + 4) output?', options: ['3 + 4', '\"3 + 4\"', '7', 'Error'], answer: 2 },\n    { q: 'Which argument changes the separator between printed items?', options: ['end', 'sep', 'join', 'split'], answer: 1 },\n    { q: 'What is the output of: print(f\"I have {2 + 3} apples\")', options: ['I have {2 + 3} apples', 'I have 5 apples', 'Error', 'I have 2 + 3 apples'], answer: 1 }\n  ];\n  var container = document.getElementById('quiz-container');\n  var selected = {};\n  questions.forEach(function(q, qi) {\n    var block = document.createElement('div');\n    block.className = 'q-block';\n    block.innerHTML = '<p>' + (qi+1) + '. ' + q.q + '</p>';\n    q.options.forEach(function(opt, oi) {\n      var btn = document.createElement('button');\n      btn.className = 'option';\n      btn.textContent = opt;\n      btn.onclick = function() {\n        block.querySelectorAll('.option').forEach(function(b){ b.style.outline=''; });\n        btn.style.outline = '2px solid #2563eb';\n        selected[qi] = oi;\n      };\n      block.appendChild(btn);\n    });\n    container.appendChild(block);\n  });\n  var submitBtn = document.createElement('button');\n  submitBtn.id = 'quiz-submit';\n  submitBtn.textContent = 'Submit Answers';\n  submitBtn.onclick = async function() {\n    var score = 0;\n    questions.forEach(function(q, qi) {\n      var block = container.children[qi];\n      var opts = block.querySelectorAll('.option');\n      opts.forEach(function(btn, oi) {\n        if (oi === q.answer) btn.classList.add('correct');\n        else if (oi === selected[qi]) btn.classList.add('wrong');\n        btn.disabled = true;\n      });\n      if (selected[qi] === q.answer) score++;\n    });\n    submitBtn.disabled = true;\n    var result = document.getElementById('quiz-result');\n    result.classList.remove('hidden');\n    if (score === questions.length) {\n      result.className = 'mt-4 p-4 rounded-lg bg-green-50 border border-green-200 text-green-800';\n      result.innerHTML = '<strong>\\u2705 Perfect score! ' + score + '/' + questions.length + '</strong> \\u2014 You have mastered the print() function!';\n      await window.__markStepComplete();\n    } else {\n      result.className = 'mt-4 p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800';\n      result.innerHTML = '<strong>Score: ' + score + '/' + questions.length + '</strong> \\u2014 Review the highlighted answers and try again.';\n    }\n  };\n  container.appendChild(submitBtn);\n})();"
+    }
+  ]
+}

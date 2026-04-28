@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PyLearn</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <!-- Skulpt: Python in the browser -->
+  <script src="https://skulpt.org/js/skulpt.min.js"></script>
+  <script src="https://skulpt.org/js/skulpt-stdlib.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .step-pill  { transition: background 0.15s, color 0.15s; }
+    .lesson-tab { transition: background 0.15s, border-color 0.15s; }
+    #step-content pre { white-space: pre-wrap; }
+
+    /* ── Python Editor ────────────────────────────────────────── */
+    .pylearn-editor-wrap { border: 1px solid #d1d5db; border-radius: 0.5rem; overflow: hidden; margin-bottom: 0.75rem; }
+    .pylearn-editor-header { background: #1e293b; color: #94a3b8; font-size: 0.72rem; padding: 0.3rem 0.75rem; display: flex; justify-content: space-between; align-items: center; }
+    .pylearn-code-area { width: 100%; background: #0f172a; color: #e2e8f0; font-family: 'Courier New', Courier, monospace; font-size: 0.85rem; line-height: 1.6; padding: 0.75rem; border: none; resize: vertical; min-height: 80px; outline: none; tab-size: 4; box-sizing: border-box; }
+    .pylearn-output-area { background: #1e293b; color: #a3e635; font-family: 'Courier New', Courier, monospace; font-size: 0.82rem; padding: 0.6rem 0.75rem; min-height: 2rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; border-top: 1px solid #334155; }
+    .pylearn-output-area.has-error { color: #f87171; }
+    .pylearn-toolbar { background: #1e293b; padding: 0.35rem 0.6rem; border-top: 1px solid #334155; display: flex; gap: 0.5rem; align-items: center; }
+    .pylearn-btn-run { background: #2563eb; color: #fff; border: none; border-radius: 0.3rem; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; }
+    .pylearn-btn-run:hover { background: #1d4ed8; }
+    .pylearn-btn-run:disabled { opacity: 0.5; cursor: default; }
+    .pylearn-btn-clear { background: transparent; color: #64748b; border: 1px solid #334155; border-radius: 0.3rem; padding: 0.25rem 0.6rem; font-size: 0.8rem; cursor: pointer; }
+    .pylearn-btn-clear:hover { color: #94a3b8; border-color: #475569; }
+    .pylearn-status { font-size: 0.75rem; color: #64748b; margin-left: auto; }
+    .pylearn-status.ok  { color: #4ade80; }
+    .pylearn-status.err { color: #f87171; }
+    .pylearn-status.run { color: #60a5fa; }
+    .pylearn-feedback { border-radius: 0.375rem; padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-top: 0.5rem; }
+    .pylearn-feedback.pass { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+    .pylearn-feedback.fail { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; }
+    .pylearn-feedback.err  { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+
+    /* spinner */
+    .spinner { border: 2px solid #e5e7eb; border-top-color: #6b7280; border-radius: 50%; width: 18px; height: 18px; animation: spin 0.7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+<!-- ── TOP BAR ─────────────────────────────────────────────── -->
+<header class="bg-white border-b border-gray-200 shadow-sm">
+  <div class="flex items-center justify-between px-4 h-12">
+    <span class="text-blue-600 font-bold text-lg tracking-tight">PyLearn</span>
+    <div id="lesson-tabs" class="flex gap-1 overflow-x-auto flex-1 mx-4"></div>
+    <div class="flex items-center gap-2 shrink-0">
+      <span id="user-label" class="text-sm text-gray-500"></span>
+      <button id="btn-login"  class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Login</button>
+      <button id="btn-logout" class="hidden text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Logout</button>
+      <button id="btn-report" class="hidden text-sm px-3 py-1 rounded border border-blue-300 text-blue-600 hover:bg-blue-50">Export Report</button>
+      <button id="btn-admin"  class="hidden text-sm px-3 py-1 rounded bg-gray-800 text-white hover:bg-gray-700">Admin</button>
+    </div>
+  </div>
+  <div id="step-bar" class="flex gap-1 px-4 py-2 bg-gray-50 border-t border-gray-100 overflow-x-auto"></div>
+</header>
+
+<!-- ── MAIN ───────────────────────────────────────────────── -->
+<main class="flex-1 flex flex-col">
+  <div id="loading-screen" class="flex-1 flex items-center justify-center">
+    <div class="text-center text-gray-500">
+      <div class="spinner mx-auto mb-3"></div>
+      <p class="text-sm">Loading lessons…</p>
+    </div>
+  </div>
+  <div id="app-content" class="hidden flex-1 flex flex-col">
+    <div id="step-content" class="flex-1 p-6 max-w-3xl w-full mx-auto"></div>
+    <div class="border-t border-gray-200 bg-white px-6 py-3 flex justify-between items-center max-w-3xl w-full mx-auto">
+      <button id="btn-prev" class="px-4 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40">&#8592; Previous</button>
+      <span id="step-counter" class="text-sm text-gray-500"></span>
+      <button id="btn-next" class="px-4 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40">Next Step &#8594;</button>
+    </div>
+  </div>
+</main>
+
+<!-- ── LOGIN MODAL ────────────────────────────────────────── -->
+<div id="modal-login" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-80">
+    <h2 class="text-lg font-semibold mb-4">Login</h2>
+    <label class="block text-sm text-gray-600 mb-1">First Name</label>
+    <input id="input-first" type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 mb-3 text-sm focus:outline-none focus:border-blue-400" placeholder="e.g. Alice" />
+    <label class="block text-sm text-gray-600 mb-1">Last Name</label>
+    <input id="input-last"  type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 mb-3 text-sm focus:outline-none focus:border-blue-400" placeholder="e.g. Smith" />
+    <label class="block text-sm text-gray-600 mb-1">Login Code</label>
+    <input id="input-code"  type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 mb-1 text-sm focus:outline-none focus:border-blue-400 uppercase" placeholder="Enter your code" />
+    <p id="login-error" class="text-red-500 text-xs mb-3 hidden"></p>
+    <div class="flex gap-2 mt-2">
+      <button id="btn-login-cancel" class="flex-1 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Cancel</button>
+      <button id="btn-login-submit" class="flex-1 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADMIN MODAL ────────────────────────────────────────── -->
+<div id="modal-admin" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[80vh] flex flex-col">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-semibold">Admin Panel</h2>
+      <button id="btn-admin-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&#x2715;</button>
+    </div>
+    <div class="flex gap-2 mb-4">
+      <button id="btn-gen-code"      class="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700">Generate New Code</button>
+      <button id="btn-refresh-codes" class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Refresh</button>
+    </div>
+    <div id="generated-code" class="hidden mb-3 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800"></div>
+    <div class="overflow-y-auto flex-1">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white">
+          <tr class="border-b border-gray-200 text-left text-gray-600">
+            <th class="pb-2 pr-4">Code</th><th class="pb-2 pr-4">Lessons Started</th>
+            <th class="pb-2 pr-4">Steps Done</th><th class="pb-2">Time Spent</th>
+          </tr>
+        </thead>
+        <tbody id="admin-table-body">
+          <tr><td colspan="4" class="text-gray-400 py-4 text-center">Loading&#8230;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── REPORT MODAL ───────────────────────────────────────── -->
+<div id="modal-report" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg max-h-[80vh] flex flex-col">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-semibold">Progress Report</h2>
+      <button id="btn-report-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&#x2715;</button>
+    </div>
+    <div id="report-content" class="overflow-y-auto flex-1 text-sm text-gray-700"></div>
+    <div class="mt-4 flex gap-2">
+      <button id="btn-export-txt"    class="px-4 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Download Report</button>
+      <button id="btn-report-close2" class="px-4 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  window.PyLearn  —  Skulpt-powered Python runner + editor factory
+//
+//  Lesson JS has access to this global for all Python execution.
+//
+//  API:
+//    PyLearn.runPython(code, [inputFn])
+//      → Promise<{ output: string, error: string|null }>
+//
+//    PyLearn.createEditor(options)
+//      options {
+//        containerId  : string   – id of the <div> to mount inside
+//        initialCode  : string   – starter code shown in editor
+//        label        : string   – header label (default "Python Editor")
+//        readOnly     : bool     – lock the textarea
+//        showOutput   : bool     – show output panel (default true)
+//        validate     : async (output, error, code)
+//                         => { pass: bool, message: string } | null
+//        onPass       : async () => void  – called when validate passes
+//      }
+//      → { getCode(), setCode(str), run() }
+// ════════════════════════════════════════════════════════════════
+window.PyLearn = (() => {
+
+  // ── Core runner ─────────────────────────────────────────────
+  function runPython(code, inputFn) {
+    return new Promise((resolve) => {
+      let output = '';
+
+      Sk.configure({
+        output(text) { output += text; },
+        read(file) {
+          if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
+            throw new Error("File not found: '" + file + "'");
+          return Sk.builtinFiles.files[file];
+        },
+        inputfun: inputFn || (() => Promise.resolve('')),
+        inputfunTakesPromise: true,
+        execLimit: 5000,
+      });
+
+      Sk.misceval.asyncToPromise(
+        () => Sk.importMainWithBody('<stdin>', false, code, true)
+      ).then(
+        ()    => resolve({ output, error: null }),
+        (err) => resolve({ output, error: err.toString() })
+      );
+    });
+  }
+
+  // ── Editor factory ───────────────────────────────────────────
+  function createEditor(opts) {
+    opts = opts || {};
+    const containerId = opts.containerId;
+    const initialCode = opts.initialCode || '';
+    const label       = opts.label       || 'Python Editor';
+    const readOnly    = opts.readOnly    || false;
+    const showOutput  = opts.showOutput  !== false;
+    const validate    = opts.validate    || null;
+    const onPass      = opts.onPass      || null;
+
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.error('PyLearn.createEditor: #' + containerId + ' not found');
+      return null;
+    }
+
+    // Build markup
+    const uid = containerId;
+    container.innerHTML =
+      '<div class="pylearn-editor-wrap">' +
+        '<div class="pylearn-editor-header">' +
+          '<span>&#x1F40D; ' + label + '</span>' +
+          '<span class="pylearn-status" id="' + uid + '-status">ready</span>' +
+        '</div>' +
+        '<textarea id="' + uid + '-code" class="pylearn-code-area"' +
+          (readOnly ? ' readonly' : '') +
+          ' spellcheck="false">' + escHtml(initialCode) + '</textarea>' +
+        (showOutput
+          ? '<div class="pylearn-output-area" id="' + uid + '-output">Output will appear here\u2026</div>'
+          : '') +
+        '<div class="pylearn-toolbar">' +
+          '<button class="pylearn-btn-run" id="' + uid + '-run">&#9654; Run</button>' +
+          (showOutput ? '<button class="pylearn-btn-clear" id="' + uid + '-clear">Clear</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div id="' + uid + '-feedback"></div>';
+
+    const textarea   = document.getElementById(uid + '-code');
+    const statusEl   = document.getElementById(uid + '-status');
+    const outputEl   = showOutput ? document.getElementById(uid + '-output') : null;
+    const runBtn     = document.getElementById(uid + '-run');
+    const clearBtn   = showOutput ? document.getElementById(uid + '-clear') : null;
+    const feedbackEl = document.getElementById(uid + '-feedback');
+
+    // Tab key → 4 spaces
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        var s = textarea.selectionStart, v = textarea.value;
+        textarea.value = v.substring(0, s) + '    ' + v.substring(textarea.selectionEnd);
+        textarea.selectionStart = textarea.selectionEnd = s + 4;
+      }
+    });
+
+    if (clearBtn) {
+      clearBtn.onclick = function() {
+        if (outputEl) { outputEl.textContent = ''; outputEl.classList.remove('has-error'); }
+        feedbackEl.innerHTML = '';
+        setStatus('', 'ready');
+      };
+    }
+
+    function setStatus(type, msg) {
+      statusEl.className = 'pylearn-status' + (type ? ' ' + type : '');
+      statusEl.textContent = msg;
+    }
+
+    function showFeedback(type, msg) {
+      feedbackEl.innerHTML = '<div class="pylearn-feedback ' + type + '">' + escHtml(msg) + '</div>';
+    }
+
+    runBtn.onclick = async function() {
+      var code = textarea.value;
+      runBtn.disabled = true;
+      setStatus('run', 'running\u2026');
+      if (outputEl) { outputEl.textContent = ''; outputEl.classList.remove('has-error'); }
+      feedbackEl.innerHTML = '';
+
+      var result = await runPython(code);
+
+      if (outputEl) {
+        outputEl.textContent = result.error
+          ? (result.output ? result.output + '\n' : '') + result.error
+          : (result.output || '(no output)');
+        outputEl.classList.toggle('has-error', !!result.error);
+      }
+
+      setStatus(result.error ? 'err' : 'ok', result.error ? 'error' : 'done');
+
+      if (validate) {
+        try {
+          var fb = await validate(result.output, result.error, code);
+          if (fb) {
+            showFeedback(fb.pass ? 'pass' : 'fail', fb.message);
+            if (fb.pass && onPass) await onPass();
+          }
+        } catch(ve) { console.error('Validation error:', ve); }
+      }
+
+      runBtn.disabled = false;
+    };
+
+    return {
+      getCode: function()  { return textarea.value; },
+      setCode: function(c) { textarea.value = c; },
+      run:     function()  { runBtn.click(); },
+    };
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  return { runPython, createEditor };
+})();
+
+
+// ════════════════════════════════════════════════════════════════
+//  APP STATE
+// ════════════════════════════════════════════════════════════════
+var state = {
+  config: null,
+  lessons: [],
+  currentLessonIdx: 0,
+  currentStepIdx: 0,
+  isAdmin: false,
+  db: null,
+  uid: null,
+  progress: {},
+  stepStartTime: null,
+  stepInjectedStyle: null,
+};
+
+// ── Utilities ────────────────────────────────────────────────
+function genCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var seg = function() {
+    return Array.from({length:4}, function() {
+      return chars[Math.random()*chars.length|0];
+    }).join('');
+  };
+  return seg()+'-'+seg()+'-'+seg();
+}
+
+function fmtMs(ms) {
+  if (!ms || ms < 1000) return '< 1s';
+  var s = Math.floor(ms/1000);
+  if (s < 60) return s+'s';
+  var m = Math.floor(s/60), rs = s%60;
+  if (m < 60) return m+'m '+rs+'s';
+  return Math.floor(m/60)+'h '+(m%60)+'m';
+}
+
+function getStepProgress(lid, sid) { return (state.progress[lid] && state.progress[lid][sid]) || {}; }
+function isStepComplete(lid, sid)  { return !!getStepProgress(lid,sid).completed; }
+function isStepStarted(lid, sid)   { return !!getStepProgress(lid,sid).startedAt; }
+function isLessonComplete(lesson)  { return lesson.data.steps.every(function(s){ return isStepComplete(lesson.meta.id,s.id); }); }
+function isLessonStarted(lesson)   { return lesson.data.steps.some(function(s){  return isStepStarted(lesson.meta.id,s.id);  }); }
+
+// ── Firebase helpers ─────────────────────────────────────────
+function progressRef(lid, sid) { return state.db.ref('progress/'+state.uid+'/'+lid+'/'+sid); }
+
+async function loadProgress() {
+  if (!state.uid) return;
+  var snap = await state.db.ref('progress/'+state.uid).get();
+  state.progress = snap.exists() ? snap.val() : {};
+}
+
+async function markStepStarted(lid, sid) {
+  if (!state.uid) return;
+  if (getStepProgress(lid,sid).startedAt) return;
+  var now = Date.now();
+  if (!state.progress[lid]) state.progress[lid] = {};
+  if (!state.progress[lid][sid]) state.progress[lid][sid] = {};
+  state.progress[lid][sid].startedAt = now;
+  await progressRef(lid,sid).update({ startedAt: now });
+  state.stepStartTime = now;
+}
+
+async function saveStepTime() {
+  var lesson = state.lessons[state.currentLessonIdx];
+  var step   = lesson.data.steps[state.currentStepIdx];
+  if (!state.uid || !state.stepStartTime) return;
+  var elapsed  = Date.now() - state.stepStartTime;
+  state.stepStartTime = null;
+  var existing = getStepProgress(lesson.meta.id, step.id).totalMs || 0;
+  var newTotal = existing + elapsed;
+  if (!state.progress[lesson.meta.id]) state.progress[lesson.meta.id] = {};
+  if (!state.progress[lesson.meta.id][step.id]) state.progress[lesson.meta.id][step.id] = {};
+  state.progress[lesson.meta.id][step.id].totalMs = newTotal;
+  await progressRef(lesson.meta.id, step.id).update({ totalMs: newTotal });
+}
+
+async function markStepComplete(lid, sid) {
+  if (!state.uid) return;
+  if (!state.progress[lid]) state.progress[lid] = {};
+  if (!state.progress[lid][sid]) state.progress[lid][sid] = {};
+  state.progress[lid][sid].completed = true;
+  await progressRef(lid,sid).update({ completed: true });
+  renderStepBar();
+  renderLessonTabs();
+}
+
+// ── Load app data ─────────────────────────────────────────────
+async function loadApp() {
+  var res    = await fetch('lessons/index.json');
+  state.config = await res.json();
+
+  firebase.initializeApp(state.config.firebase);
+  state.db = firebase.database();
+
+  for (var i = 0; i < state.config.lessons.length; i++) {
+    var meta = state.config.lessons[i];
+    var r    = await fetch(meta.file);
+    var data = await r.json();
+    state.lessons.push({ meta: meta, data: data });
+  }
+
+  document.getElementById('loading-screen').classList.add('hidden');
+  document.getElementById('app-content').classList.remove('hidden');
+  renderLessonTabs();
+  loadStep(0, 0);
+  setupAuthUI();
+}
+
+// ── Render ────────────────────────────────────────────────────
+function renderLessonTabs() {
+  var container = document.getElementById('lesson-tabs');
+  container.innerHTML = '';
+  state.lessons.forEach(function(lesson, idx) {
+    var complete = state.uid && isLessonComplete(lesson);
+    var started  = state.uid && isLessonStarted(lesson);
+    var active   = idx === state.currentLessonIdx;
+    var btn = document.createElement('button');
+    btn.className = 'lesson-tab px-3 py-1 rounded text-sm whitespace-nowrap border ' + (
+      active    ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' :
+      complete  ? 'border-green-400 bg-green-50 text-green-700 hover:bg-green-100' :
+      started   ? 'border-yellow-400 bg-yellow-50 text-yellow-700 hover:bg-yellow-100' :
+                  'border-gray-200 bg-white text-gray-600 hover:bg-gray-50');
+    btn.textContent = lesson.data.title;
+    btn.onclick = function() { saveStepTime(); loadLesson(idx); };
+    container.appendChild(btn);
+  });
+}
+
+function renderStepBar() {
+  var container = document.getElementById('step-bar');
+  container.innerHTML = '';
+  var lesson = state.lessons[state.currentLessonIdx];
+  lesson.data.steps.forEach(function(step, idx) {
+    var complete = state.uid && isStepComplete(lesson.meta.id, step.id);
+    var started  = state.uid && isStepStarted(lesson.meta.id, step.id);
+    var active   = idx === state.currentStepIdx;
+    var btn = document.createElement('button');
+    btn.className = 'step-pill px-3 py-1 rounded text-xs border whitespace-nowrap ' + (
+      active    ? 'border-blue-500 bg-blue-100 text-blue-700 font-semibold' :
+      complete  ? 'border-green-400 bg-green-100 text-green-700 hover:bg-green-200' :
+      started   ? 'border-yellow-400 bg-yellow-100 text-yellow-700 hover:bg-yellow-200' :
+                  'border-gray-200 bg-white text-gray-500 hover:bg-gray-50');
+    btn.textContent = step.title;
+    btn.onclick = function() { saveStepTime(); loadStep(state.currentLessonIdx, idx); };
+    container.appendChild(btn);
+  });
+}
+
+// ── Load lesson / step ────────────────────────────────────────
+function loadLesson(idx) {
+  state.currentLessonIdx = idx;
+  state.currentStepIdx   = 0;
+  renderLessonTabs();
+  loadStep(idx, 0);
+}
+
+function loadStep(lessonIdx, stepIdx) {
+  state.currentLessonIdx = lessonIdx;
+  state.currentStepIdx   = stepIdx;
+  renderStepBar();
+
+  var lesson = state.lessons[lessonIdx];
+  var step   = lesson.data.steps[stepIdx];
+
+  // Step CSS
+  if (state.stepInjectedStyle) state.stepInjectedStyle.remove();
+  if (step.css) {
+    var styleEl = document.createElement('style');
+    styleEl.textContent = step.css;
+    document.head.appendChild(styleEl);
+    state.stepInjectedStyle = styleEl;
+  } else {
+    state.stepInjectedStyle = null;
+  }
+
+  // Content
+  document.getElementById('step-content').innerHTML = step.content;
+
+  // Nav
+  var total = lesson.data.steps.length;
+  document.getElementById('step-counter').textContent = 'Step '+(stepIdx+1)+' of '+total;
+  document.getElementById('btn-prev').disabled = stepIdx === 0;
+  document.getElementById('btn-next').disabled = stepIdx === total - 1;
+  document.getElementById('btn-next').textContent = stepIdx === total-1 ? 'Finish \u2713' : 'Next Step \u2192';
+
+  // Time tracking
+  if (state.uid) {
+    state.stepStartTime = Date.now();
+    markStepStarted(lesson.meta.id, step.id);
+  }
+
+  // API available to step JS
+  window.__markStepComplete = async function() {
+    await saveStepTime();
+    await markStepComplete(lesson.meta.id, step.id);
+  };
+
+  // Step JS
+  if (step.js) {
+    setTimeout(function() {
+      try { eval(step.js); } catch(e) { console.error('Step JS error:', e); }
+    }, 50);
+  }
+}
+
+// ── Navigation ────────────────────────────────────────────────
+document.getElementById('btn-prev').onclick = async function() {
+  await saveStepTime();
+  if (state.currentStepIdx > 0) loadStep(state.currentLessonIdx, state.currentStepIdx-1);
+};
+
+document.getElementById('btn-next').onclick = async function() {
+  var lesson = state.lessons[state.currentLessonIdx];
+  var step   = lesson.data.steps[state.currentStepIdx];
+  await saveStepTime();
+  if (step.autoComplete !== false) await markStepComplete(lesson.meta.id, step.id);
+  var next = state.currentStepIdx + 1;
+  if (next < lesson.data.steps.length) loadStep(state.currentLessonIdx, next);
+};
+
+// ── Auth ──────────────────────────────────────────────────────
+function setupAuthUI() {
+  var modalLogin = document.getElementById('modal-login');
+
+  document.getElementById('btn-login').onclick = function() {
+    modalLogin.classList.remove('hidden');
+    var saved = localStorage.getItem('pylearn_name');
+    if (saved) {
+      var n = JSON.parse(saved);
+      document.getElementById('input-first').value = n.first || '';
+      document.getElementById('input-last').value  = n.last  || '';
+    }
+  };
+
+  document.getElementById('btn-login-cancel').onclick = function() { modalLogin.classList.add('hidden'); };
+
+  document.getElementById('btn-login-submit').onclick = async function() {
+    var first = document.getElementById('input-first').value.trim();
+    var last  = document.getElementById('input-last').value.trim();
+    var code  = document.getElementById('input-code').value.trim().toUpperCase();
+    var errEl = document.getElementById('login-error');
+    errEl.classList.add('hidden');
+
+    if (!first||!last) { errEl.textContent='Please enter your name.';       errEl.classList.remove('hidden'); return; }
+    if (!code)         { errEl.textContent='Please enter your login code.'; errEl.classList.remove('hidden'); return; }
+
+    if (code === state.config.adminCode) {
+      localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
+      localStorage.setItem('pylearn_code', code);
+      state.isAdmin=true; state.uid='admin';
+      modalLogin.classList.add('hidden');
+      updateAuthUI(first,last,true);
+      return;
+    }
+    try {
+      var snap = await state.db.ref('codes/'+code).get();
+      if (!snap.exists()) { errEl.textContent='Invalid code. Please ask your teacher.'; errEl.classList.remove('hidden'); return; }
+      localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
+      localStorage.setItem('pylearn_code', code);
+      state.uid=code; state.isAdmin=false;
+      await loadProgress();
+      renderLessonTabs(); renderStepBar();
+      modalLogin.classList.add('hidden');
+      updateAuthUI(first,last,false);
+    } catch(e) { errEl.textContent='Error connecting. Please try again.'; errEl.classList.remove('hidden'); }
+  };
+
+  document.getElementById('btn-logout').onclick = async function() {
+    await saveStepTime();
+    localStorage.removeItem('pylearn_code');
+    state.uid=null; state.isAdmin=false; state.progress={};
+    updateAuthUI(null,null,false);
+    renderLessonTabs(); renderStepBar();
+  };
+
+  document.getElementById('btn-report').onclick = showReport;
+  document.getElementById('btn-admin').onclick   = showAdmin;
+  document.getElementById('btn-admin-close').onclick  = function(){ document.getElementById('modal-admin').classList.add('hidden'); };
+  document.getElementById('btn-report-close').onclick  = function(){ document.getElementById('modal-report').classList.add('hidden'); };
+  document.getElementById('btn-report-close2').onclick = function(){ document.getElementById('modal-report').classList.add('hidden'); };
+  document.getElementById('btn-export-txt').onclick   = exportReport;
+
+  // Auto-login
+  var savedCode = localStorage.getItem('pylearn_code');
+  var savedName = localStorage.getItem('pylearn_name');
+  if (savedCode && savedName) {
+    var n = JSON.parse(savedName);
+    if (savedCode === state.config.adminCode) {
+      state.uid='admin'; state.isAdmin=true;
+      updateAuthUI(n.first,n.last,true);
+    } else {
+      state.uid=savedCode;
+      loadProgress().then(function(){ renderLessonTabs(); renderStepBar(); });
+      updateAuthUI(n.first,n.last,false);
+    }
+  }
+}
+
+function updateAuthUI(first, last, isAdmin) {
+  var show = !!first;
+  document.getElementById('btn-login').classList.toggle('hidden',  show);
+  document.getElementById('btn-logout').classList.toggle('hidden', !show);
+  document.getElementById('btn-report').classList.toggle('hidden', !show||isAdmin);
+  document.getElementById('btn-admin').classList.toggle('hidden',  !isAdmin);
+  document.getElementById('user-label').textContent = show ? first+' '+last : '';
+}
+
+// ── Admin ─────────────────────────────────────────────────────
+async function showAdmin() {
+  document.getElementById('modal-admin').classList.remove('hidden');
+  await refreshAdminTable();
+}
+
+async function refreshAdminTable() {
+  var tbody = document.getElementById('admin-table-body');
+  tbody.innerHTML = '<tr><td colspan="4" class="text-gray-400 py-4 text-center">Loading\u2026</td></tr>';
+  try {
+    var results = await Promise.all([state.db.ref('codes').get(), state.db.ref('progress').get()]);
+    var codes   = results[0].exists() ? results[0].val() : {};
+    var allProg = results[1].exists() ? results[1].val() : {};
+    tbody.innerHTML = '';
+    var codeKeys = Object.keys(codes);
+    if (!codeKeys.length) { tbody.innerHTML='<tr><td colspan="4" class="text-gray-400 py-4 text-center">No codes yet.</td></tr>'; return; }
+    codeKeys.forEach(function(code) {
+      var prog=allProg[code]||{}, lessonsStarted=0, stepsDone=0, totalMs=0;
+      Object.keys(prog).forEach(function(lid){
+        var lStarted=false;
+        Object.keys(prog[lid]).forEach(function(sid){
+          var s=prog[lid][sid];
+          if(s.startedAt) lStarted=true;
+          if(s.completed) stepsDone++;
+          if(s.totalMs)   totalMs+=s.totalMs;
+        });
+        if(lStarted) lessonsStarted++;
+      });
+      var tr=document.createElement('tr');
+      tr.className='border-b border-gray-100';
+      tr.innerHTML='<td class="py-2 pr-4 font-mono text-xs">'+code+'</td><td class="py-2 pr-4">'+lessonsStarted+'</td><td class="py-2 pr-4">'+stepsDone+'</td><td class="py-2">'+fmtMs(totalMs)+'</td>';
+      tbody.appendChild(tr);
+    });
+  } catch(e) {
+    tbody.innerHTML='<tr><td colspan="4" class="text-red-400 py-4 text-center">Error loading data.</td></tr>';
+  }
+}
+
+document.getElementById('btn-gen-code').onclick = async function() {
+  var code = genCode();
+  await state.db.ref('codes/'+code).set({ createdAt: Date.now() });
+  var el = document.getElementById('generated-code');
+  el.classList.remove('hidden');
+  el.textContent = 'New code: '+code;
+  await refreshAdminTable();
+};
+
+document.getElementById('btn-refresh-codes').onclick = refreshAdminTable;
+
+// ── Report ────────────────────────────────────────────────────
+function showReport() {
+  document.getElementById('modal-report').classList.remove('hidden');
+  var el   = document.getElementById('report-content');
+  var name = (function(){ try{ var n=JSON.parse(localStorage.getItem('pylearn_name')); return n.first+' '+n.last; }catch(e){ return 'Student'; } })();
+  var html = '<p class="mb-3 font-semibold">'+name+' \u2014 '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+'</p>';
+  state.lessons.forEach(function(lesson){
+    var lid=lesson.meta.id, complete=isLessonComplete(lesson), started=isLessonStarted(lesson);
+    var cls=complete?'text-green-700 bg-green-50 border-green-200':started?'text-yellow-700 bg-yellow-50 border-yellow-200':'text-gray-500 bg-gray-50 border-gray-200';
+    var status=complete?'Complete':started?'In Progress':'Not Started';
+    var lessonMs=0; lesson.data.steps.forEach(function(s){ lessonMs+=getStepProgress(lid,s.id).totalMs||0; });
+    html+='<div class="mb-4 border rounded-lg p-3 '+cls+'"><div class="flex justify-between items-center mb-2"><span class="font-medium">'+lesson.data.title+'</span><span class="text-xs">'+status+' \u00b7 '+fmtMs(lessonMs)+'</span></div>';
+    html+='<table class="w-full text-xs"><thead><tr class="text-left opacity-70"><th class="pb-1 pr-3">Step</th><th class="pb-1 pr-3">Status</th><th class="pb-1">Time</th></tr></thead><tbody>';
+    lesson.data.steps.forEach(function(step){
+      var sp=getStepProgress(lid,step.id);
+      var st=sp.completed?'\u2705 Complete':sp.startedAt?'\uD83D\uDFE1 Started':'\u2B1C Not started';
+      html+='<tr><td class="pr-3 py-0.5">'+step.title+'</td><td class="pr-3">'+st+'</td><td>'+fmtMs(sp.totalMs)+'</td></tr>';
+    });
+    html+='</tbody></table></div>';
+  });
+  el.innerHTML=html;
+}
+
+function exportReport() {
+  var name=(function(){ try{ var n=JSON.parse(localStorage.getItem('pylearn_name')); return n.first+' '+n.last; }catch(e){ return 'Student'; } })();
+  var txt='PyLearn Progress Report\n'+name+'\n'+new Date().toLocaleString('en-GB')+'\n'+'='.repeat(40)+'\n\n';
+  state.lessons.forEach(function(lesson){
+    var lid=lesson.meta.id, lessonMs=0;
+    lesson.data.steps.forEach(function(s){ lessonMs+=getStepProgress(lid,s.id).totalMs||0; });
+    var status=isLessonComplete(lesson)?'COMPLETE':isLessonStarted(lesson)?'IN PROGRESS':'NOT STARTED';
+    txt+='Lesson: '+lesson.data.title+' ['+status+'] - '+fmtMs(lessonMs)+'\n';
+    lesson.data.steps.forEach(function(step){
+      var sp=getStepProgress(lid,step.id);
+      txt+='  \u2022 '+step.title+': '+(sp.completed?'Complete':sp.startedAt?'Started':'Not started')+' ('+fmtMs(sp.totalMs)+')\n';
+    });
+    txt+='\n';
+  });
+  var blob=new Blob([txt],{type:'text/plain'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='pylearn-report-'+name.replace(/\s/g,'-').toLowerCase()+'.txt';
+  a.click();
+}
+
+// ── Init ──────────────────────────────────────────────────────
+loadApp().catch(function(e) {
+  document.getElementById('loading-screen').innerHTML =
+    '<div class="text-center text-red-500"><p class="font-semibold">Failed to load</p><p class="text-sm mt-1">'+e.message+'</p><p class="text-xs mt-2 text-gray-400">Ensure lessons/index.json exists and you are serving over HTTP.</p></div>';
+});
+</script>
+</body>
+</html>
