@@ -20,7 +20,7 @@
     /* ── Python Editor ────────────────────────────────────────── */
     .pylearn-editor-wrap { border: 1px solid #d1d5db; border-radius: 0.5rem; overflow: hidden; margin-bottom: 0.75rem; }
     .pylearn-editor-header { background: #1e293b; color: #94a3b8; font-size: 0.72rem; padding: 0.3rem 0.75rem; display: flex; justify-content: space-between; align-items: center; }
-    .pylearn-code-area { width: 100%; background: #0f172a; color: #e2e8f0; font-family: 'Courier New', Courier, monospace; font-size: 0.85rem; line-height: 1.6; padding: 0.75rem; border: none; resize: vertical; min-height: 80px; outline: none; tab-size: 4; box-sizing: border-box; }
+    .pylearn-code-area { width: 100%; background: #0f172a; color: #e2e8f0; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; line-height: 1.6; padding: 0.75rem; border: none; resize: vertical; min-height: 180px; outline: none; tab-size: 4; box-sizing: border-box; }
     .pylearn-output-area { background: #1e293b; color: #a3e635; font-family: 'Courier New', Courier, monospace; font-size: 0.82rem; padding: 0.6rem 0.75rem; min-height: 2rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; border-top: 1px solid #334155; }
     .pylearn-output-area.has-error { color: #f87171; }
     .pylearn-toolbar { background: #1e293b; padding: 0.35rem 0.6rem; border-top: 1px solid #334155; display: flex; gap: 0.5rem; align-items: center; }
@@ -235,6 +235,11 @@ window.PyLearn = (() => {
     const runBtn     = document.getElementById(uid + '-run');
     const clearBtn   = showOutput ? document.getElementById(uid + '-clear') : null;
     const feedbackEl = document.getElementById(uid + '-feedback');
+
+    // Auto-size: minimum 8 lines; if initial code is longer, grow to fit (cap 20 lines)
+    var lineCount = (initialCode.match(/\n/g) || []).length + 1;
+    var lines = Math.min(Math.max(lineCount + 2, 8), 20);
+    textarea.style.height = (lines * 1.6) + 'rem';
 
     // Tab key → 4 spaces
     textarea.addEventListener('keydown', function(e) {
