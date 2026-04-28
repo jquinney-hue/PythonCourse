@@ -20,9 +20,14 @@
     /* ── Python Editor ────────────────────────────────────────── */
     .pylearn-editor-wrap { border: 1px solid #d1d5db; border-radius: 0.5rem; overflow: hidden; margin-bottom: 0.75rem; }
     .pylearn-editor-header { background: #1e293b; color: #94a3b8; font-size: 0.72rem; padding: 0.3rem 0.75rem; display: flex; justify-content: space-between; align-items: center; }
+    .pylearn-header-tools { display: flex; align-items: center; gap: 0.5rem; }
+    .pylearn-btn-reset { background: transparent; color: #94a3b8; border: 1px solid #334155; border-radius: 0.25rem; padding: 0.05rem 0.45rem; font-size: 0.7rem; cursor: pointer; font-family: inherit; }
+    .pylearn-btn-reset:hover { color: #cbd5e1; border-color: #475569; background: #334155; }
     .pylearn-code-area { width: 100%; background: #0f172a; color: #e2e8f0; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; line-height: 1.6; padding: 0.75rem; border: none; resize: vertical; min-height: 180px; outline: none; tab-size: 4; box-sizing: border-box; }
     .pylearn-output-area { background: #1e293b; color: #a3e635; font-family: 'Courier New', Courier, monospace; font-size: 0.82rem; padding: 0.6rem 0.75rem; min-height: 2rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; border-top: 1px solid #334155; }
     .pylearn-output-area.has-error { color: #f87171; }
+    .pylearn-output-area.pylearn-output-listening { box-shadow: inset 0 0 0 2px #2563eb; color: #e2e8f0; }
+    .pylearn-output-area.pylearn-output-listening::before { content: ''; }
     .pylearn-toolbar { background: #1e293b; padding: 0.35rem 0.6rem; border-top: 1px solid #334155; display: flex; gap: 0.5rem; align-items: center; }
     .pylearn-btn-run { background: #2563eb; color: #fff; border: none; border-radius: 0.3rem; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; }
     .pylearn-btn-run:hover { background: #1d4ed8; }
@@ -166,20 +171,31 @@
 window.PyLearn = (() => {
 
   // ── Core runner ─────────────────────────────────────────────
-  function runPython(code, inputFn) {
+  // opts: { onOutput?(text), inputFn?(prompt) -> Promise<string> }
+  // Falls back to (text -> buffered) and (prompt -> "") if not provided.
+  function runPython(code, opts) {
+    // Backwards compat: if a function is passed as second arg, treat as inputFn
+    if (typeof opts === 'function') opts = { inputFn: opts };
+    opts = opts || {};
     return new Promise((resolve) => {
       let output = '';
+      const onOutput = opts.onOutput || null;
+      const inputFn  = opts.inputFn  || (() => Promise.resolve(''));
 
       Sk.configure({
-        output(text) { output += text; },
+        output(text) {
+          output += text;
+          if (onOutput) onOutput(text);
+        },
         read(file) {
           if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
             throw new Error("File not found: '" + file + "'");
           return Sk.builtinFiles.files[file];
         },
-        inputfun: inputFn || (() => Promise.resolve('')),
+        inputfun: inputFn,
         inputfunTakesPromise: true,
-        execLimit: 5000,
+        // No execLimit: we may be waiting on a human typing input.
+        // Skulpt still bails on infinite loops via stack/yield mechanics for await calls.
       });
 
       Sk.misceval.asyncToPromise(
@@ -201,6 +217,7 @@ window.PyLearn = (() => {
     const showOutput  = opts.showOutput  !== false;
     const validate    = opts.validate    || null;
     const onPass      = opts.onPass      || null;
+    const persist     = opts.persist     !== false;  // Save code to localStorage by default
 
     const container = document.getElementById(containerId);
     if (!container) {
@@ -210,15 +227,40 @@ window.PyLearn = (() => {
 
     // Build markup
     const uid = containerId;
+
+    // Storage key — saves student's code per step so it persists across navigation
+    var storageKey = null;
+    if (persist) {
+      try {
+        var lid = window.__pylearnCurrentLessonId;
+        var sid = window.__pylearnCurrentStepId;
+        if (lid && sid) {
+          storageKey = 'pylearn_code:' + lid + ':' + sid + ':' + containerId;
+        }
+      } catch(e) {}
+    }
+
+    // Try to load previously saved code for this editor
+    var startingCode = initialCode;
+    if (storageKey) {
+      try {
+        var saved = localStorage.getItem(storageKey);
+        if (saved !== null) startingCode = saved;
+      } catch(e) {}
+    }
+
     container.innerHTML =
       '<div class="pylearn-editor-wrap">' +
         '<div class="pylearn-editor-header">' +
           '<span>&#x1F40D; ' + label + '</span>' +
-          '<span class="pylearn-status" id="' + uid + '-status">ready</span>' +
+          '<span class="pylearn-header-tools">' +
+            (storageKey && !readOnly ? '<button class="pylearn-btn-reset" id="' + uid + '-reset" title="Reset to starter code">&#x21BA; Reset</button>' : '') +
+            '<span class="pylearn-status" id="' + uid + '-status">ready</span>' +
+          '</span>' +
         '</div>' +
         '<textarea id="' + uid + '-code" class="pylearn-code-area"' +
           (readOnly ? ' readonly' : '') +
-          ' spellcheck="false">' + escHtml(initialCode) + '</textarea>' +
+          ' spellcheck="false">' + escHtml(startingCode) + '</textarea>' +
         (showOutput
           ? '<div class="pylearn-output-area" id="' + uid + '-output">Output will appear here\u2026</div>'
           : '') +
@@ -234,12 +276,35 @@ window.PyLearn = (() => {
     const outputEl   = showOutput ? document.getElementById(uid + '-output') : null;
     const runBtn     = document.getElementById(uid + '-run');
     const clearBtn   = showOutput ? document.getElementById(uid + '-clear') : null;
+    const resetBtn   = (storageKey && !readOnly) ? document.getElementById(uid + '-reset') : null;
     const feedbackEl = document.getElementById(uid + '-feedback');
 
-    // Auto-size: minimum 8 lines; if initial code is longer, grow to fit (cap 20 lines)
-    var lineCount = (initialCode.match(/\n/g) || []).length + 1;
+    // Auto-size: minimum 8 lines; if code is longer, grow to fit (cap 20 lines)
+    var lineCount = (startingCode.match(/\n/g) || []).length + 1;
     var lines = Math.min(Math.max(lineCount + 2, 8), 20);
     textarea.style.height = (lines * 1.6) + 'rem';
+
+    // Save on every keystroke
+    if (storageKey) {
+      textarea.addEventListener('input', function() {
+        try { localStorage.setItem(storageKey, textarea.value); } catch(e) {}
+      });
+    }
+
+    // Reset button: restore original starter code
+    if (resetBtn) {
+      resetBtn.onclick = function() {
+        if (!confirm('Reset your code to the starting code? Your changes will be lost.')) return;
+        textarea.value = initialCode;
+        try { localStorage.removeItem(storageKey); } catch(e) {}
+        if (outputEl) { outputEl.textContent = 'Output will appear here\u2026'; outputEl.classList.remove('has-error'); }
+        feedbackEl.innerHTML = '';
+        // Re-size textarea for the original code
+        var lc = (initialCode.match(/\n/g) || []).length + 1;
+        var ln = Math.min(Math.max(lc + 2, 8), 20);
+        textarea.style.height = (ln * 1.6) + 'rem';
+      };
+    }
 
     // Tab key → 4 spaces
     textarea.addEventListener('keydown', function(e) {
@@ -248,6 +313,8 @@ window.PyLearn = (() => {
         var s = textarea.selectionStart, v = textarea.value;
         textarea.value = v.substring(0, s) + '    ' + v.substring(textarea.selectionEnd);
         textarea.selectionStart = textarea.selectionEnd = s + 4;
+        // Trigger save
+        if (storageKey) { try { localStorage.setItem(storageKey, textarea.value); } catch(e) {} }
       }
     });
 
@@ -272,16 +339,92 @@ window.PyLearn = (() => {
       var code = textarea.value;
       runBtn.disabled = true;
       setStatus('run', 'running\u2026');
-      if (outputEl) { outputEl.textContent = ''; outputEl.classList.remove('has-error'); }
+      if (outputEl) {
+        outputEl.textContent = '';
+        outputEl.classList.remove('has-error');
+      }
       feedbackEl.innerHTML = '';
 
-      var result = await runPython(code);
+      // Live output streaming: append each chunk to the output element as it arrives
+      var liveText = '';
+      var onOutput = outputEl ? function(text) {
+        liveText += text;
+        outputEl.textContent = liveText;
+        outputEl.scrollTop = outputEl.scrollHeight;
+      } : null;
+
+      // Live input: when Python calls input(prompt), show the prompt and let the
+      // user type into the output area until they press Enter.
+      var liveInputFn = outputEl ? function(prompt) {
+        return new Promise(function(resolve) {
+          // Show prompt as part of the output (prompt has no trailing newline)
+          var promptText = prompt || '';
+          liveText += promptText;
+          outputEl.textContent = liveText;
+
+          // Track what the user is typing (highlighted at the end of output)
+          var typed = '';
+          var promptLen = liveText.length;
+
+          function render() {
+            // Show the live output + a visual cursor
+            outputEl.textContent = liveText.substring(0, promptLen) + typed + '\u2588';
+            outputEl.scrollTop = outputEl.scrollHeight;
+          }
+
+          function onKeyDown(e) {
+            // Don't capture keys typed in inputs/textareas elsewhere
+            var t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              document.removeEventListener('keydown', onKeyDown);
+              outputEl.classList.remove('pylearn-output-listening');
+              // Commit: append the typed text + newline to liveText
+              liveText = liveText.substring(0, promptLen) + typed + '\n';
+              outputEl.textContent = liveText;
+              outputEl.scrollTop = outputEl.scrollHeight;
+              resolve(typed);
+            } else if (e.key === 'Backspace') {
+              e.preventDefault();
+              typed = typed.slice(0, -1);
+              render();
+            } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              // printable character
+              e.preventDefault();
+              typed += e.key;
+              render();
+            }
+          }
+
+          outputEl.classList.add('pylearn-output-listening');
+          // Move focus away from the code textarea so keystrokes hit our handler
+          if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+          }
+          render();
+          document.addEventListener('keydown', onKeyDown);
+        });
+      } : null;
+
+      // If caller provided an explicit inputFn override, prefer that (used by validators)
+      var effectiveInputFn = (typeof runBtn._inputFnOverride === 'function')
+        ? runBtn._inputFnOverride
+        : liveInputFn;
+
+      var result = await runPython(code, {
+        onOutput: onOutput,
+        inputFn: effectiveInputFn,
+      });
 
       if (outputEl) {
-        outputEl.textContent = result.error
-          ? (result.output ? result.output + '\n' : '') + result.error
-          : (result.output || '(no output)');
-        outputEl.classList.toggle('has-error', !!result.error);
+        // Final state
+        if (result.error) {
+          outputEl.textContent = (liveText || '') + (liveText && !liveText.endsWith('\n') ? '\n' : '') + result.error;
+          outputEl.classList.add('has-error');
+        } else if (!liveText) {
+          outputEl.textContent = '(no output)';
+        }
       }
 
       setStatus(result.error ? 'err' : 'ok', result.error ? 'error' : 'done');
@@ -301,8 +444,14 @@ window.PyLearn = (() => {
 
     return {
       getCode: function()  { return textarea.value; },
-      setCode: function(c) { textarea.value = c; },
+      setCode: function(c) {
+        textarea.value = c;
+        if (storageKey) { try { localStorage.setItem(storageKey, c); } catch(e) {} }
+      },
       run:     function()  { runBtn.click(); },
+      // Set a function to provide input() answers automatically instead of asking the user.
+      // Pass null to restore live keyboard input. Useful for demos where the answer is fixed.
+      setInputFn: function(fn) { runBtn._inputFnOverride = fn || null; },
     };
   }
 
@@ -494,6 +643,10 @@ function loadStep(lessonIdx, stepIdx) {
   // Content
   document.getElementById('step-content').innerHTML = step.content;
 
+  // Expose current location so createEditor can build a stable storage key
+  window.__pylearnCurrentLessonId = lesson.meta.id;
+  window.__pylearnCurrentStepId   = step.id;
+
   // Nav
   var total = lesson.data.steps.length;
   document.getElementById('step-counter').textContent = 'Step '+(stepIdx+1)+' of '+total;
@@ -586,6 +739,13 @@ function setupAuthUI() {
   document.getElementById('btn-logout').onclick = async function() {
     await saveStepTime();
     localStorage.removeItem('pylearn_code');
+    // Clear all saved per-step code so the next student doesn't see this one's work
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('pylearn_code:') === 0) localStorage.removeItem(k);
+      }
+    } catch(e) {}
     state.uid=null; state.isAdmin=false; state.progress={};
     updateAuthUI(null,null,false);
     renderLessonTabs(); renderStepBar();
