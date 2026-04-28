@@ -21,6 +21,12 @@
       "title": "Loops",
       "file": "lessons/python-loops.json",
       "order": 2
+    },
+{
+      "id": "gcse-loops",
+      "title": "GCSE Loops",
+      "file": "lessons/gcse-loops.json",
+      "order": 3
     }
   ]
 }
