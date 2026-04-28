@@ -172,15 +172,31 @@ window.PyLearn = (() => {
 
   // ── Core runner ─────────────────────────────────────────────
   // opts: { onOutput?(text), inputFn?(prompt) -> Promise<string> }
-  // Falls back to (text -> buffered) and (prompt -> "") if not provided.
+  // Returns { output, error, prompts } where:
+  //   output  - all stdout EXCEPT input() prompts (just real print output)
+  //   prompts - array of prompt strings shown by input() calls
+  //   error   - error string if execution failed, else null
   function runPython(code, opts) {
     // Backwards compat: if a function is passed as second arg, treat as inputFn
     if (typeof opts === 'function') opts = { inputFn: opts };
     opts = opts || {};
     return new Promise((resolve) => {
       let output = '';
+      const prompts = [];
       const onOutput = opts.onOutput || null;
-      const inputFn  = opts.inputFn  || (() => Promise.resolve(''));
+      const userInputFn = opts.inputFn || (() => Promise.resolve(''));
+
+      // Wrap inputFn so we can strip the prompt from buffered output.
+      // Skulpt writes the prompt to stdout immediately before calling inputfun.
+      // We trim that prompt off the end of `output` so validators see only print() text.
+      const wrappedInputFn = function(prompt) {
+        var p = prompt || '';
+        prompts.push(p);
+        if (p && output.endsWith(p)) {
+          output = output.substring(0, output.length - p.length);
+        }
+        return userInputFn(p);
+      };
 
       Sk.configure({
         output(text) {
@@ -192,17 +208,16 @@ window.PyLearn = (() => {
             throw new Error("File not found: '" + file + "'");
           return Sk.builtinFiles.files[file];
         },
-        inputfun: inputFn,
+        inputfun: wrappedInputFn,
         inputfunTakesPromise: true,
         // No execLimit: we may be waiting on a human typing input.
-        // Skulpt still bails on infinite loops via stack/yield mechanics for await calls.
       });
 
       Sk.misceval.asyncToPromise(
         () => Sk.importMainWithBody('<stdin>', false, code, true)
       ).then(
-        ()    => resolve({ output, error: null }),
-        (err) => resolve({ output, error: err.toString() })
+        ()    => resolve({ output, prompts, error: null }),
+        (err) => resolve({ output, prompts, error: err.toString() })
       );
     });
   }
