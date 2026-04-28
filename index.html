@@ -56,6 +56,7 @@
     <span class="text-blue-600 font-bold text-lg tracking-tight">PyLearn</span>
     <div id="lesson-tabs" class="flex gap-1 overflow-x-auto flex-1 mx-4"></div>
     <div class="flex items-center gap-2 shrink-0">
+      <select id="year-group-select" class="text-sm border border-gray-300 rounded px-2 py-1 bg-white text-gray-700 focus:outline-none focus:border-blue-400"></select>
       <span id="user-label" class="text-sm text-gray-500"></span>
       <button id="btn-login"  class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Login</button>
       <button id="btn-logout" class="hidden text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Logout</button>
@@ -484,8 +485,12 @@ window.PyLearn = (() => {
 //  APP STATE
 // ════════════════════════════════════════════════════════════════
 var state = {
-  config: null,
-  lessons: [],
+  config: null,          // firebase.json contents
+  lessonIndex: null,     // lessons/index.json contents
+  yearGroups: [],        // [{ id, label, lessons: [meta] }]
+  allLessons: [],        // all loaded { meta, data } across all year groups
+  currentYearGroup: null,// id of the active year group
+  lessons: [],           // filtered to currentYearGroup
   currentLessonIdx: 0,
   currentStepIdx: 0,
   isAdmin: false,
@@ -568,24 +573,93 @@ async function markStepComplete(lid, sid) {
 
 // ── Load app data ─────────────────────────────────────────────
 async function loadApp() {
-  var res    = await fetch('lessons/index.json');
-  state.config = await res.json();
+  // Fetch firebase config and lesson index in parallel
+  var results = await Promise.all([
+    fetch('config/firebase.json').then(function(r) { return r.json(); }),
+    fetch('lessons/index.json').then(function(r) { return r.json(); }),
+  ]);
+  state.config      = results[0];  // { firebase, adminCode }
+  state.lessonIndex = results[1];  // { yearGroups: [...] }
+  state.yearGroups  = state.lessonIndex.yearGroups;
 
+  // Init Firebase
   firebase.initializeApp(state.config.firebase);
   state.db = firebase.database();
 
-  for (var i = 0; i < state.config.lessons.length; i++) {
-    var meta = state.config.lessons[i];
-    var r    = await fetch(meta.file);
-    var data = await r.json();
-    state.lessons.push({ meta: meta, data: data });
-  }
+  // Load ALL lesson files across all year groups up front
+  var lessonFilesNeeded = [];
+  state.yearGroups.forEach(function(yg) {
+    yg.lessons.forEach(function(meta) {
+      // Attach yearGroupId to meta for filtering later
+      meta.yearGroupId = yg.id;
+      lessonFilesNeeded.push(meta);
+    });
+  });
+
+  // Deduplicate by file path in case two year groups share a lesson file
+  var seenFiles = {};
+  var uniqueFiles = lessonFilesNeeded.filter(function(meta) {
+    if (seenFiles[meta.file]) return false;
+    seenFiles[meta.file] = true;
+    return true;
+  });
+
+  var fetchedData = await Promise.all(
+    uniqueFiles.map(function(meta) { return fetch(meta.file).then(function(r) { return r.json(); }); })
+  );
+
+  var fileDataMap = {};
+  uniqueFiles.forEach(function(meta, i) { fileDataMap[meta.file] = fetchedData[i]; });
+
+  // Build allLessons
+  lessonFilesNeeded.forEach(function(meta) {
+    state.allLessons.push({ meta: meta, data: fileDataMap[meta.file] });
+  });
+
+  // Build year group selector
+  var select = document.getElementById('year-group-select');
+  select.innerHTML = '';
+  state.yearGroups.forEach(function(yg) {
+    var opt = document.createElement('option');
+    opt.value  = yg.id;
+    opt.textContent = yg.label;
+    select.appendChild(opt);
+  });
+
+  // Restore saved year group preference (or default to first)
+  var savedYG = localStorage.getItem('pylearn_year_group');
+  var initialYG = (savedYG && state.yearGroups.find(function(y){ return y.id === savedYG; }))
+    ? savedYG
+    : state.yearGroups[0].id;
+
+  select.value = initialYG;
+  select.onchange = function() {
+    saveStepTime();
+    applyYearGroup(select.value);
+  };
 
   document.getElementById('loading-screen').classList.add('hidden');
   document.getElementById('app-content').classList.remove('hidden');
-  renderLessonTabs();
-  loadStep(0, 0);
+
+  applyYearGroup(initialYG);
   setupAuthUI();
+}
+
+// Switch to a year group: filter lessons, reset navigation, re-render
+function applyYearGroup(ygId) {
+  localStorage.setItem('pylearn_year_group', ygId);
+  state.currentYearGroup = ygId;
+
+  // Filter allLessons to this year group, preserving original order
+  state.lessons = state.allLessons.filter(function(l) { return l.meta.yearGroupId === ygId; });
+
+  state.currentLessonIdx = 0;
+  state.currentStepIdx   = 0;
+
+  renderLessonTabs();
+  if (state.lessons.length > 0) {
+    loadStep(0, 0);
+  }
 }
 
 // ── Render ────────────────────────────────────────────────────
@@ -894,7 +968,7 @@ function exportReport() {
 // ── Init ──────────────────────────────────────────────────────
 loadApp().catch(function(e) {
   document.getElementById('loading-screen').innerHTML =
-    '<div class="text-center text-red-500"><p class="font-semibold">Failed to load</p><p class="text-sm mt-1">'+e.message+'</p><p class="text-xs mt-2 text-gray-400">Ensure lessons/index.json exists and you are serving over HTTP.</p></div>';
+    '<div class="text-center text-red-500"><p class="font-semibold">Failed to load</p><p class="text-sm mt-1">'+e.message+'</p><p class="text-xs mt-2 text-gray-400">Ensure config/firebase.json and lessons/index.json exist and you are serving over HTTP.</p></div>';
 });
 </script>
 </body>

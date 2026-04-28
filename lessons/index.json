@@ -1,32 +1,34 @@
 {
-  "firebase": {
-    "apiKey": "AIzaSyABZJr3lLGveSBE3hsueT8Kf8N60uS8E_k",
-    "authDomain": "courses-57fbf.firebaseapp.com",
-    "databaseURL": "https://courses-57fbf-default-rtdb.europe-west1.firebasedatabase.app/",
-    "projectId": "courses-57fbf",
-    "storageBucket": "courses-57fbf.appspot.com",
-    "messagingSenderId": "YOUR_SENDER_ID",
-    "appId": "courses-57fbf"
-  },
-  "adminCode": "ADMIN-X7K2-M9PQ-R4LW-V6NT",
-  "lessons": [
+  "yearGroups": [
     {
-      "id": "login-screen",
-      "title": "Login Screen",
-      "file": "lessons/login-screen.json",
-      "order": 1
+      "id": "year8",
+      "label": "Year 8",
+      "lessons": [
+        {
+          "id": "login-screen",
+          "title": "Login Screen",
+          "file": "lessons/login-screen.json",
+          "order": 1
+        },
+        {
+          "id": "python-loops",
+          "title": "Loops",
+          "file": "lessons/python-loops.json",
+          "order": 2
+        }
+      ]
     },
     {
-      "id": "python-loops",
-      "title": "Loops",
-      "file": "lessons/python-loops.json",
-      "order": 2
-    },
-{
-      "id": "gcse-loops",
-      "title": "GCSE Loops",
-      "file": "lessons/gcse-loops.json",
-      "order": 3
+      "id": "gcse",
+      "label": "GCSE",
+      "lessons": [
+        {
+          "id": "gcse-loops",
+          "title": "GCSE Loops",
+          "file": "lessons/gcse-loops.json",
+          "order": 1
+        }
+      ]
     }
   ]
 }
