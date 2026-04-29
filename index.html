@@ -11,6 +11,8 @@
   <!-- Skulpt: Python in the browser -->
   <script src="https://skulpt.org/js/skulpt.min.js"></script>
   <script src="https://skulpt.org/js/skulpt-stdlib.js"></script>
+  <!-- SheetJS: xlsx export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: 'Segoe UI', system-ui, sans-serif; }
     .step-pill  { transition: background 0.15s, color 0.15s; }
@@ -105,28 +107,51 @@
 
 <!-- ── ADMIN MODAL ────────────────────────────────────────── -->
 <div id="modal-admin" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[80vh] flex flex-col">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl max-h-[85vh] flex flex-col">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-lg font-semibold">Admin Panel</h2>
       <button id="btn-admin-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&#x2715;</button>
     </div>
-    <div class="flex gap-2 mb-4">
-      <button id="btn-gen-code"      class="px-3 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700">Generate New Code</button>
-      <button id="btn-refresh-codes" class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Refresh</button>
+
+    <!-- Generate / add codes -->
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+      <!-- Bulk generate -->
+      <p class="text-sm font-medium text-gray-700 mb-3">Generate codes for a class</p>
+      <div class="flex gap-2 items-end mb-3">
+        <div class="flex-1">
+          <label class="block text-xs text-gray-500 mb-1">Class name</label>
+          <input id="input-class-name" type="text" placeholder="e.g. 7Y1"
+            class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 uppercase" />
+        </div>
+        <div class="w-28">
+          <label class="block text-xs text-gray-500 mb-1">Number of codes</label>
+          <input id="input-code-count" type="number" min="1" max="60" value="30"
+            class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+        </div>
+        <button id="btn-gen-codes" class="px-4 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700 whitespace-nowrap">
+          Generate Codes
+        </button>
+        <button id="btn-refresh-codes" class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">
+          Refresh
+        </button>
+      </div>
+      <!-- Add single code -->
+      <div class="border-t border-gray-200 pt-3 flex gap-2 items-end">
+        <div class="flex-1">
+          <label class="block text-xs text-gray-500 mb-1">Add one student to existing class</label>
+          <input id="input-single-class" type="text" placeholder="Class name (e.g. 7Y1)"
+            class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 uppercase" />
+        </div>
+        <button id="btn-add-single" class="px-4 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 whitespace-nowrap">
+          Add One Code
+        </button>
+      </div>
+      <p id="gen-status" class="text-xs mt-2 text-gray-500 hidden"></p>
     </div>
-    <div id="generated-code" class="hidden mb-3 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800"></div>
-    <div class="overflow-y-auto flex-1">
-      <table class="w-full text-sm">
-        <thead class="sticky top-0 bg-white">
-          <tr class="border-b border-gray-200 text-left text-gray-600">
-            <th class="pb-2 pr-4">Code</th><th class="pb-2 pr-4">Lessons Started</th>
-            <th class="pb-2 pr-4">Steps Done</th><th class="pb-2">Time Spent</th>
-          </tr>
-        </thead>
-        <tbody id="admin-table-body">
-          <tr><td colspan="4" class="text-gray-400 py-4 text-center">Loading&#8230;</td></tr>
-        </tbody>
-      </table>
+
+    <!-- Classes table -->
+    <div class="overflow-y-auto flex-1" id="admin-classes-container">
+      <p class="text-gray-400 text-sm text-center py-4">Loading&#8230;</p>
     </div>
   </div>
 </div>
@@ -174,34 +199,32 @@ window.PyLearn = (() => {
   // ── Core runner ─────────────────────────────────────────────
   // opts: { onOutput?(text), inputFn?(prompt) -> Promise<string> }
   // Returns { output, error, prompts } where:
-  //   output  - all stdout EXCEPT input() prompts (just real print output)
-  //   prompts - array of prompt strings shown by input() calls
+  //   output  - only real print() output — input() prompts are excluded
+  //   prompts - array of prompt strings passed to each input() call
   //   error   - error string if execution failed, else null
   function runPython(code, opts) {
-    // Backwards compat: if a function is passed as second arg, treat as inputFn
     if (typeof opts === 'function') opts = { inputFn: opts };
     opts = opts || {};
     return new Promise((resolve) => {
       let output = '';
       const prompts = [];
-      const onOutput = opts.onOutput || null;
-      const userInputFn = opts.inputFn || (() => Promise.resolve(''));
+      const onOutput    = opts.onOutput   || null;
+      const userInputFn = opts.inputFn    || (() => Promise.resolve(''));
 
-      // Wrap inputFn so we can strip the prompt from buffered output.
-      // Skulpt writes the prompt to stdout immediately before calling inputfun.
-      // We trim that prompt off the end of `output` so validators see only print() text.
-      const wrappedInputFn = function(prompt) {
-        var p = prompt || '';
-        prompts.push(p);
-        if (p && output.endsWith(p)) {
-          output = output.substring(0, output.length - p.length);
-        }
-        return userInputFn(p);
-      };
+      // Flag: while true, text arriving at Sk.output is a prompt — route it to
+      // promptBuffer, not output. Cleared once inputfun resolves.
+      let readingInput = false;
+      let promptBuffer = '';
 
       Sk.configure({
         output(text) {
-          output += text;
+          if (readingInput) {
+            // This text is part of the input() prompt — don't add to output
+            promptBuffer += text;
+          } else {
+            output += text;
+          }
+          // Always call onOutput so the live UI still shows prompts to the student
           if (onOutput) onOutput(text);
         },
         read(file) {
@@ -209,9 +232,37 @@ window.PyLearn = (() => {
             throw new Error("File not found: '" + file + "'");
           return Sk.builtinFiles.files[file];
         },
-        inputfun: wrappedInputFn,
+        inputfun: function(prompt) {
+          // Skulpt calls output(prompt) before calling inputfun.
+          // Set the flag BEFORE that happens by doing it synchronously here.
+          // We can't set it truly before Skulpt's own output call, but we can
+          // strip promptBuffer from output after each input call instead.
+          var p = prompt || '';
+          prompts.push(p);
+          // Strip the prompt from output — Skulpt writes prompt to stdout
+          // synchronously just before calling inputfun, so it's at the end of output
+          if (p && output.endsWith(p)) {
+            output = output.slice(0, -p.length);
+          } else if (p) {
+            // Skulpt may write it with a trailing newline or differently —
+            // try stripping the trimmed version too
+            var trimmed = output.trimEnd();
+            if (trimmed.endsWith(p.trimEnd())) {
+              output = trimmed.slice(0, -p.trimEnd().length);
+            } else {
+              // As a last resort, strip any occurrence of the prompt string from output
+              output = output.split(p).join('');
+            }
+          }
+          readingInput = true;
+          promptBuffer = '';
+          return Promise.resolve(userInputFn(p)).then(function(answer) {
+            readingInput = false;
+            promptBuffer = '';
+            return answer;
+          });
+        },
         inputfunTakesPromise: true,
-        // No execLimit: we may be waiting on a human typing input.
       });
 
       Sk.misceval.asyncToPromise(
@@ -334,6 +385,11 @@ window.PyLearn = (() => {
       }
     });
 
+    // Tell the Next button that this step has an editor (so it requires Run before completing)
+    if (typeof window.__pylearnStepHasEditor !== 'undefined') {
+      window.__pylearnStepHasEditor = true;
+    }
+
     if (clearBtn) {
       clearBtn.onclick = function() {
         if (outputEl) { outputEl.textContent = ''; outputEl.classList.remove('has-error'); }
@@ -352,6 +408,10 @@ window.PyLearn = (() => {
     }
 
     runBtn.onclick = async function() {
+      // Signal that the student has run the code on this step
+      if (typeof window.__pylearnStepRan !== 'undefined') {
+        window.__pylearnStepRan = true;
+      }
       var code = textarea.value;
       runBtn.disabled = true;
       setStatus('run', 'running\u2026');
@@ -523,28 +583,93 @@ function fmtMs(ms) {
 
 function getStepProgress(lid, sid) { return (state.progress[lid] && state.progress[lid][sid]) || {}; }
 function isStepComplete(lid, sid)  { return !!getStepProgress(lid,sid).completed; }
-function isStepStarted(lid, sid)   { return !!getStepProgress(lid,sid).startedAt; }
+function isStepStarted(lid, sid)   { var p = getStepProgress(lid,sid); return !!(p.started || p.startedAt); }
 function isLessonComplete(lesson)  { return lesson.data.steps.every(function(s){ return isStepComplete(lesson.meta.id,s.id); }); }
 function isLessonStarted(lesson)   { return lesson.data.steps.some(function(s){  return isStepStarted(lesson.meta.id,s.id);  }); }
+
+// ── localStorage progress helpers ─────────────────────────────
+// Local progress is stored independently of login, keyed by a device key.
+// Key: 'pylearn_progress' → { lessonId: { stepId: { started, completed } } }
+// Note: time tracking (totalMs, startedAt) is only stored in Firebase (needs login).
+// Local storage only tracks started (boolean) and completed (boolean) for colour coding.
+
+function localProgressKey() {
+  return 'pylearn_progress';
+}
+
+function readLocalProgress() {
+  try {
+    var raw = localStorage.getItem(localProgressKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+function writeLocalProgress(progress) {
+  try {
+    // Only persist started/completed booleans — strip timestamps/time data to save space
+    var slim = {};
+    Object.keys(progress).forEach(function(lid) {
+      slim[lid] = {};
+      Object.keys(progress[lid]).forEach(function(sid) {
+        var s = progress[lid][sid];
+        slim[lid][sid] = {};
+        if (s.startedAt || s.started) slim[lid][sid].started = true;
+        if (s.completed) slim[lid][sid].completed = true;
+      });
+    });
+    localStorage.setItem(localProgressKey(), JSON.stringify(slim));
+  } catch(e) {}
+}
+
+// Merge Firebase progress into state.progress, then persist locally.
+// Firebase is the source of truth for completed — once complete, always complete.
+function mergeFirebaseProgress(firebaseProgress) {
+  Object.keys(firebaseProgress).forEach(function(lid) {
+    if (!state.progress[lid]) state.progress[lid] = {};
+    Object.keys(firebaseProgress[lid]).forEach(function(sid) {
+      var fb = firebaseProgress[lid][sid];
+      var local = state.progress[lid][sid] || {};
+      state.progress[lid][sid] = Object.assign({}, local, fb);
+    });
+  });
+  writeLocalProgress(state.progress);
+}
 
 // ── Firebase helpers ─────────────────────────────────────────
 function progressRef(lid, sid) { return state.db.ref('progress/'+state.uid+'/'+lid+'/'+sid); }
 
 async function loadProgress() {
+  // Always load local progress first — instant, no network needed
+  state.progress = readLocalProgress();
+  renderLessonTabs();
+  renderStepBar();
+
+  // If logged in, also fetch Firebase and merge (Firebase wins on conflicts)
   if (!state.uid) return;
-  var snap = await state.db.ref('progress/'+state.uid).get();
-  state.progress = snap.exists() ? snap.val() : {};
+  try {
+    var snap = await state.db.ref('progress/'+state.uid).get();
+    if (snap.exists()) {
+      mergeFirebaseProgress(snap.val());
+      renderLessonTabs();
+      renderStepBar();
+    }
+  } catch(e) { console.warn('Could not load Firebase progress:', e); }
 }
 
 async function markStepStarted(lid, sid) {
-  if (!state.uid) return;
-  if (getStepProgress(lid,sid).startedAt) return;
+  if (getStepProgress(lid,sid).startedAt || getStepProgress(lid,sid).started) return;
   var now = Date.now();
   if (!state.progress[lid]) state.progress[lid] = {};
   if (!state.progress[lid][sid]) state.progress[lid][sid] = {};
+  state.progress[lid][sid].started = true;
   state.progress[lid][sid].startedAt = now;
-  await progressRef(lid,sid).update({ startedAt: now });
-  state.stepStartTime = now;
+  writeLocalProgress(state.progress);
+
+  // Also write to Firebase if logged in
+  if (state.uid) {
+    state.stepStartTime = now;
+    progressRef(lid,sid).update({ startedAt: now }).catch(function(){});
+  }
 }
 
 async function saveStepTime() {
@@ -558,15 +683,20 @@ async function saveStepTime() {
   if (!state.progress[lesson.meta.id]) state.progress[lesson.meta.id] = {};
   if (!state.progress[lesson.meta.id][step.id]) state.progress[lesson.meta.id][step.id] = {};
   state.progress[lesson.meta.id][step.id].totalMs = newTotal;
-  await progressRef(lesson.meta.id, step.id).update({ totalMs: newTotal });
+  progressRef(lesson.meta.id, step.id).update({ totalMs: newTotal }).catch(function(){});
 }
 
 async function markStepComplete(lid, sid) {
-  if (!state.uid) return;
   if (!state.progress[lid]) state.progress[lid] = {};
   if (!state.progress[lid][sid]) state.progress[lid][sid] = {};
   state.progress[lid][sid].completed = true;
-  await progressRef(lid,sid).update({ completed: true });
+  state.progress[lid][sid].started   = true;
+  writeLocalProgress(state.progress);
+
+  // Also write to Firebase if logged in
+  if (state.uid) {
+    progressRef(lid,sid).update({ completed: true }).catch(function(){});
+  }
   renderStepBar();
   renderLessonTabs();
 }
@@ -584,7 +714,25 @@ async function loadApp() {
 
   // Init Firebase
   firebase.initializeApp(state.config.firebase);
-  state.db = firebase.database();
+  state.db   = firebase.database();
+  state.auth = firebase.auth();
+
+  // Sign in anonymously — required for Firebase rules (auth != null).
+  // We wait for the auth state to confirm before continuing so no writes
+  // happen before the session is established.
+  await new Promise(function(resolve) {
+    var unsubscribe = state.auth.onAuthStateChanged(function(user) {
+      if (user) {
+        unsubscribe();
+        resolve();
+      }
+    });
+    state.auth.signInAnonymously().catch(function(e) {
+      console.error('Firebase anonymous sign-in failed:', e.code, e.message);
+      unsubscribe();
+      resolve(); // continue anyway — local progress will still work
+    });
+  });
 
   // Load ALL lesson files across all year groups up front
   var lessonFilesNeeded = [];
@@ -641,6 +789,9 @@ async function loadApp() {
   document.getElementById('loading-screen').classList.add('hidden');
   document.getElementById('app-content').classList.remove('hidden');
 
+  // Load local progress immediately so step colours are correct from first render
+  state.progress = readLocalProgress();
+
   applyYearGroup(initialYG);
   setupAuthUI();
 }
@@ -667,8 +818,8 @@ function renderLessonTabs() {
   var container = document.getElementById('lesson-tabs');
   container.innerHTML = '';
   state.lessons.forEach(function(lesson, idx) {
-    var complete = state.uid && isLessonComplete(lesson);
-    var started  = state.uid && isLessonStarted(lesson);
+    var complete = isLessonComplete(lesson);
+    var started  = isLessonStarted(lesson);
     var active   = idx === state.currentLessonIdx;
     var btn = document.createElement('button');
     btn.className = 'lesson-tab px-3 py-1 rounded text-sm whitespace-nowrap border ' + (
@@ -687,8 +838,8 @@ function renderStepBar() {
   container.innerHTML = '';
   var lesson = state.lessons[state.currentLessonIdx];
   lesson.data.steps.forEach(function(step, idx) {
-    var complete = state.uid && isStepComplete(lesson.meta.id, step.id);
-    var started  = state.uid && isStepStarted(lesson.meta.id, step.id);
+    var complete = isStepComplete(lesson.meta.id, step.id);
+    var started  = isStepStarted(lesson.meta.id, step.id);
     var active   = idx === state.currentStepIdx;
     var btn = document.createElement('button');
     btn.className = 'step-pill px-3 py-1 rounded text-xs border whitespace-nowrap ' + (
@@ -736,6 +887,12 @@ function loadStep(lessonIdx, stepIdx) {
   window.__pylearnCurrentLessonId = lesson.meta.id;
   window.__pylearnCurrentStepId   = step.id;
 
+  // Reset per-step flags used by the Next button
+  // __pylearnStepHasEditor — set to true by createEditor on mount
+  // __pylearnStepRan       — set to true when the Run button is clicked
+  window.__pylearnStepHasEditor = false;
+  window.__pylearnStepRan       = false;
+
   // Nav
   var total = lesson.data.steps.length;
   document.getElementById('step-counter').textContent = 'Step '+(stepIdx+1)+' of '+total;
@@ -743,11 +900,9 @@ function loadStep(lessonIdx, stepIdx) {
   document.getElementById('btn-next').disabled = stepIdx === total - 1;
   document.getElementById('btn-next').textContent = stepIdx === total-1 ? 'Finish \u2713' : 'Next Step \u2192';
 
-  // Time tracking
-  if (state.uid) {
-    state.stepStartTime = Date.now();
-    markStepStarted(lesson.meta.id, step.id);
-  }
+  // Mark step as started (always, for local progress colours)
+  // Time tracking (stepStartTime) is set inside markStepStarted only when uid is set
+  markStepStarted(lesson.meta.id, step.id);
 
   // API available to step JS
   window.__markStepComplete = async function() {
@@ -773,7 +928,25 @@ document.getElementById('btn-next').onclick = async function() {
   var lesson = state.lessons[state.currentLessonIdx];
   var step   = lesson.data.steps[state.currentStepIdx];
   await saveStepTime();
-  if (step.autoComplete !== false) await markStepComplete(lesson.meta.id, step.id);
+
+  if (step.autoComplete !== false) {
+    // If the step has an editor but the student hasn't run the code yet, nudge them
+    if (window.__pylearnStepHasEditor && !window.__pylearnStepRan) {
+      var nextBtn = document.getElementById('btn-next');
+      var original = nextBtn.textContent;
+      nextBtn.textContent = 'Try the code first! \u25B6';
+      nextBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+      nextBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+      setTimeout(function() {
+        nextBtn.textContent = original;
+        nextBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+        nextBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+      }, 2000);
+      return;
+    }
+    await markStepComplete(lesson.meta.id, step.id);
+  }
+
   var next = state.currentStepIdx + 1;
   if (next < lesson.data.steps.length) loadStep(state.currentLessonIdx, next);
 };
@@ -808,13 +981,32 @@ function setupAuthUI() {
       localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
       localStorage.setItem('pylearn_code', code);
       state.isAdmin=true; state.uid='admin';
+      // Register this browser's anonymous UID as an admin in Firebase.
+      // The rule only allows this write if the value equals the admin code — 
+      // so only someone who knows the code can become an admin.
+      try {
+        var firebaseUid = state.auth.currentUser && state.auth.currentUser.uid;
+        if (firebaseUid) {
+          await state.db.ref('admins/' + firebaseUid).set(state.config.adminCode);
+        }
+      } catch(e) { console.warn('Could not register admin session:', e.message); }
       modalLogin.classList.add('hidden');
       updateAuthUI(first,last,true);
       return;
     }
     try {
-      var snap = await state.db.ref('codes/'+code).get();
-      if (!snap.exists()) { errEl.textContent='Invalid code. Please ask your teacher.'; errEl.classList.remove('hidden'); return; }
+      // Search for the code across all classes
+      var classesSnap = await state.db.ref('classes').get();
+      var foundClass = null;
+      if (classesSnap.exists()) {
+        classesSnap.forEach(function(classSnap) {
+          var codesSnap = classSnap.child('codes');
+          if (codesSnap.child(code).exists()) {
+            foundClass = classSnap.key;
+          }
+        });
+      }
+      if (!foundClass) { errEl.textContent='Invalid code. Please ask your teacher.'; errEl.classList.remove('hidden'); return; }
       localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
       localStorage.setItem('pylearn_code', code);
       state.uid=code; state.isAdmin=false;
@@ -832,9 +1024,11 @@ function setupAuthUI() {
     try {
       for (var i = localStorage.length - 1; i >= 0; i--) {
         var k = localStorage.key(i);
-        if (k && k.indexOf('pylearn_code:') === 0) localStorage.removeItem(k);
+        if (k && (k.indexOf('pylearn_code:') === 0)) localStorage.removeItem(k);
       }
     } catch(e) {}
+    // Clear local progress so the next student starts fresh on this device
+    try { localStorage.removeItem(localProgressKey()); } catch(e) {}
     state.uid=null; state.isAdmin=false; state.progress={};
     updateAuthUI(null,null,false);
     renderLessonTabs(); renderStepBar();
@@ -854,6 +1048,13 @@ function setupAuthUI() {
     var n = JSON.parse(savedName);
     if (savedCode === state.config.adminCode) {
       state.uid='admin'; state.isAdmin=true;
+      // Re-register admin UID on page refresh so Firebase rules still recognise them
+      try {
+        var firebaseUid = state.auth.currentUser && state.auth.currentUser.uid;
+        if (firebaseUid) {
+          state.db.ref('admins/' + firebaseUid).set(state.config.adminCode).catch(function(){});
+        }
+      } catch(e) {}
       updateAuthUI(n.first,n.last,true);
     } else {
       state.uid=savedCode;
@@ -879,47 +1080,206 @@ async function showAdmin() {
 }
 
 async function refreshAdminTable() {
-  var tbody = document.getElementById('admin-table-body');
-  tbody.innerHTML = '<tr><td colspan="4" class="text-gray-400 py-4 text-center">Loading\u2026</td></tr>';
+  var container = document.getElementById('admin-classes-container');
+  container.innerHTML = '<p class="text-gray-400 text-sm text-center py-4">Loading\u2026</p>';
   try {
-    var results = await Promise.all([state.db.ref('codes').get(), state.db.ref('progress').get()]);
-    var codes   = results[0].exists() ? results[0].val() : {};
-    var allProg = results[1].exists() ? results[1].val() : {};
-    tbody.innerHTML = '';
-    var codeKeys = Object.keys(codes);
-    if (!codeKeys.length) { tbody.innerHTML='<tr><td colspan="4" class="text-gray-400 py-4 text-center">No codes yet.</td></tr>'; return; }
-    codeKeys.forEach(function(code) {
-      var prog=allProg[code]||{}, lessonsStarted=0, stepsDone=0, totalMs=0;
-      Object.keys(prog).forEach(function(lid){
-        var lStarted=false;
-        Object.keys(prog[lid]).forEach(function(sid){
-          var s=prog[lid][sid];
-          if(s.startedAt) lStarted=true;
-          if(s.completed) stepsDone++;
-          if(s.totalMs)   totalMs+=s.totalMs;
+    var results = await Promise.all([
+      state.db.ref('classes').get(),
+      state.db.ref('progress').get(),
+    ]);
+    var classesSnap = results[0];
+    var allProg     = results[1].exists() ? results[1].val() : {};
+
+    if (!classesSnap.exists()) {
+      container.innerHTML = '<p class="text-gray-400 text-sm text-center py-4">No classes yet. Generate some codes above.</p>';
+      return;
+    }
+
+    container.innerHTML = '';
+    classesSnap.forEach(function(classSnap) {
+      var className = classSnap.key;
+      var codes     = classSnap.child('codes').val() || {};
+      var codeList  = Object.keys(codes);
+
+      // Section header with delete class button
+      var header = document.createElement('div');
+      header.className = 'flex items-center justify-between py-2 px-1 mb-1 mt-3 border-b-2 border-gray-200';
+      header.innerHTML =
+        '<span class="font-semibold text-gray-800">' + className + '</span>' +
+        '<span class="text-xs text-gray-500 mr-auto ml-3">' + codeList.length + ' code' + (codeList.length !== 1 ? 's' : '') + '</span>' +
+        '<div class="flex gap-2">' +
+          '<button class="btn-export-class px-3 py-1 rounded border border-blue-300 text-blue-600 text-xs hover:bg-blue-50" data-class="' + className + '">&#x2193; Export</button>' +
+          '<button class="btn-delete-class px-3 py-1 rounded border border-red-300 text-red-600 text-xs hover:bg-red-50" data-class="' + className + '">&#x1F5D1; Delete class</button>' +
+        '</div>';
+      container.appendChild(header);
+
+      // Codes table
+      var table = document.createElement('table');
+      table.className = 'w-full text-sm mb-2';
+      table.innerHTML =
+        '<thead>' +
+          '<tr class="text-left text-gray-500 text-xs">' +
+            '<th class="pb-1 pr-4 font-normal">Code</th>' +
+            '<th class="pb-1 pr-4 font-normal">Lessons started</th>' +
+            '<th class="pb-1 pr-4 font-normal">Steps done</th>' +
+            '<th class="pb-1 pr-4 font-normal">Time spent</th>' +
+            '<th class="pb-1 font-normal"></th>' +
+          '</tr>' +
+        '</thead>';
+      var tbody = document.createElement('tbody');
+
+      codeList.forEach(function(code) {
+        var prog = allProg[code] || {};
+        var lessonsStarted = 0, stepsDone = 0, totalMs = 0;
+        Object.keys(prog).forEach(function(lid) {
+          var lStarted = false;
+          Object.keys(prog[lid]).forEach(function(sid) {
+            var s = prog[lid][sid];
+            if (s.startedAt || s.started) lStarted = true;
+            if (s.completed) stepsDone++;
+            if (s.totalMs)   totalMs += s.totalMs;
+          });
+          if (lStarted) lessonsStarted++;
         });
-        if(lStarted) lessonsStarted++;
+        var tr = document.createElement('tr');
+        tr.className = 'border-b border-gray-50';
+        tr.innerHTML =
+          '<td class="py-1.5 pr-4 font-mono text-xs">' + code + '</td>' +
+          '<td class="py-1.5 pr-4">' + (lessonsStarted || '—') + '</td>' +
+          '<td class="py-1.5 pr-4">' + (stepsDone || '—') + '</td>' +
+          '<td class="py-1.5 pr-4">' + (totalMs ? fmtMs(totalMs) : '—') + '</td>' +
+          '<td class="py-1.5">' +
+            '<button class="btn-delete-code text-red-400 hover:text-red-600 text-xs" data-class="' + className + '" data-code="' + code + '">Remove</button>' +
+          '</td>';
+        tbody.appendChild(tr);
       });
-      var tr=document.createElement('tr');
-      tr.className='border-b border-gray-100';
-      tr.innerHTML='<td class="py-2 pr-4 font-mono text-xs">'+code+'</td><td class="py-2 pr-4">'+lessonsStarted+'</td><td class="py-2 pr-4">'+stepsDone+'</td><td class="py-2">'+fmtMs(totalMs)+'</td>';
-      tbody.appendChild(tr);
+
+      table.appendChild(tbody);
+      container.appendChild(table);
     });
+
+    // Wire up export buttons
+    container.querySelectorAll('.btn-export-class').forEach(function(btn) {
+      btn.onclick = function() { exportClassSpreadsheet(btn.dataset.class); };
+    });
+
+    // Wire up delete class buttons
+    container.querySelectorAll('.btn-delete-class').forEach(function(btn) {
+      btn.onclick = async function() {
+        var className = btn.dataset.class;
+        if (!confirm('Delete all codes for class ' + className + '? This cannot be undone.')) return;
+        btn.disabled = true;
+        btn.textContent = 'Deleting\u2026';
+        try {
+          await state.db.ref('classes/' + className).remove();
+          await refreshAdminTable();
+        } catch(e) {
+          alert('Error deleting class: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = '\uD83D\uDDD1 Delete class';
+        }
+      };
+    });
+
+    // Wire up delete single code buttons
+    container.querySelectorAll('.btn-delete-code').forEach(function(btn) {
+      btn.onclick = async function() {
+        var code = btn.dataset.code;
+        var className = btn.dataset.class;
+        if (!confirm('Remove code ' + code + ' from class ' + className + '?')) return;
+        btn.disabled = true;
+        btn.textContent = '\u2026';
+        try {
+          await state.db.ref('classes/' + className + '/codes/' + code).remove();
+          await refreshAdminTable();
+        } catch(e) {
+          alert('Error removing code: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Remove';
+        }
+      };
+    });
+
   } catch(e) {
-    tbody.innerHTML='<tr><td colspan="4" class="text-red-400 py-4 text-center">Error loading data.</td></tr>';
+    container.innerHTML = '<p class="text-red-400 text-sm text-center py-4">Error loading data: ' + e.message + '</p>';
   }
 }
 
-document.getElementById('btn-gen-code').onclick = async function() {
-  var code = genCode();
-  await state.db.ref('codes/'+code).set({ createdAt: Date.now() });
-  var el = document.getElementById('generated-code');
-  el.classList.remove('hidden');
-  el.textContent = 'New code: '+code;
-  await refreshAdminTable();
+function exportClassSpreadsheet(className) {
+  // Fetch the codes for this class then build the xlsx
+  state.db.ref('classes/' + className + '/codes').get().then(function(snap) {
+    var codes = snap.exists() ? Object.keys(snap.val()) : [];
+
+    // Build worksheet data: header row + one row per code with blank Name column
+    var wsData = [['Name', 'Code']];
+    codes.forEach(function(code) { wsData.push(['', code]); });
+
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Column widths
+    ws['!cols'] = [{ wch: 30 }, { wch: 20 }];
+
+    // Style header row bold (basic — SheetJS CE supports limited styling)
+    // Apply bold via cell format
+    ['A1', 'B1'].forEach(function(ref) {
+      if (ws[ref]) ws[ref].s = { font: { bold: true }, fill: { fgColor: { rgb: 'F3F4F6' } } };
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, className);
+    XLSX.writeFile(wb, 'PyLearn-' + className + '-codes.xlsx');
+  }).catch(function(e) {
+    alert('Could not export: ' + e.message);
+  });
+}
+
+document.getElementById('btn-gen-codes').onclick = async function() {
+  var rawName  = document.getElementById('input-class-name').value.trim().toUpperCase();
+  var count    = parseInt(document.getElementById('input-code-count').value, 10);
+  var statusEl = document.getElementById('gen-status');
+
+  if (!rawName) { statusEl.textContent = 'Please enter a class name.'; statusEl.classList.remove('hidden'); return; }
+  if (!count || count < 1 || count > 60) { statusEl.textContent = 'Number of codes must be between 1 and 60.'; statusEl.classList.remove('hidden'); return; }
+
+  statusEl.textContent = 'Generating ' + count + ' codes for ' + rawName + '\u2026';
+  statusEl.classList.remove('hidden');
+  document.getElementById('btn-gen-codes').disabled = true;
+
+  try {
+    var updates = {};
+    var generated = [];
+    for (var i = 0; i < count; i++) {
+      var code = genCode();
+      generated.push(code);
+      updates['classes/' + rawName + '/codes/' + code] = { createdAt: Date.now() };
+    }
+    await state.db.ref().update(updates);
+    statusEl.textContent = '\u2705 Generated ' + count + ' codes for ' + rawName + '.';
+    await refreshAdminTable();
+  } catch(e) {
+    statusEl.textContent = '\u274c Error: ' + e.message;
+  }
+
+  document.getElementById('btn-gen-codes').disabled = false;
 };
 
 document.getElementById('btn-refresh-codes').onclick = refreshAdminTable;
+
+document.getElementById('btn-add-single').onclick = async function() {
+  var className = document.getElementById('input-single-class').value.trim().toUpperCase();
+  var statusEl  = document.getElementById('gen-status');
+  if (!className) { statusEl.textContent = 'Please enter a class name.'; statusEl.classList.remove('hidden'); return; }
+  statusEl.textContent = 'Adding code to ' + className + '\u2026';
+  statusEl.classList.remove('hidden');
+  try {
+    var code = genCode();
+    await state.db.ref('classes/' + className + '/codes/' + code).set({ createdAt: Date.now() });
+    statusEl.textContent = '\u2705 Added code ' + code + ' to ' + className + '.';
+    await refreshAdminTable();
+  } catch(e) {
+    statusEl.textContent = '\u274c Error: ' + e.message;
+  }
+};
 
 // ── Report ────────────────────────────────────────────────────
 function showReport() {
