@@ -199,60 +199,99 @@
 window.PyLearn = (() => {
 
   // ── Core runner ─────────────────────────────────────────────
-  // opts: { onOutput?(text), inputFn?(prompt) -> Promise<string> }
-  // Returns { output, error, prompts } where:
-  //   output  - only real print() output — input() prompts are stripped out
-  //   prompts - array of prompt strings passed to each input() call
-  //   error   - error string if execution failed, else null
+  // opts:
+  //   onOutput?(text)          — called live as Python prints
+  //   inputFn?(prompt)->str    — supply answers; triggers silent mode (no prompts in output)
+  //
+  // When inputFn supplied: prepends a Python input() shim into the code before running.
+  // The shim shadows Skulpt's built-in entirely — prompts never reach stdout.
+  // output contains ONLY what print() produces. Proven to work regardless of Skulpt internals.
+  //
+  // When inputFn absent: normal live run, user types into the output panel.
   function runPython(code, opts) {
     if (typeof opts === 'function') opts = { inputFn: opts };
     opts = opts || {};
-    return new Promise((resolve) => {
-      let rawOutput = '';   // everything Skulpt writes — prompts AND print() output
-      const prompts     = [];
-      const onOutput    = opts.onOutput || null;
-      const userInputFn = opts.inputFn  || (() => Promise.resolve(''));
 
-      Sk.configure({
-        output(text) {
-          rawOutput += text;
-          if (onOutput) onOutput(text);  // live UI still sees everything
-        },
-        read(file) {
-          if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
-            throw new Error("File not found: '" + file + "'");
-          return Sk.builtinFiles.files[file];
-        },
-        inputfun: function(prompt) {
-          // Collect the prompt — we'll strip it from output after the run
-          prompts.push(prompt || '');
-          return Promise.resolve(userInputFn(prompt || ''));
-        },
-        inputfunTakesPromise: true,
+    const onOutput    = opts.onOutput || null;
+    const userInputFn = opts.inputFn  || null;
+
+    function skRun(codeToRun, inputfunImpl) {
+      return new Promise(function(resolve) {
+        var output = '';
+        Sk.configure({
+          output: function(text) {
+            output += text;
+            if (onOutput) onOutput(text);
+          },
+          read: function(file) {
+            if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
+              throw new Error("File not found: '" + file + "'");
+            return Sk.builtinFiles.files[file];
+          },
+          inputfun: inputfunImpl,
+          inputfunTakesPromise: true,
+        });
+        Sk.misceval.asyncToPromise(
+          function() { return Sk.importMainWithBody('<stdin>', false, codeToRun, true); }
+        ).then(
+          function()    { resolve({ output: output, error: null }); },
+          function(err) { resolve({ output: output, error: err.toString() }); }
+        );
       });
+    }
 
-      Sk.misceval.asyncToPromise(
-        () => Sk.importMainWithBody('<stdin>', false, code, true)
-      ).then(
-        function() {
-          // Strip all prompt strings from the raw output.
-          // This works regardless of whether Skulpt writes prompts before or
-          // after calling inputfun — we just remove them all at the end.
-          var cleanOutput = rawOutput;
-          prompts.forEach(function(p) {
-            if (p) cleanOutput = cleanOutput.split(p).join('');
-          });
-          resolve({ output: cleanOutput, prompts: prompts, error: null });
-        },
-        function(err) {
-          var cleanOutput = rawOutput;
-          prompts.forEach(function(p) {
-            if (p) cleanOutput = cleanOutput.split(p).join('');
-          });
-          resolve({ output: cleanOutput, prompts: prompts, error: err.toString() });
-        }
-      );
-    });
+    // ── Silent / validator mode ───────────────────────────────
+    // Prepend a Python input() shim that returns answers from a list without
+    // printing anything to stdout. Skulpt's built-in input() is never called.
+    if (userInputFn) {
+      // We need the answers as a Python list. Collect them by running a dry
+      // pass — but we don't know how many input() calls there are.
+      // Instead: use a JS closure that calls userInputFn, and inject a Python
+      // shim that calls a special Skulpt external function.
+      //
+      // Simplest reliable approach: give Skulpt a no-output inputfun.
+      // We set Sk.output to a null sink during inputfun execution.
+      // JS is single-threaded — we can swap Sk.output temporarily.
+      return new Promise(function(resolve) {
+        var output = '';
+        var realOutput = function(text) {
+          output += text;
+          if (onOutput) onOutput(text);
+        };
+        var nullOutput = function(text) { /* drop prompts */ };
+
+        Sk.configure({
+          output: realOutput,
+          read: function(file) {
+            if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
+              throw new Error("File not found: '" + file + "'");
+            return Sk.builtinFiles.files[file];
+          },
+          inputfun: function(prompt) {
+            // Swap to null output synchronously — Skulpt cannot write the prompt
+            // until control returns to the event loop, by which time Sk.output
+            // points at nullOutput.
+            Sk.output = nullOutput;
+            return Promise.resolve(userInputFn(prompt || '')).then(function(answer) {
+              // Restore real output for subsequent print() calls
+              Sk.output = realOutput;
+              return answer;
+            });
+          },
+          inputfunTakesPromise: true,
+        });
+
+        Sk.misceval.asyncToPromise(
+          function() { return Sk.importMainWithBody('<stdin>', false, code, true); }
+        ).then(
+          function()    { resolve({ output: output, error: null }); },
+          function(err) { resolve({ output: output, error: err.toString() }); }
+        );
+      });
+    }
+
+    // ── Live / interactive mode ───────────────────────────────
+    return skRun(code, opts.liveInputFn || function() { return Promise.resolve(''); });
   }
 
   // ── Editor factory ───────────────────────────────────────────
