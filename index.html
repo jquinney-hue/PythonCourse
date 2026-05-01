@@ -62,6 +62,7 @@
       <span id="user-label" class="text-sm text-gray-500"></span>
       <button id="btn-login"  class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Login</button>
       <button id="btn-logout" class="hidden text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Logout</button>
+      <button id="btn-join-quiz" class="hidden text-sm px-3 py-1 rounded border border-purple-400 text-purple-700 hover:bg-purple-50">&#x1F3AE; Join Quiz</button>
       <button id="btn-report" class="hidden text-sm px-3 py-1 rounded border border-blue-300 text-blue-600 hover:bg-blue-50">Export Report</button>
       <button id="btn-admin"  class="hidden text-sm px-3 py-1 rounded bg-gray-800 text-white hover:bg-gray-700">Admin</button>
     </div>
@@ -169,6 +170,195 @@
     <div class="mt-4 flex gap-2">
       <button id="btn-export-txt"    class="px-4 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">Download Report</button>
       <button id="btn-report-close2" class="px-4 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── QUIZ SETUP MODAL (admin) ───────────────────────────── -->
+<div id="modal-quiz-setup" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg max-h-[85vh] flex flex-col">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-semibold">&#x1F3AE; Host a Quiz</h2>
+      <button id="btn-quiz-setup-close" class="text-gray-400 hover:text-gray-600 text-xl">&#x2715;</button>
+    </div>
+    <div class="mb-3">
+      <p class="text-sm text-gray-600 mb-3">Lesson: <span id="quiz-setup-lesson-name" class="font-medium text-gray-800"></span></p>
+      <div class="flex gap-3 mb-4">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="quiz-mode" value="quick" checked class="accent-blue-600" />
+          <span class="text-sm text-gray-700">Quick mode</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="quiz-mode" value="custom" class="accent-blue-600" />
+          <span class="text-sm text-gray-700">Custom mode</span>
+        </label>
+      </div>
+      <!-- Quick mode options -->
+      <div id="quiz-quick-opts" class="border border-gray-200 rounded-lg p-4 mb-3">
+        <div class="flex gap-4 items-end">
+          <div class="flex-1">
+            <label class="block text-xs text-gray-500 mb-1">Number of questions</label>
+            <input id="quiz-q-count" type="number" min="1" max="15" value="5"
+              class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+          </div>
+          <div class="flex-1">
+            <label class="block text-xs text-gray-500 mb-1">Seconds per question</label>
+            <input id="quiz-q-time" type="number" min="10" max="300" value="60"
+              class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+          </div>
+        </div>
+      </div>
+      <!-- Custom mode options -->
+      <div id="quiz-custom-opts" class="hidden border border-gray-200 rounded-lg p-4 mb-3 max-h-64 overflow-y-auto">
+        <p class="text-xs text-gray-500 mb-2">Select questions and set time per question:</p>
+        <div id="quiz-custom-list" class="space-y-2"></div>
+      </div>
+    </div>
+    <button id="btn-quiz-start-host" class="w-full py-2 rounded bg-purple-600 text-white font-medium hover:bg-purple-700">
+      Create Lobby &#x1F680;
+    </button>
+  </div>
+</div>
+
+<!-- ── QUIZ HOST SCREEN (fullscreen overlay) ──────────────── -->
+<div id="quiz-host-screen" class="hidden fixed inset-0 bg-gray-900 flex flex-col z-50 text-white">
+  <!-- Header bar -->
+  <div class="flex items-center justify-between px-6 py-3 bg-gray-800 border-b border-gray-700">
+    <div class="flex items-center gap-3">
+      <span class="font-bold text-lg">&#x1F3AE; PyLearn Quiz</span>
+      <span id="qh-lesson-name" class="text-gray-400 text-sm"></span>
+    </div>
+    <div id="qh-lobby-code-display" class="flex items-center gap-2">
+      <span class="text-gray-400 text-sm">Join code:</span>
+      <span id="qh-lobby-code" class="font-mono text-2xl font-bold tracking-widest text-yellow-400"></span>
+    </div>
+    <button id="btn-quiz-host-exit" class="text-gray-400 hover:text-white text-sm border border-gray-600 px-3 py-1 rounded">End Quiz</button>
+  </div>
+
+  <!-- Lobby state -->
+  <div id="qh-lobby" class="flex-1 flex flex-col items-center justify-center">
+    <p class="text-gray-400 mb-2 text-sm">Waiting for students to join…</p>
+    <div class="text-6xl font-mono font-bold text-yellow-400 tracking-widest mb-6" id="qh-lobby-code-big"></div>
+    <div id="qh-player-list" class="flex flex-wrap gap-2 justify-center max-w-2xl mb-8"></div>
+    <button id="btn-quiz-begin" class="px-8 py-3 rounded-lg bg-green-500 hover:bg-green-400 font-bold text-lg disabled:opacity-40" disabled>
+      Start Quiz &#x25B6;
+    </button>
+  </div>
+
+  <!-- Question state -->
+  <div id="qh-question" class="hidden flex-1 flex flex-col">
+    <div class="flex items-center justify-between px-6 py-3 bg-gray-800 text-sm text-gray-400">
+      <span id="qh-q-progress"></span>
+      <div class="flex items-center gap-3">
+        <span>&#x23F1; <span id="qh-timer" class="font-mono font-bold text-white text-lg"></span>s</span>
+        <span id="qh-answered-count" class="text-gray-400"></span>
+      </div>
+      <button id="btn-quiz-next" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-sm">Next &#x2192;</button>
+    </div>
+    <!-- Timer bar -->
+    <div class="h-2 bg-gray-700"><div id="qh-timer-bar" class="h-2 bg-green-500 transition-all" style="width:100%"></div></div>
+    <!-- Question text -->
+    <div class="flex-1 flex flex-col items-center justify-center px-8">
+      <div id="qh-q-text" class="text-2xl font-bold text-center mb-8 max-w-3xl leading-snug"></div>
+      <!-- 4 answer boxes (display only for host) -->
+      <div class="grid grid-cols-2 gap-4 w-full max-w-2xl">
+        <div id="qh-opt-0" class="rounded-xl p-4 text-center font-semibold text-lg bg-red-600"></div>
+        <div id="qh-opt-1" class="rounded-xl p-4 text-center font-semibold text-lg bg-blue-600"></div>
+        <div id="qh-opt-2" class="rounded-xl p-4 text-center font-semibold text-lg bg-yellow-500 text-gray-900"></div>
+        <div id="qh-opt-3" class="rounded-xl p-4 text-center font-semibold text-lg bg-green-600"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Answer reveal state -->
+  <div id="qh-reveal" class="hidden flex-1 flex flex-col items-center justify-center px-8">
+    <p class="text-gray-400 mb-3 text-sm">Correct answer</p>
+    <div id="qh-reveal-answer" class="text-2xl font-bold rounded-xl px-8 py-4 mb-6 bg-green-600"></div>
+    <div id="qh-reveal-stats" class="flex gap-4 flex-wrap justify-center mb-6"></div>
+    <button id="btn-quiz-continue" class="px-8 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold text-lg">
+      Continue &#x2192;
+    </button>
+  </div>
+
+  <!-- Finished state -->
+  <div id="qh-finished" class="hidden flex-1 flex flex-col items-center justify-center">
+    <div class="text-4xl mb-4">&#x1F3C6;</div>
+    <h2 class="text-2xl font-bold mb-2">Quiz Complete!</h2>
+    <div id="qh-final-scores" class="mt-4 space-y-2 text-center"></div>
+  </div>
+</div>
+
+<!-- ── QUIZ STUDENT SCREEN (fullscreen overlay) ──────────── -->
+<div id="quiz-student-screen" class="hidden fixed inset-0 flex flex-col z-50 text-white" style="background:#1a1a2e">
+  <!-- Header -->
+  <div class="flex items-center justify-between px-6 py-3 bg-black/30">
+    <span class="font-bold">&#x1F3AE; PyLearn Quiz</span>
+    <button id="btn-quiz-student-exit" class="text-gray-400 hover:text-white text-sm border border-gray-600 px-3 py-1 rounded">Leave</button>
+  </div>
+
+  <!-- Lobby wait -->
+  <div id="qs-lobby" class="flex-1 flex flex-col items-center justify-center">
+    <div class="text-5xl mb-4">&#x23F3;</div>
+    <h2 class="text-xl font-bold mb-2">You're in the lobby!</h2>
+    <p class="text-gray-400 text-sm">Wait for your teacher to start the quiz&#x2026;</p>
+    <p id="qs-my-code" class="text-gray-500 text-xs mt-4"></p>
+  </div>
+
+  <!-- Kicked -->
+  <div id="qs-kicked" class="hidden flex-1 flex flex-col items-center justify-center">
+    <div class="text-5xl mb-4">&#x274C;</div>
+    <h2 class="text-xl font-bold mb-2">You were removed</h2>
+    <p class="text-gray-400 text-sm">Your teacher removed you from the quiz.</p>
+    <button id="btn-quiz-rejoin" class="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded font-medium">Try to Rejoin</button>
+  </div>
+
+  <!-- Question -->
+  <div id="qs-question" class="hidden flex-1 flex flex-col">
+    <div class="flex items-center justify-between px-6 py-2 bg-black/20 text-sm text-gray-400">
+      <span id="qs-q-progress"></span>
+      <span>&#x23F1; <span id="qs-timer" class="font-mono font-bold text-white text-lg"></span>s</span>
+    </div>
+    <div class="h-1.5 bg-gray-700"><div id="qs-timer-bar" class="h-1.5 bg-green-500 transition-all" style="width:100%"></div></div>
+    <div class="flex-1 flex flex-col items-center justify-center px-6 pb-4">
+      <div id="qs-q-text" class="text-xl font-bold text-center mb-6 max-w-2xl leading-snug"></div>
+      <div id="qs-answered-msg" class="hidden text-green-400 font-semibold text-lg mb-4">&#x2713; Answer submitted!</div>
+      <div id="qs-answer-grid" class="grid grid-cols-2 gap-3 w-full max-w-xl">
+        <button class="quiz-ans-btn rounded-xl py-5 px-4 font-bold text-base bg-red-600 hover:bg-red-500 active:scale-95 transition-transform" data-idx="0">&#x25CF; <span></span></button>
+        <button class="quiz-ans-btn rounded-xl py-5 px-4 font-bold text-base bg-blue-600 hover:bg-blue-500 active:scale-95 transition-transform" data-idx="1">&#x25CF; <span></span></button>
+        <button class="quiz-ans-btn rounded-xl py-5 px-4 font-bold text-base bg-yellow-500 hover:bg-yellow-400 text-gray-900 active:scale-95 transition-transform" data-idx="2">&#x25CF; <span></span></button>
+        <button class="quiz-ans-btn rounded-xl py-5 px-4 font-bold text-base bg-green-600 hover:bg-green-500 active:scale-95 transition-transform" data-idx="3">&#x25CF; <span></span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Answer reveal -->
+  <div id="qs-reveal" class="hidden flex-1 flex flex-col items-center justify-center px-6">
+    <div id="qs-reveal-result" class="text-4xl mb-3"></div>
+    <div id="qs-reveal-answer" class="text-xl font-bold rounded-xl px-6 py-3 bg-green-600 mb-2"></div>
+    <p class="text-gray-400 text-sm">Next question coming up&#x2026;</p>
+  </div>
+
+  <!-- Finished -->
+  <div id="qs-finished" class="hidden flex-1 flex flex-col items-center justify-center">
+    <div class="text-5xl mb-4">&#x1F3C6;</div>
+    <h2 class="text-2xl font-bold mb-1">Quiz finished!</h2>
+    <p class="text-gray-400 text-sm">Well done!</p>
+    <div id="qs-final-score" class="mt-4 text-xl font-bold text-yellow-400"></div>
+  </div>
+</div>
+
+<!-- ── JOIN QUIZ MODAL (student) ──────────────────────────── -->
+<div id="modal-join-quiz" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-80">
+    <h2 class="text-lg font-semibold mb-4">&#x1F3AE; Join a Quiz</h2>
+    <label class="block text-sm text-gray-600 mb-1">4-digit lobby code</label>
+    <input id="input-lobby-code" type="text" maxlength="4"
+      class="w-full border border-gray-300 rounded px-3 py-2 text-3xl font-mono tracking-widest text-center mb-3 focus:outline-none focus:border-purple-400 uppercase"
+      placeholder="0000" />
+    <p id="join-quiz-error" class="text-red-500 text-xs mb-3 hidden"></p>
+    <div class="flex gap-2">
+      <button id="btn-join-quiz-cancel" class="flex-1 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Cancel</button>
+      <button id="btn-join-quiz-submit" class="flex-1 py-2 rounded bg-purple-600 text-white font-medium hover:bg-purple-700">Join!</button>
     </div>
   </div>
 </div>
@@ -1205,6 +1395,7 @@ async function refreshAdminTable() {
         '<span class="font-semibold text-gray-800">' + className + '</span>' +
         '<span class="text-xs text-gray-400 mr-auto ml-3">' + codeList.length + ' student' + (codeList.length !== 1 ? 's' : '') + '</span>' +
         '<div class="flex gap-2">' +
+          '<button class="btn-host-quiz px-3 py-1 rounded border border-purple-400 text-purple-700 text-xs hover:bg-purple-50" data-class="' + className + '">&#x1F3AE; Host Quiz</button>' +
           '<button class="btn-export-detail px-3 py-1 rounded border border-green-300 text-green-700 text-xs hover:bg-green-50" data-class="' + className + '">&#x2193; Detailed Report</button>' +
           '<button class="btn-export-class px-3 py-1 rounded border border-blue-300 text-blue-600 text-xs hover:bg-blue-50" data-class="' + className + '">&#x2193; Codes Sheet</button>' +
           '<button class="btn-delete-class px-3 py-1 rounded border border-red-300 text-red-600 text-xs hover:bg-red-50" data-class="' + className + '">\uD83D\uDDD1 Delete class</button>' +
@@ -1331,6 +1522,10 @@ async function refreshAdminTable() {
     });
 
     // ── Wire up buttons ──────────────────────────────────────
+    container.querySelectorAll('.btn-host-quiz').forEach(function(btn) {
+      btn.onclick = function() { openQuizSetup(btn.dataset.class); };
+    });
+
     container.querySelectorAll('.btn-export-class').forEach(function(btn) {
       btn.onclick = function() { exportCodesSheet(btn.dataset.class); };
     });
@@ -1685,6 +1880,550 @@ function exportReport() {
   a.download='pylearn-report-'+name.replace(/\s/g,'-').toLowerCase()+'.txt';
   a.click();
 }
+
+// ════════════════════════════════════════════════════════════════
+//  QUIZ SYSTEM
+// ════════════════════════════════════════════════════════════════
+
+var quiz = {
+  lessonId:    null,
+  className:   null,
+  questions:   [],      // shuffled subset
+  lobbyCode:   null,    // 4-digit string
+  sessionRef:  null,    // Firebase ref
+  playerCount: 0,
+  timerInterval: null,
+  timerEnd:    null,
+  currentState: null,   // 'lobby'|'question'|'answer'|'finished'
+  myScore:     0,       // student side
+  myAnswered:  false,
+  unsubscribers: [],    // Firebase listeners to clean up
+};
+
+// ── Generate 4-digit lobby code unique in Firebase ─────────────
+async function genLobbyCode() {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    var code = String(Math.floor(1000 + Math.random() * 9000));
+    var snap = await state.db.ref('quizSessions/' + code).get();
+    if (!snap.exists() || !snap.child('hostUid').exists()) return code;
+  }
+  return String(Math.floor(1000 + Math.random() * 9000)); // fallback
+}
+
+// ── ADMIN: Open quiz setup modal ───────────────────────────────
+function openQuizSetup(className) {
+  quiz.className = className;
+  // Find current lesson's quiz questions
+  var lesson = state.lessons[state.currentLessonIdx];
+  quiz.lessonId = lesson.meta.id;
+  var allQs = lesson.data.quizQuestions || [];
+
+  document.getElementById('quiz-setup-lesson-name').textContent = lesson.data.title;
+  document.getElementById('quiz-q-count').max = allQs.length;
+  document.getElementById('quiz-q-count').value = Math.min(5, allQs.length);
+
+  // Build custom question list
+  var customList = document.getElementById('quiz-custom-list');
+  customList.innerHTML = '';
+  allQs.forEach(function(q, idx) {
+    var row = document.createElement('div');
+    row.className = 'flex items-center gap-2';
+    row.innerHTML =
+      '<input type="checkbox" class="quiz-custom-check accent-purple-600" data-idx="' + idx + '" checked />' +
+      '<span class="text-sm text-gray-700 flex-1">' + q.q + '</span>' +
+      '<input type="number" class="quiz-custom-time w-16 border border-gray-300 rounded px-2 py-0.5 text-xs" value="60" min="10" max="300" />';
+    customList.appendChild(row);
+  });
+
+  document.getElementById('modal-quiz-setup').classList.remove('hidden');
+  document.getElementById('modal-admin').classList.add('hidden');
+}
+
+document.querySelectorAll('input[name="quiz-mode"]').forEach(function(radio) {
+  radio.onchange = function() {
+    var isCustom = radio.value === 'custom';
+    document.getElementById('quiz-quick-opts').classList.toggle('hidden', isCustom);
+    document.getElementById('quiz-custom-opts').classList.toggle('hidden', !isCustom);
+  };
+});
+
+document.getElementById('btn-quiz-setup-close').onclick = function() {
+  document.getElementById('modal-quiz-setup').classList.add('hidden');
+  document.getElementById('modal-admin').classList.remove('hidden');
+};
+
+document.getElementById('btn-quiz-start-host').onclick = async function() {
+  var lesson = state.lessons[state.currentLessonIdx];
+  var allQs  = lesson.data.quizQuestions || [];
+  var mode   = document.querySelector('input[name="quiz-mode"]:checked').value;
+  var selectedQs = [];
+
+  if (mode === 'quick') {
+    var count   = Math.min(parseInt(document.getElementById('quiz-q-count').value) || 5, allQs.length);
+    var timeEach = parseInt(document.getElementById('quiz-q-time').value) || 60;
+    // Shuffle and take count
+    var shuffled = allQs.slice().sort(function() { return Math.random() - 0.5; });
+    selectedQs = shuffled.slice(0, count).map(function(q) { return Object.assign({}, q, { duration: timeEach }); });
+  } else {
+    var checks = document.querySelectorAll('.quiz-custom-check:checked');
+    checks.forEach(function(cb) {
+      var idx = parseInt(cb.dataset.idx);
+      var time = parseInt(cb.closest('div').querySelector('.quiz-custom-time').value) || 60;
+      selectedQs.push(Object.assign({}, allQs[idx], { duration: time }));
+    });
+    if (!selectedQs.length) { alert('Select at least one question.'); return; }
+  }
+
+  document.getElementById('modal-quiz-setup').classList.add('hidden');
+
+  // Create Firebase session
+  var lobbyCode = await genLobbyCode();
+  quiz.lobbyCode  = lobbyCode;
+  quiz.questions  = selectedQs;
+  quiz.sessionRef = state.db.ref('quizSessions/' + lobbyCode);
+
+  var firebaseUid = state.auth.currentUser && state.auth.currentUser.uid;
+  await quiz.sessionRef.set({
+    hostUid:     firebaseUid,
+    state:       'lobby',
+    questionIdx: -1,
+    lessonId:    lesson.meta.id,
+    questions:   selectedQs.map(function(q) {
+      return { q: q.q, options: q.options, answer: q.answer, duration: q.duration };
+    }),
+  });
+
+  // Remove session when host disconnects
+  quiz.sessionRef.onDisconnect().remove();
+
+  showQuizHostScreen();
+};
+
+// ── ADMIN: Host screen ─────────────────────────────────────────
+function showQuizHostScreen() {
+  document.getElementById('quiz-host-screen').classList.remove('hidden');
+  document.getElementById('qh-lobby-code').textContent = quiz.lobbyCode;
+  document.getElementById('qh-lobby-code-big').textContent = quiz.lobbyCode;
+  document.getElementById('qh-lesson-name').textContent =
+    (state.lessons[state.currentLessonIdx] || {data:{title:''}}).data.title;
+
+  setQuizHostView('lobby');
+
+  // Listen for players joining/leaving/being kicked
+  var playersRef = quiz.sessionRef.child('players');
+  var playersListener = playersRef.on('value', function(snap) {
+    var players = snap.val() || {};
+    var playerCodes = Object.keys(players).filter(function(c) { return !players[c].kicked; });
+    quiz.playerCount = playerCodes.length;
+    renderHostPlayerList(players);
+    document.getElementById('btn-quiz-begin').disabled = playerCodes.length === 0;
+  });
+  quiz.unsubscribers.push(function() { playersRef.off('value', playersListener); });
+}
+
+function setQuizHostView(view) {
+  ['lobby','question','reveal','finished'].forEach(function(v) {
+    document.getElementById('qh-' + v).classList.toggle('hidden', v !== view);
+  });
+  quiz.currentState = view;
+}
+
+function renderHostPlayerList(players) {
+  var list = document.getElementById('qh-player-list');
+  list.innerHTML = '';
+  Object.keys(players).forEach(function(code) {
+    var p = players[code];
+    var chip = document.createElement('div');
+    chip.className = 'flex items-center gap-1 bg-gray-700 rounded-full px-3 py-1 text-sm';
+    chip.innerHTML =
+      '<span>' + code + '</span>' +
+      '<button class="text-red-400 hover:text-red-300 text-xs ml-1 font-bold" title="Kick">&#x2715;</button>';
+    chip.querySelector('button').onclick = async function() {
+      await quiz.sessionRef.child('players/' + code + '/kicked').set(true);
+    };
+    list.appendChild(chip);
+  });
+}
+
+document.getElementById('btn-quiz-begin').onclick = async function() {
+  await startNextQuestion();
+};
+
+document.getElementById('btn-quiz-next').onclick = async function() {
+  clearInterval(quiz.timerInterval);
+  await showAnswerReveal();
+};
+
+document.getElementById('btn-quiz-continue').onclick = async function() {
+  await startNextQuestion();
+};
+
+document.getElementById('btn-quiz-host-exit').onclick = async function() {
+  if (!confirm('End the quiz for all players?')) return;
+  await endQuiz();
+};
+
+async function startNextQuestion() {
+  clearInterval(quiz.timerInterval);
+  var snap = await quiz.sessionRef.child('questionIdx').get();
+  var nextIdx = (snap.exists() ? snap.val() : -1) + 1;
+
+  if (nextIdx >= quiz.questions.length) {
+    await endQuiz(); return;
+  }
+
+  var q = quiz.questions[nextIdx];
+  var now = Date.now();
+  await quiz.sessionRef.update({
+    state:           'question',
+    questionIdx:     nextIdx,
+    questionStart:   now,
+    questionDuration: q.duration,
+    answerRevealStart: null,
+  });
+
+  // Render host question view
+  document.getElementById('qh-q-text').textContent = q.q;
+  q.options.forEach(function(opt, i) {
+    document.getElementById('qh-opt-' + i).textContent = opt;
+  });
+  document.getElementById('qh-q-progress').textContent =
+    'Question ' + (nextIdx + 1) + ' of ' + quiz.questions.length;
+  document.getElementById('qh-answered-count').textContent = '';
+
+  setQuizHostView('question');
+  startHostTimer(q.duration, nextIdx);
+}
+
+function startHostTimer(duration, qIdx) {
+  quiz.timerEnd = Date.now() + duration * 1000;
+  clearInterval(quiz.timerInterval);
+
+  function tick() {
+    var remaining = Math.max(0, Math.ceil((quiz.timerEnd - Date.now()) / 1000));
+    document.getElementById('qh-timer').textContent = remaining;
+    var pct = ((quiz.timerEnd - Date.now()) / (duration * 1000)) * 100;
+    var bar = document.getElementById('qh-timer-bar');
+    bar.style.width = Math.max(0, pct) + '%';
+    bar.className = 'h-2 transition-all ' + (pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+
+    // Check how many have answered
+    quiz.sessionRef.child('answers/' + qIdx).get().then(function(snap) {
+      var answered = snap.exists() ? Object.keys(snap.val()).length : 0;
+      document.getElementById('qh-answered-count').textContent =
+        answered + ' / ' + quiz.playerCount + ' answered';
+      if (answered >= quiz.playerCount && quiz.playerCount > 0) {
+        clearInterval(quiz.timerInterval);
+        showAnswerReveal();
+      }
+    });
+
+    if (remaining <= 0) {
+      clearInterval(quiz.timerInterval);
+      showAnswerReveal();
+    }
+  }
+  tick();
+  quiz.timerInterval = setInterval(tick, 500);
+}
+
+async function showAnswerReveal() {
+  clearInterval(quiz.timerInterval);
+  var snap = await quiz.sessionRef.child('questionIdx').get();
+  var qIdx = snap.val();
+  var q = quiz.questions[qIdx];
+  var now = Date.now();
+
+  await quiz.sessionRef.update({ state: 'answer', answerRevealStart: now });
+
+  // Show correct answer
+  var colours = ['bg-red-600','bg-blue-600','bg-yellow-500','bg-green-600'];
+  var revealEl = document.getElementById('qh-reveal-answer');
+  revealEl.textContent = q.options[q.answer];
+  revealEl.className = 'text-2xl font-bold rounded-xl px-8 py-4 mb-6 ' + colours[q.answer];
+
+  // Show answer breakdown
+  var statsEl = document.getElementById('qh-reveal-stats');
+  statsEl.innerHTML = '';
+  var answersSnap = await quiz.sessionRef.child('answers/' + qIdx).get();
+  var answerCounts = [0,0,0,0];
+  if (answersSnap.exists()) {
+    Object.values(answersSnap.val()).forEach(function(a) {
+      if (typeof a.answer === 'number') answerCounts[a.answer]++;
+    });
+  }
+  q.options.forEach(function(opt, i) {
+    var chip = document.createElement('div');
+    chip.className = 'rounded-lg px-4 py-2 text-center text-sm ' +
+      (i === q.answer ? 'bg-green-600 font-bold' : 'bg-gray-700 opacity-70');
+    chip.textContent = opt + ' — ' + answerCounts[i];
+    statsEl.appendChild(chip);
+  });
+
+  setQuizHostView('reveal');
+
+  // Auto-advance after half the question duration
+  var revealDuration = Math.max(5000, (q.duration / 2) * 1000);
+  quiz.timerInterval = setTimeout(async function() {
+    await startNextQuestion();
+  }, revealDuration);
+}
+
+async function endQuiz() {
+  clearInterval(quiz.timerInterval);
+  await quiz.sessionRef.update({ state: 'finished' });
+  setQuizHostView('finished');
+  // Clean up listeners
+  quiz.unsubscribers.forEach(function(fn) { fn(); });
+  quiz.unsubscribers = [];
+}
+
+// ── STUDENT: Join quiz ─────────────────────────────────────────
+document.getElementById('btn-join-quiz').onclick = function() {
+  document.getElementById('input-lobby-code').value = '';
+  document.getElementById('join-quiz-error').classList.add('hidden');
+  document.getElementById('modal-join-quiz').classList.remove('hidden');
+};
+
+document.getElementById('btn-join-quiz-cancel').onclick = function() {
+  document.getElementById('modal-join-quiz').classList.add('hidden');
+};
+
+// Prevent join-spam: track in-flight join request
+var joinInProgress = false;
+
+document.getElementById('btn-join-quiz-submit').onclick = async function() {
+  if (joinInProgress) return;
+  var lobbyCode = document.getElementById('input-lobby-code').value.trim().toUpperCase();
+  var errEl = document.getElementById('join-quiz-error');
+  errEl.classList.add('hidden');
+  if (!lobbyCode || lobbyCode.length !== 4) {
+    errEl.textContent = 'Please enter a 4-digit code.'; errEl.classList.remove('hidden'); return;
+  }
+
+  joinInProgress = true;
+  document.getElementById('btn-join-quiz-submit').disabled = true;
+
+  try {
+    var sessionRef = state.db.ref('quizSessions/' + lobbyCode);
+    var snap = await sessionRef.get();
+    if (!snap.exists() || snap.child('state').val() !== 'lobby') {
+      errEl.textContent = 'No open lobby found with that code.'; errEl.classList.remove('hidden');
+      joinInProgress = false; document.getElementById('btn-join-quiz-submit').disabled = false;
+      return;
+    }
+
+    // Check if already in (not kicked)
+    var existing = snap.child('players/' + state.uid);
+    if (existing.exists() && !existing.child('kicked').val()) {
+      errEl.textContent = 'You are already in this quiz.'; errEl.classList.remove('hidden');
+      joinInProgress = false; document.getElementById('btn-join-quiz-submit').disabled = false;
+      return;
+    }
+
+    // Use Firebase transaction to prevent duplicate join
+    var playerRef = sessionRef.child('players/' + state.uid);
+    var result = await playerRef.transaction(function(current) {
+      if (current && !current.kicked) return; // already joined, abort
+      return { joinedAt: Date.now(), kicked: false };
+    });
+
+    if (!result.committed) {
+      errEl.textContent = 'Already joined.'; errEl.classList.remove('hidden');
+      joinInProgress = false; document.getElementById('btn-join-quiz-submit').disabled = false;
+      return;
+    }
+
+    document.getElementById('modal-join-quiz').classList.add('hidden');
+    quiz.lobbyCode  = lobbyCode;
+    quiz.sessionRef = sessionRef;
+    quiz.myScore    = 0;
+    quiz.myAnswered = false;
+    showStudentScreen(lobbyCode, snap.val().questions || []);
+
+  } catch(e) {
+    errEl.textContent = 'Error joining: ' + e.message; errEl.classList.remove('hidden');
+  }
+  joinInProgress = false;
+  document.getElementById('btn-join-quiz-submit').disabled = false;
+};
+
+document.getElementById('btn-join-quiz-cancel').onclick = function() {
+  document.getElementById('modal-join-quiz').classList.add('hidden');
+};
+
+// ── STUDENT: Screen ────────────────────────────────────────────
+function setStudentView(view) {
+  ['lobby','kicked','question','reveal','finished'].forEach(function(v) {
+    document.getElementById('qs-' + v).classList.toggle('hidden', v !== view);
+  });
+}
+
+function showStudentScreen(lobbyCode, questions) {
+  quiz.questions = questions;
+  document.getElementById('quiz-student-screen').classList.remove('hidden');
+  document.getElementById('qs-my-code').textContent = 'Your code: ' + state.uid;
+  setStudentView('lobby');
+
+  var sessionRef = state.db.ref('quizSessions/' + lobbyCode);
+
+  // Listen to kicked state
+  var kickedRef = sessionRef.child('players/' + state.uid + '/kicked');
+  var kickedListener = kickedRef.on('value', function(snap) {
+    if (snap.val() === true) setStudentView('kicked');
+  });
+  quiz.unsubscribers.push(function() { kickedRef.off('value', kickedListener); });
+
+  // Listen to overall quiz state
+  var stateListener = sessionRef.on('value', function(snap) {
+    if (!snap.exists()) { exitStudentQuiz(); return; }
+    var qzState = snap.child('state').val();
+    var qIdx    = snap.child('questionIdx').val();
+
+    if (qzState === 'lobby') {
+      setStudentView('lobby');
+    } else if (qzState === 'question') {
+      quiz.myAnswered = false;
+      // Load questions from Firebase snapshot in case they weren't there on join
+      var fbQs = snap.child('questions').val();
+      if (fbQs) quiz.questions = Object.values(fbQs);
+      renderStudentQuestion(qIdx, snap.child('questionStart').val(), snap.child('questionDuration').val());
+    } else if (qzState === 'answer') {
+      var q = quiz.questions[qIdx];
+      renderStudentReveal(q, qIdx);
+    } else if (qzState === 'finished') {
+      setStudentView('finished');
+      document.getElementById('qs-final-score').textContent =
+        'You scored ' + quiz.myScore + ' / ' + quiz.questions.length;
+      quiz.unsubscribers.forEach(function(fn) { fn(); });
+      quiz.unsubscribers = [];
+    }
+  });
+  quiz.unsubscribers.push(function() { sessionRef.off('value', stateListener); });
+}
+
+function renderStudentQuestion(qIdx, questionStart, duration) {
+  setStudentView('question');
+  var q = quiz.questions[qIdx];
+  if (!q) return;
+
+  document.getElementById('qs-q-text').textContent = q.q;
+  document.getElementById('qs-q-progress').textContent =
+    'Question ' + (qIdx + 1) + ' of ' + quiz.questions.length;
+  document.getElementById('qs-answered-msg').classList.add('hidden');
+
+  // Show answer buttons
+  document.getElementById('qs-answer-grid').classList.remove('hidden');
+  document.querySelectorAll('.quiz-ans-btn').forEach(function(btn, i) {
+    btn.querySelector('span').textContent = q.options[i];
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.onclick = function() { submitStudentAnswer(qIdx, i, btn); };
+  });
+
+  // Timer based on server start time
+  var elapsed    = (Date.now() - questionStart) / 1000;
+  var remaining  = Math.max(0, duration - elapsed);
+  clearInterval(quiz.timerInterval);
+  var timerEnd   = Date.now() + remaining * 1000;
+
+  function tick() {
+    var rem = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
+    document.getElementById('qs-timer').textContent = rem;
+    var pct = ((timerEnd - Date.now()) / (duration * 1000)) * 100;
+    var bar = document.getElementById('qs-timer-bar');
+    bar.style.width = Math.max(0, pct) + '%';
+    bar.className = 'h-1.5 transition-all ' + (pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+    if (rem <= 0) { clearInterval(quiz.timerInterval); lockStudentAnswers(); }
+  }
+  tick();
+  quiz.timerInterval = setInterval(tick, 500);
+}
+
+function lockStudentAnswers() {
+  document.querySelectorAll('.quiz-ans-btn').forEach(function(btn) {
+    btn.disabled = true; btn.style.opacity = '0.5';
+  });
+}
+
+async function submitStudentAnswer(qIdx, answerIdx, btn) {
+  if (quiz.myAnswered) return;
+  quiz.myAnswered = true;
+  lockStudentAnswers();
+  btn.style.opacity = '1';  // highlight chosen
+  btn.style.outline = '3px solid white';
+
+  await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
+    answer: answerIdx,
+    answeredAt: Date.now(),
+  });
+
+  document.getElementById('qs-answered-msg').classList.remove('hidden');
+  document.getElementById('qs-answer-grid').classList.add('hidden');
+}
+
+function renderStudentReveal(q, qIdx) {
+  clearInterval(quiz.timerInterval);
+  setStudentView('reveal');
+  if (!q) return;
+
+  var answered = quiz.myAnswered;
+  // Check if our answer was right — read from Firebase
+  quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).get().then(function(snap) {
+    var correct = snap.exists() && snap.child('answer').val() === q.answer;
+    if (correct) quiz.myScore++;
+    document.getElementById('qs-reveal-result').textContent = correct ? '✅ Correct!' : '❌ Wrong';
+    document.getElementById('qs-reveal-answer').textContent = 'Answer: ' + q.options[q.answer];
+  });
+}
+
+document.getElementById('btn-quiz-student-exit').onclick = function() {
+  if (confirm('Leave the quiz?')) exitStudentQuiz();
+};
+
+document.getElementById('btn-quiz-rejoin').onclick = async function() {
+  // Remove kicked flag and re-join
+  if (!quiz.sessionRef) return;
+  var result = await quiz.sessionRef.child('players/' + state.uid).transaction(function(current) {
+    if (!current) return;
+    return { joinedAt: Date.now(), kicked: false };
+  });
+  if (result.committed) setStudentView('lobby');
+};
+
+function exitStudentQuiz() {
+  clearInterval(quiz.timerInterval);
+  quiz.unsubscribers.forEach(function(fn) { fn(); });
+  quiz.unsubscribers = [];
+  if (quiz.sessionRef) {
+    quiz.sessionRef.child('players/' + state.uid).remove();
+  }
+  quiz.sessionRef = null;
+  document.getElementById('quiz-student-screen').classList.add('hidden');
+}
+
+// ── Wire up join quiz button visibility ────────────────────────
+var _origUpdateAuthUI = updateAuthUI;
+updateAuthUI = function(first, last, isAdmin) {
+  _origUpdateAuthUI(first, last, isAdmin);
+  var show = !!first && !isAdmin;
+  document.getElementById('btn-join-quiz').classList.toggle('hidden', !show);
+};
+
+// ── Init lobby code input: numbers only, auto-submit at 4 digits ─
+document.getElementById('input-lobby-code').addEventListener('input', function() {
+  this.value = this.value.replace(/[^0-9]/g, '').slice(0, 4);
+  if (this.value.length === 4) document.getElementById('btn-join-quiz-submit').click();
+});
+
+// ── Init quiz setup radio handler
+document.querySelectorAll('input[name="quiz-mode"]').forEach(function(r) {
+  r.onchange = function() {
+    var isCustom = this.value === 'custom';
+    document.getElementById('quiz-quick-opts').classList.toggle('hidden', isCustom);
+    document.getElementById('quiz-custom-opts').classList.toggle('hidden', !isCustom);
+  };
+});
 
 // ── Init ──────────────────────────────────────────────────────
 loadApp().catch(function(e) {

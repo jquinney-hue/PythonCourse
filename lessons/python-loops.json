@@ -123,5 +123,157 @@
       "css": "#el-prompt code { background:#dbeafe; padding:1px 5px; border-radius:3px; font-family:monospace; font-size:0.9em; }",
       "js": "(function(){\n  var streak = 0;\n  var best = parseInt(localStorage.getItem('pylearn_loops_best') || '0', 10);\n  document.getElementById('el-best').textContent = best;\n\n  var challenges = [\n    {\n      prompt: 'Use a for loop to print the word <strong>Go!</strong> exactly <strong>3 times</strong>.',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        var expected = 'Go!\\nGo!\\nGo!';\n        if (r.output.trim() !== expected) return '\\u274c Should show Go! three times, you got: \\\"' + r.output.trim() + '\\\"';\n        if (!/for/.test(code)) return '\\u26a0\\ufe0f Please use a for loop.';\n        return null;\n      }\n    },\n    {\n      prompt: 'Use a for loop to print all the numbers from <strong>1 to 5</strong>.',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === '1\\n2\\n3\\n4\\n5' ? null : '\\u274c We need 1 to 5 each on their own line.';\n      }\n    },\n    {\n      prompt: 'Use a for loop to print the numbers from <strong>10 to 20</strong> (including 20).',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        var expected = '';\n        for (var i = 10; i <= 20; i++) expected += i + (i < 20 ? '\\n' : '');\n        return r.output.trim() === expected ? null : '\\u274c We need 10 to 20.';\n      }\n    },\n    {\n      prompt: 'Use a for loop to print the <strong>even</strong> numbers from <strong>2 to 10</strong> (including 10).',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === '2\\n4\\n6\\n8\\n10' ? null : '\\u274c We need: 2, 4, 6, 8, 10 each on their own line.';\n      }\n    },\n    {\n      prompt: 'Use a for loop to add up the numbers from <strong>1 to 10</strong> and print the total.',\n      starter: 'total = 0\\n\\n# Loop and add\\n\\nprint(total)',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === '55' ? null : '\\u274c The sum of 1 to 10 is 55, you got: \\\"' + r.output.trim() + '\\\"';\n      }\n    },\n    {\n      prompt: 'Count down from <strong>5 to 1</strong> using a for loop.',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === '5\\n4\\n3\\n2\\n1' ? null : '\\u274c We need 5, 4, 3, 2, 1 going down.';\n      }\n    },\n    {\n      prompt: 'Loop through <strong>1 to 10</strong>. Show <strong>Big</strong> if the number is bigger than 5, otherwise show the number.',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        var expected = '1\\n2\\n3\\n4\\n5\\nBig\\nBig\\nBig\\nBig\\nBig';\n        return r.output.trim() === expected ? null : '\\u274c Numbers 1-5 should be the number, then \\\"Big\\\" five times for 6-10.';\n      }\n    },\n    {\n      prompt: 'Print the <strong>3 times table</strong> from 3 up to 30 (3, 6, 9, 12 ... 30) using a for loop.',\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        var expected = [3,6,9,12,15,18,21,24,27,30].join('\\n');\n        return r.output.trim() === expected ? null : '\\u274c Should be the 3 times table: 3, 6, 9, 12, ... 30.';\n      }\n    },\n    {\n      prompt: 'Use a for loop to count the <strong>multiples of 5</strong> between 1 and 50. Print just the count.',\n      starter: 'count = 0\\n\\n# Loop here\\n\\nprint(count)',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === '10' ? null : '\\u274c There are 10 multiples of 5 between 1 and 50, you got: \\\"' + r.output.trim() + '\\\"';\n      }\n    },\n    {\n      prompt: 'Use a while loop to print the numbers <strong>1, 2, 3, 4, 5</strong>.',\n      starter: 'count = 1\\n\\n# while loop here\\n',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        if (r.output.trim() !== '1\\n2\\n3\\n4\\n5') return '\\u274c We need 1 to 5 on separate lines.';\n        if (!/while/.test(code)) return '\\u26a0\\ufe0f Please use a while loop for this one.';\n        return null;\n      }\n    }\n  ];\n\n  var currentIdx = -1;\n\n  function pickChallenge() {\n    var next;\n    do { next = Math.floor(Math.random() * challenges.length); } while (next === currentIdx && challenges.length > 1);\n    currentIdx = next;\n    return challenges[next];\n  }\n\n  function loadChallenge() {\n    var ch = pickChallenge();\n    document.getElementById('el-prompt').innerHTML = ch.prompt;\n    var wrap = document.getElementById('editor-endless');\n    wrap.innerHTML = '';\n    PyLearn.createEditor({\n      containerId: 'editor-endless',\n      persist: false,\n      initialCode: ch.starter || '# Write your code\\n',\n      label: 'Endless Mode',\n      validate: async function(output, error, code) {\n        var msg = await challenges[currentIdx].check(code);\n        if (msg) return { pass: false, message: msg };\n        return { pass: true, message: '\\u2705 Correct! Loading next...' };\n      },\n      onPass: async function() {\n        streak++;\n        if (streak > best) {\n          best = streak;\n          localStorage.setItem('pylearn_loops_best', best);\n          document.getElementById('el-best').textContent = best;\n        }\n        document.getElementById('el-streak').textContent = streak;\n        setTimeout(loadChallenge, 1300);\n      }\n    });\n  }\n\n  document.getElementById('el-new').onclick = function() {\n    streak = 0;\n    document.getElementById('el-streak').textContent = streak;\n    loadChallenge();\n  };\n\n  loadChallenge();\n})();"
     }
+  ],
+  "quizQuestions": [
+    {
+      "q": "What does a loop do?",
+      "options": [
+        "Asks the user a question",
+        "Repeats code multiple times",
+        "Stores a value",
+        "Shows text once"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "How many times does this run? for i in range(5):",
+      "options": [
+        "4",
+        "5",
+        "6",
+        "0"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What numbers does range(3) produce?",
+      "options": [
+        "1, 2, 3",
+        "0, 1, 2, 3",
+        "0, 1, 2",
+        "1, 2"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What is i in: for i in range(5): print(i)?",
+      "options": [
+        "A fixed value",
+        "Always 5",
+        "The loop counter",
+        "A string"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What does range(1, 6) produce?",
+      "options": [
+        "0,1,2,3,4,5",
+        "1,2,3,4,5,6",
+        "1,2,3,4,5",
+        "0,1,2,3,4"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What symbol means remainder in Python?",
+      "options": [
+        "/",
+        "//",
+        "%",
+        "*"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "How do you check if a number is even?",
+      "options": [
+        "n % 2 == 1",
+        "n / 2 == 0",
+        "n % 2 == 0",
+        "n * 2 == 0"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What is the total pattern used for?",
+      "options": [
+        "Counting how many match a condition",
+        "Adding numbers up",
+        "Finding the biggest number",
+        "Printing a list"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "A while loop runs…",
+      "options": [
+        "Exactly 10 times",
+        "As long as a condition is True",
+        "Only once",
+        "Until you press Enter"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What is a sentinel value?",
+      "options": [
+        "The biggest number in a list",
+        "A special value that stops the loop",
+        "The loop counter",
+        "The first item in a list"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "FizzBuzz: what do you print for a multiple of both 3 and 5?",
+      "options": [
+        "Fizz",
+        "Buzz",
+        "FizzBuzz",
+        "15"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "Why must you check FizzBuzz (divisible by both) FIRST?",
+      "options": [
+        "It makes the code shorter",
+        "Otherwise 15 would just show Fizz or Buzz",
+        "Python requires it",
+        "To make it faster"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does count = count + 1 do?",
+      "options": [
+        "Sets count to 1",
+        "Adds 1 to count",
+        "Multiplies count by 1",
+        "Resets count"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "How do you count down from 10 to 1 using range?",
+      "options": [
+        "range(10)",
+        "range(10, 0)",
+        "range(10, 0, -1)",
+        "range(1, 10, -1)"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What is the highest pattern used for?",
+      "options": [
+        "Adding all numbers",
+        "Finding the biggest value seen so far",
+        "Counting even numbers",
+        "Stopping a loop"
+      ],
+      "answer": 1
+    }
   ]
 }

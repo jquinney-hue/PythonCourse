@@ -131,5 +131,157 @@
       "css": "#el-prompt code { background:#dbeafe; padding:1px 5px; border-radius:3px; font-family:monospace; font-size:0.9em; }",
       "js": "(function(){\n  var VALIDATOR = 'def check_password(username, password):\\n    accounts = {\"alice\": \"Sunshine7\", \"bob\": \"Football3\", \"admin\": \"Adm1n!Pass\", \"guest\": \"guest\"}\\n    if username not in accounts:\\n        return False\\n    return accounts[username] == password\\n\\n';\n\n  var streak = 0;\n  var best   = parseInt(localStorage.getItem('pylearn_login_best') || '0', 10);\n  document.getElementById('el-best').textContent = best;\n\n  var challenges = [\n    {\n      prompt: 'Use <code>print</code> to show the word: <strong>Hello</strong>',\n      note: '',\n      inputs: [],\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === 'Hello' ? null : '\\u274c We need exactly: Hello. You showed: \\\"' + r.output.trim() + '\\\"';\n      }\n    },\n    {\n      prompt: 'Use <strong>one</strong> <code>print</code> with a comma to show: <strong>Score: 100</strong>',\n      note: '',\n      inputs: [],\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        if (r.output.trim() !== 'Score: 100') return '\\u274c We need: Score: 100. You showed: \\\"' + r.output.trim() + '\\\"';\n        if (!/,/.test(code)) return '\\u26a0\\ufe0f Right answer, but please use a comma in print.';\n        return null;\n      }\n    },\n    {\n      prompt: 'A variable <code>name = \"Sam\"</code> is already there. Use <code>print</code> with a comma to show: <strong>Hello Sam</strong> (using the variable, not the word \"Sam\" in quotes).',\n      note: '',\n      inputs: [],\n      starter: 'name = \"Sam\"\\n# Show: Hello Sam\\n',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        if (r.output.trim() !== 'Hello Sam') return '\\u274c We need: Hello Sam. You showed: \\\"' + r.output.trim() + '\\\"';\n        if (!/name\\b/.test(code.split('=').slice(1).join('='))) return '\\u26a0\\ufe0f Use the variable <code>name</code> in your print, not the word in quotes.';\n        return null;\n      }\n    },\n    {\n      prompt: 'Ask the user <code>\"What is your name? \"</code> and store the answer. Then show <strong>Hi</strong> followed by the name. (Hint: use a comma in print.)',\n      note: '&#x1F4A1; The user will type: <strong>Maya</strong>',\n      inputs: ['Maya'],\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code, { inputs: ['Maya'] });\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        return r.output.trim() === 'Hi Maya' ? null : '\\u274c We need: Hi Maya. You showed: \\\"' + r.output.trim() + '\\\"';\n      }\n    },\n    {\n      prompt: 'A variable <code>age</code> is set. Show <strong>Adult</strong> if age is 18 or more, otherwise show <strong>Child</strong>.',\n      note: '',\n      inputs: [],\n      starter: 'age = 25\\n# Write your if/else\\n',\n      check: async function(code) {\n        var stripped = code.replace(/^age\\s*=.*$/m, '');\n        var cases = [{a:25, e:'Adult'}, {a:10, e:'Child'}, {a:18, e:'Adult'}];\n        for (var i = 0; i < cases.length; i++) {\n          var c = cases[i];\n          var r = await PyLearn.runPython('age = ' + c.a + '\\n' + stripped);\n          if (r.error) return '\\u274c Problem when age=' + c.a + ': ' + r.error;\n          if (r.output.trim() !== c.e) return '\\u274c When age=' + c.a + ' we need: ' + c.e + '. You showed: \\\"' + r.output.trim() + '\\\"';\n        }\n        return null;\n      }\n    },\n    {\n      prompt: 'Ask <code>\"Favourite colour: \"</code>. Then show <strong>Nice colour!</strong> if they typed <code>blue</code>, otherwise show <strong>Cool</strong>.',\n      note: '&#x1F4A1; Tested with both <strong>blue</strong> and <strong>red</strong>.',\n      inputs: ['blue'],\n      starter: '',\n      check: async function(code) {\n        var r1 = await PyLearn.runPython(code, { inputs: ['blue'] });\n        if (r1.error) return '\\u274c Problem: ' + r1.error;\n        if (r1.output.trim() !== 'Nice colour!') return '\\u274c When they type \"blue\" we need: Nice colour! You showed: \\\"' + r1.output.trim() + '\\\"';\n        var r2 = await PyLearn.runPython(code, { inputs: ['red'] });\n        if (r2.error) return '\\u274c Problem: ' + r2.error;\n        if (r2.output.trim() !== 'Cool') return '\\u274c When they type \"red\" we need: Cool. You showed: \\\"' + r2.output.trim() + '\\\"';\n        return null;\n      }\n    },\n    {\n      prompt: 'A variable <code>username</code> is set. If it equals <code>\"admin\"</code> show <strong>Welcome boss</strong>, otherwise show <strong>Hello user</strong>.',\n      note: '',\n      inputs: [],\n      starter: 'username = \"admin\"\\n',\n      check: async function(code) {\n        var stripped = code.replace(/^username\\s*=.*$/m, '');\n        var cases = [{u:'admin', e:'Welcome boss'}, {u:'sam', e:'Hello user'}];\n        for (var i = 0; i < cases.length; i++) {\n          var c = cases[i];\n          var r = await PyLearn.runPython('username = \"' + c.u + '\"\\n' + stripped);\n          if (r.error) return '\\u274c Problem when username=\"' + c.u + '\": ' + r.error;\n          if (r.output.trim() !== c.e) return '\\u274c With username=\"' + c.u + '\" we need: ' + c.e + '. You showed: \\\"' + r.output.trim() + '\\\"';\n        }\n        return null;\n      }\n    },\n    {\n      prompt: 'Use the password checker. Use <code>check_password(\"bob\", \"Football3\")</code>. If True, show <strong>Hi Bob!</strong>, otherwise show <strong>Wrong password</strong>.',\n      note: '',\n      inputs: [],\n      starter: '',\n      check: async function(code) {\n        var fullCode = VALIDATOR + code.replace(/def check_password[\\s\\S]*?return\\s+accounts\\[username\\]\\s*==\\s*password\\s*\\n?/g, '');\n        var r = await PyLearn.runPython(fullCode);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        if (r.output.trim() === 'Hi Bob!') return null;\n        return '\\u274c We need: Hi Bob! You showed: \\\"' + r.output.trim() + '\\\"';\n      }\n    },\n    {\n      prompt: 'Ask <code>\"Username: \"</code> and <code>\"Password: \"</code>. Use the password checker. If correct show <strong>Logged in</strong>, otherwise show <strong>Try again</strong>.',\n      note: '&#x1F4A1; Tested with alice / Sunshine7 (correct) and alice / wrong (incorrect).',\n      inputs: ['alice', 'Sunshine7'],\n      starter: '',\n      check: async function(code) {\n        var fullCode = VALIDATOR + code.replace(/def check_password[\\s\\S]*?return\\s+accounts\\[username\\]\\s*==\\s*password\\s*\\n?/g, '');\n        var r1 = await PyLearn.runPython(fullCode, (function(){ var q=['alice','Sunshine7']; return async function(){ return q.shift()||''; }; })());\n        if (r1.error) return '\\u274c Problem: ' + r1.error;\n        if (r1.output.trim() !== 'Logged in') return '\\u274c With correct password we need: Logged in. You showed: \\\"' + r1.output.trim() + '\\\"';\n        var r2 = await PyLearn.runPython(fullCode, (function(){ var q=['alice','wrong']; return async function(){ return q.shift()||''; }; })());\n        if (r2.error) return '\\u274c Problem: ' + r2.error;\n        if (r2.output.trim() !== 'Try again') return '\\u274c With wrong password we need: Try again. You showed: \\\"' + r2.output.trim() + '\\\"';\n        return null;\n      }\n    },\n    {\n      prompt: 'Make two variables: <code>game = \"Minecraft\"</code> and <code>players = 4</code>. Show on one line: <strong>Game: Minecraft Players: 4</strong>',\n      note: '',\n      inputs: [],\n      starter: '',\n      check: async function(code) {\n        var r = await PyLearn.runPython(code);\n        if (r.error) return '\\u274c Problem: ' + r.error;\n        if (r.output.trim() !== 'Game: Minecraft Players: 4') return '\\u274c We need: Game: Minecraft Players: 4. You showed: \\\"' + r.output.trim() + '\\\"';\n        if (!/game\\s*=/.test(code) || !/players\\s*=/.test(code)) return '\\u26a0\\ufe0f Make sure you create both variables: game and players.';\n        return null;\n      }\n    }\n  ];\n\n  var currentIdx = -1;\n\n  function pickChallenge() {\n    var next;\n    do { next = Math.floor(Math.random() * challenges.length); } while (next === currentIdx && challenges.length > 1);\n    currentIdx = next;\n    return challenges[next];\n  }\n\n  function loadChallenge() {\n    var ch = pickChallenge();\n    document.getElementById('el-prompt').innerHTML = ch.prompt;\n    document.getElementById('el-sim-note').innerHTML = ch.note || '';\n\n    var wrap = document.getElementById('editor-endless');\n    wrap.innerHTML = '';\n\n    PyLearn.createEditor({\n      containerId: 'editor-endless',\n      persist: false,\n      initialCode: ch.starter || '# Write your code\\n',\n      label: 'Endless Mode',\n      validate: async function(output, error, code) {\n        var msg = await challenges[currentIdx].check(code);\n        if (msg) return { pass: false, message: msg };\n        return { pass: true, message: '\\u2705 Correct! Loading next challenge...' };\n      },\n      onPass: async function() {\n        streak++;\n        if (streak > best) {\n          best = streak;\n          localStorage.setItem('pylearn_login_best', best);\n          document.getElementById('el-best').textContent = best;\n        }\n        document.getElementById('el-streak').textContent = streak;\n        setTimeout(loadChallenge, 1300);\n      }\n    });\n\n  }\n\n  document.getElementById('el-new').onclick = function() {\n    streak = 0;\n    document.getElementById('el-streak').textContent = streak;\n    loadChallenge();\n  };\n\n  loadChallenge();\n})();"
     }
+  ],
+  "quizQuestions": [
+    {
+      "q": "What does print() do?",
+      "options": [
+        "Stores a value",
+        "Shows text on the screen",
+        "Asks the user a question",
+        "Adds two numbers"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "Which line correctly shows the word Hello?",
+      "options": [
+        "print Hello",
+        "print(\"Hello\")",
+        "show(\"Hello\")",
+        "display Hello"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What are the quotes in print(\"Hello\") for?",
+      "options": [
+        "They are decoration",
+        "They mark the start and end of text",
+        "They make the text bold",
+        "They tell Python to print twice"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this print? print(\"Hi\", \"there\")",
+      "options": [
+        "Hi,there",
+        "Hi there",
+        "Hithere",
+        "Hi\nthere"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "A variable is like…",
+      "options": [
+        "A question Python asks",
+        "A labelled box that stores a value",
+        "A type of bracket",
+        "A way to show text"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "Which line stores the number 10 in a box called score?",
+      "options": [
+        "score == 10",
+        "10 = score",
+        "score = 10",
+        "store score 10"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What does input() do?",
+      "options": [
+        "Shows text on screen",
+        "Adds two numbers",
+        "Waits for the user to type something",
+        "Creates a variable"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What is wrong with: if age = 18:",
+      "options": [
+        "age should be in quotes",
+        "Should use == not =",
+        "Missing brackets",
+        "Nothing is wrong"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does else do in an if/else?",
+      "options": [
+        "Runs when the if condition is True",
+        "Runs when the if condition is False",
+        "Asks the user a question",
+        "Prints extra text"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What will this print? x = 5\\nif x > 3:\\n    print(\"Big\")",
+      "options": [
+        "Nothing",
+        "Big",
+        "x",
+        "Error"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does check_password(\"alice\", \"Sunshine7\") return if the password is correct?",
+      "options": [
+        "\"correct\"",
+        "1",
+        "True",
+        "OK"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "Which symbol checks if two things are the same?",
+      "options": [
+        "=",
+        "==",
+        "!=",
+        "=>"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this show? print(\"Score:\", 100)",
+      "options": [
+        "Score:100",
+        "Score: 100",
+        "\"Score:\" 100",
+        "Error"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What happens if you type the wrong password in a login screen?",
+      "options": [
+        "The program crashes",
+        "Nothing happens",
+        "Access denied is shown",
+        "The program restarts"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "Which of these is a valid variable name?",
+      "options": [
+        "2score",
+        "my score",
+        "my_score",
+        "my-score"
+      ],
+      "answer": 2
+    }
   ]
 }

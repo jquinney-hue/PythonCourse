@@ -139,5 +139,157 @@
       "css": "#el-prompt code { background:#dbeafe; padding:1px 5px; border-radius:3px; font-family:monospace; font-size:0.9em; }",
       "js": "(function(){\n  var streak = 0;\n  var best = parseInt(localStorage.getItem('pylearn_gcse_best') || '0', 10);\n  document.getElementById('el-best').textContent = best;\n\n  var challenges = [\n    {\n      name: \"Total items sold in a week\",\n      prompt: \"<p class='mb-2'><strong>Total items sold in a week</strong></p><p class='mb-2'>Write a Python program that calculate the total number of items sold in a week.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter the number of items sold each day</li><li>repeat this input process for 7 days</li><li>calculate the total number of items sold</li><li>output the total in an appropriate message</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>10, 20, 15, 5, 10, 20, 20</strong></p>\",\n      inputs: [\"10\", \"20\", \"15\", \"5\", \"10\", \"20\", \"20\"],\n      expectedNumber: \"100\",\n      expectedWords: \"total|sold|items|sum|week|all\",\n      requireWhile: false\n    },\n    {\n      name: \"Highest temperature in a week\",\n      prompt: \"<p class='mb-2'><strong>Highest temperature in a week</strong></p><p class='mb-2'>Write a Python program that determine the highest temperature recorded in a week.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter the temperature for each day</li><li>repeat this input process for 7 days</li><li>determine which temperature is the highest</li><li>output the highest temperature in an appropriate message</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>10, 25, 15, 32, 20, 5, 12</strong></p>\",\n      inputs: [\"10\", \"25\", \"15\", \"32\", \"20\", \"5\", \"12\"],\n      expectedNumber: \"32\",\n      expectedWords: \"high|highest|max|temperature|temp|maximum|warmest\",\n      requireWhile: false\n    },\n    {\n      name: \"Average of 5 test marks\",\n      prompt: \"<p class='mb-2'><strong>Average of 5 test marks</strong></p><p class='mb-2'>Write a Python program that calculate the average mark for 5 tests.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter the mark for each test</li><li>repeat this input process for 5 tests</li><li>calculate the average mark</li><li>output the average mark in an appropriate message</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>10, 20, 30, 40, 50</strong></p>\",\n      inputs: [\"10\", \"20\", \"30\", \"40\", \"50\"],\n      expectedNumber: \"30\",\n      expectedWords: \"average|avg|mean|mark|score\",\n      requireWhile: false\n    },\n    {\n      name: \"Lowest score out of 8 players\",\n      prompt: \"<p class='mb-2'><strong>Lowest score out of 8 players</strong></p><p class='mb-2'>Write a Python program that determine the lowest score achieved by 8 players in a game.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter the score for each player</li><li>repeat this input process for 8 players</li><li>determine which score is the lowest</li><li>output the lowest score in an appropriate message</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>50, 40, 30, 20, 15, 60, 70, 80</strong></p>\",\n      inputs: [\"50\", \"40\", \"30\", \"20\", \"15\", \"60\", \"70\", \"80\"],\n      expectedNumber: \"15\",\n      expectedWords: \"low|lowest|min|minimum|score|player|worst\",\n      requireWhile: false\n    },\n    {\n      name: \"Cinema screening revenue\",\n      prompt: \"<p class='mb-2'><strong>Cinema screening revenue</strong></p><p class='mb-2'>Write a Python program that calculate the total revenue from ticket sales across 5 movie screenings in a day.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter the total revenue for each screening</li><li>repeat this process for 5 screenings</li><li>calculate the combined total revenue</li><li>output the final revenue amount</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>100.50, 200.00, 150.00, 300.00, 50.00</strong></p>\",\n      inputs: [\"100.50\", \"200.00\", \"150.00\", \"300.00\", \"50.00\"],\n      expectedNumber: \"800\",\n      expectedWords: \"total|revenue|daily|sales|money|cinema|sum\",\n      requireWhile: false\n    },\n    {\n      name: \"Sum until -1 entered\",\n      prompt: \"<p class='mb-2'><strong>Sum until -1 entered</strong></p><p class='mb-2'>Write a Python program that calculate the total of integers entered until the user enters -1. Use a while loop.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter an integer</li><li>repeatedly take inputs until the user enters -1</li><li>add each integer (except -1) to a running total</li><li>output the final total</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>10, 20, 30, -1</strong></p>\",\n      inputs: [\"10\", \"20\", \"30\", \"-1\"],\n      expectedNumber: \"60\",\n      expectedWords: \"total|sum|all|numbers|final|result\",\n      requireWhile: true\n    },\n    {\n      name: \"Count until 0 entered\",\n      prompt: \"<p class='mb-2'><strong>Count until 0 entered</strong></p><p class='mb-2'>Write a Python program that count how many integers are entered until the user enters 0. Use a while loop.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt the user to enter an integer</li><li>repeatedly take inputs until the user enters 0</li><li>count integers entered (not including the 0)</li><li>output the count</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>5, 10, 15, 20, 0</strong></p>\",\n      inputs: [\"5\", \"10\", \"15\", \"20\", \"0\"],\n      expectedNumber: \"4\",\n      expectedWords: \"number|integers|count|entered|total|amount\",\n      requireWhile: true\n    },\n    {\n      name: \"Sum until total reaches 100\",\n      prompt: \"<p class='mb-2'><strong>Sum until total reaches 100</strong></p><p class='mb-2'>Write a Python program that keep adding integers entered until the total reaches at least 100. Use a while loop.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>set running total to 0</li><li>while total < 100, prompt for an integer and add it</li><li>output the final total</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>40, 50, 15</strong></p>\",\n      inputs: [\"40\", \"50\", \"15\"],\n      expectedNumber: \"105\",\n      expectedWords: \"final|total|sum|reached|over|at least\",\n      requireWhile: true\n    },\n    {\n      name: \"Repeat until even number\",\n      prompt: \"<p class='mb-2'><strong>Repeat until even number</strong></p><p class='mb-2'>Write a Python program that keep asking the user to enter a number until they enter an even number. Use a while loop.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt for an integer</li><li>repeatedly take inputs while the number is odd</li><li>output the even number when entered</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>3, 5, 7, 8</strong></p>\",\n      inputs: [\"3\", \"5\", \"7\", \"8\"],\n      expectedNumber: \"8\",\n      expectedWords: \"even|number|entered|is|got|found\",\n      requireWhile: true\n    },\n    {\n      name: \"Find largest until -1\",\n      prompt: \"<p class='mb-2'><strong>Find largest until -1</strong></p><p class='mb-2'>Write a Python program that find the largest integer entered until the user enters -1. Use a while loop.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt for an integer</li><li>repeatedly take inputs until -1</li><li>track the largest</li><li>output the largest</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>10, 50, 25, 5, -1</strong></p>\",\n      inputs: [\"10\", \"50\", \"25\", \"5\", \"-1\"],\n      expectedNumber: \"50\",\n      expectedWords: \"largest|max|maximum|highest|biggest\",\n      requireWhile: true\n    },\n    {\n      name: \"Validate age 11-18\",\n      prompt: \"<p class='mb-2'><strong>Validate age 11-18</strong></p><p class='mb-2'>Write a Python program that keep asking for an age until a valid age between 11 and 18 inclusive is entered. Use a while loop with or.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt for age</li><li>while age < 11 or age > 18, ask again</li><li>output a success message when valid</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>9, 25, 15</strong></p>\",\n      inputs: [\"9\", \"25\", \"15\"],\n      expectedNumber: null,\n      expectedWords: \"valid|success|accepted|correct|done|ok|perfect|great|right|good\",\n      requireWhile: true\n    },\n    {\n      name: \"Count red cars (10 cars)\",\n      prompt: \"<p class='mb-2'><strong>Count red cars (10 cars)</strong></p><p class='mb-2'>Write a Python program that count how many red cars pass by out of 10 recorded cars. Match red regardless of capitalisation.</p><p class='text-sm text-gray-700 mb-1'>Your program should:</p><ul class='list-disc pl-5 mt-2 text-sm space-y-1'><li>prompt for the colour of each car</li><li>repeat 10 times</li><li>count cars where colour is red (any case)</li><li>output the count</li></ul><p class='text-xs text-gray-600 mt-3'>&#x1F4A1; Validator types: <strong>red, blue, green, Red, black, white, RED, yellow, purple, orange</strong></p>\",\n      inputs: [\"red\", \"blue\", \"green\", \"Red\", \"black\", \"white\", \"RED\", \"yellow\", \"purple\", \"orange\"],\n      expectedNumber: \"3\",\n      expectedWords: \"red|cars|number|total|count|amount\",\n      requireWhile: false\n    },\n  ];\n\n  var currentIdx = -1;\n\n  function pickChallenge() {\n    var next;\n    do { next = Math.floor(Math.random() * challenges.length); } while (next === currentIdx && challenges.length > 1);\n    currentIdx = next;\n    return challenges[next];\n  }\n\n  function loadChallenge() {\n    var ch = pickChallenge();\n    document.getElementById('el-prompt').innerHTML = ch.prompt;\n    var wrap = document.getElementById('editor-endless');\n    wrap.innerHTML = '';\n    PyLearn.createEditor({\n      containerId: 'editor-endless',\n      persist: false,\n      initialCode: '# Write your solution\\n',\n      label: 'GCSE Endless',\n      validate: async function(output, error, code) {\n        var c = challenges[currentIdx];\n        var inputs = c.inputs.slice();\n        var r = await PyLearn.runPython(code, { inputs: inputs });\n        if (r.error) return { pass: false, message: '\\u274c Problem: ' + r.error };\n        if (!r.output.trim()) return { pass: false, message: '\\u26a0\\ufe0f Nothing was printed!' };\n        // Check expected number if any\n        if (c.expectedNumber !== null) {\n          if (r.output.indexOf(c.expectedNumber) === -1) {\n            return { pass: false, message: '\\u274c Expected the number ' + c.expectedNumber + ' in the output. Got: \"' + r.output.trim() + '\"' };\n          }\n        }\n        // Check expected words\n        var wordRe = new RegExp(c.expectedWords, 'i');\n        if (!wordRe.test(r.output)) {\n          return { pass: false, message: '\\u274c Add a clear label to your output (something like \"total\" or \"highest\").' };\n        }\n        // Check loop type\n        if (c.requireWhile) {\n          if (!/while/.test(code)) return { pass: false, message: '\\u26a0\\ufe0f This question needs a while loop, not a for loop.' };\n        } else {\n          if (!/for|while/.test(code)) return { pass: false, message: '\\u26a0\\ufe0f Please use a loop.' };\n        }\n        return { pass: true, message: '\\u2705 Correct! Loading next challenge...' };\n      },\n      onPass: async function() {\n        streak++;\n        if (streak > best) {\n          best = streak;\n          localStorage.setItem('pylearn_gcse_best', best);\n          document.getElementById('el-best').textContent = best;\n        }\n        document.getElementById('el-streak').textContent = streak;\n        setTimeout(loadChallenge, 1300);\n      }\n    });\n  }\n\n  document.getElementById('el-new').onclick = function() {\n    streak = 0;\n    document.getElementById('el-streak').textContent = streak;\n    loadChallenge();\n  };\n\n  loadChallenge();\n})();"
     }
+  ],
+  "quizQuestions": [
+    {
+      "q": "What does int(input()) do?",
+      "options": [
+        "Shows a number on screen",
+        "Asks for input and converts it to a whole number",
+        "Creates a variable",
+        "Multiplies by an integer"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "When would you use float(input()) instead of int(input())?",
+      "options": [
+        "When you want text",
+        "When the answer might have decimal places",
+        "When the number is very large",
+        "When using a for loop"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does str(day) do when day = 3?",
+      "options": [
+        "Creates a variable called day",
+        "Converts the number 3 to the text \"3\"",
+        "Prints day on screen",
+        "Sets day to a string"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "Why do we use range(1, 8) instead of range(7) for 7 days?",
+      "options": [
+        "range(7) doesn't work",
+        "So the loop variable goes 1-7 not 0-6",
+        "To make it faster",
+        "range(1, 8) goes 8 times"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "In the total pattern, what should total be set to before the loop?",
+      "options": [
+        "1",
+        "-1",
+        "None",
+        "0"
+      ],
+      "answer": 3
+    },
+    {
+      "q": "In the count pattern, what do you add to count inside the loop?",
+      "options": [
+        "The value itself",
+        "1",
+        "count",
+        "0"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "To find the highest value, what should highest be set to before the loop?",
+      "options": [
+        "0",
+        "1",
+        "A very large number",
+        "A very small number like -9999"
+      ],
+      "answer": 3
+    },
+    {
+      "q": "What is a sentinel value in a while loop?",
+      "options": [
+        "The first value entered",
+        "The loop counter",
+        "A special value that signals the end of input",
+        "The answer to the question"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "In the prime-the-pump pattern, input() appears…",
+      "options": [
+        "Only inside the loop",
+        "Only before the loop",
+        "Once before the loop and once inside",
+        "Twice inside the loop"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What does number != -1 mean as a while condition?",
+      "options": [
+        "number is -1",
+        "number is not equal to -1",
+        "number is less than -1",
+        "number is greater than -1"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does .lower() do to a string?",
+      "options": [
+        "Makes it shorter",
+        "Converts all letters to lowercase",
+        "Removes spaces",
+        "Converts it to a number"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "To validate an age between 11 and 18, which while condition is correct?",
+      "options": [
+        "while age < 11 and age > 18:",
+        "while age > 11 or age < 18:",
+        "while age < 11 or age > 18:",
+        "while age == 11 or age == 18:"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What does total = total + number do each loop iteration?",
+      "options": [
+        "Replaces total with number",
+        "Adds number to the running total",
+        "Multiplies total by number",
+        "Resets total to 0"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "For a times table, which range gives multipliers 1 to 12?",
+      "options": [
+        "range(12)",
+        "range(1, 12)",
+        "range(1, 13)",
+        "range(0, 12)"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "Which conversion is needed when asking for a price?",
+      "options": [
+        "int(input())",
+        "str(input())",
+        "float(input())",
+        "bool(input())"
+      ],
+      "answer": 2
+    }
   ]
 }
