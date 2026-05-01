@@ -96,7 +96,7 @@
     <label class="block text-sm text-gray-600 mb-1">Last Name</label>
     <input id="input-last"  type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 mb-3 text-sm focus:outline-none focus:border-blue-400" placeholder="e.g. Smith" />
     <label class="block text-sm text-gray-600 mb-1">Login Code</label>
-    <input id="input-code"  type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 mb-1 text-sm focus:outline-none focus:border-blue-400 uppercase" placeholder="Enter your code" />
+    <input id="input-code"  type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 mb-1 text-sm focus:outline-none focus:border-blue-400" placeholder="e.g. BrightCoralPenguin" />
     <p id="login-error" class="text-red-500 text-xs mb-3 hidden"></p>
     <div class="flex gap-2 mt-2">
       <button id="btn-login-cancel" class="flex-1 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Cancel</button>
@@ -1045,20 +1045,17 @@ function setupAuthUI() {
   document.getElementById('btn-login-submit').onclick = async function() {
     var first = document.getElementById('input-first').value.trim();
     var last  = document.getElementById('input-last').value.trim();
-    var code  = document.getElementById('input-code').value.trim().toUpperCase();
+    var code  = document.getElementById('input-code').value.trim();
     var errEl = document.getElementById('login-error');
     errEl.classList.add('hidden');
 
     if (!first||!last) { errEl.textContent='Please enter your name.';       errEl.classList.remove('hidden'); return; }
     if (!code)         { errEl.textContent='Please enter your login code.'; errEl.classList.remove('hidden'); return; }
 
-    if (code === state.config.adminCode) {
+    if (code.toLowerCase() === state.config.adminCode.toLowerCase()) {
       localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
-      localStorage.setItem('pylearn_code', code);
+      localStorage.setItem('pylearn_code', state.config.adminCode);
       state.isAdmin=true; state.uid='admin';
-      // Register this browser's anonymous UID as an admin in Firebase.
-      // The rule only allows this write if the value equals the admin code — 
-      // so only someone who knows the code can become an admin.
       try {
         var firebaseUid = state.auth.currentUser && state.auth.currentUser.uid;
         if (firebaseUid) {
@@ -1070,21 +1067,24 @@ function setupAuthUI() {
       return;
     }
     try {
-      // Search for the code across all classes
+      // Search for the code across all classes, case-insensitively
+      // Use the stored version of the code (correct case) as the uid
       var classesSnap = await state.db.ref('classes').get();
-      var foundClass = null;
+      var foundCode = null;
       if (classesSnap.exists()) {
         classesSnap.forEach(function(classSnap) {
-          var codesSnap = classSnap.child('codes');
-          if (codesSnap.child(code).exists()) {
-            foundClass = classSnap.key;
-          }
+          var codesVal = classSnap.child('codes').val() || {};
+          Object.keys(codesVal).forEach(function(storedCode) {
+            if (storedCode.toLowerCase() === code.toLowerCase()) {
+              foundCode = storedCode;  // use the correctly-cased stored code as uid
+            }
+          });
         });
       }
-      if (!foundClass) { errEl.textContent='Invalid code. Please ask your teacher.'; errEl.classList.remove('hidden'); return; }
+      if (!foundCode) { errEl.textContent='Invalid code. Please ask your teacher.'; errEl.classList.remove('hidden'); return; }
       localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
-      localStorage.setItem('pylearn_code', code);
-      state.uid=code; state.isAdmin=false;
+      localStorage.setItem('pylearn_code', foundCode);
+      state.uid=foundCode; state.isAdmin=false;
       await loadProgress();
       renderLessonTabs(); renderStepBar();
       modalLogin.classList.add('hidden');
@@ -1121,7 +1121,7 @@ function setupAuthUI() {
   var savedName = localStorage.getItem('pylearn_name');
   if (savedCode && savedName) {
     var n = JSON.parse(savedName);
-    if (savedCode === state.config.adminCode) {
+    if (savedCode.toLowerCase() === state.config.adminCode.toLowerCase()) {
       state.uid='admin'; state.isAdmin=true;
       // Re-register admin UID on page refresh so Firebase rules still recognise them
       try {
