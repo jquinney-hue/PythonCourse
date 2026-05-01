@@ -142,154 +142,154 @@
   ],
   "quizQuestions": [
     {
-      "q": "What does int(input()) do?",
+      "q": "What does this print?\n\ntotal = 0\nfor day in range(1, 8):\n    sold = int(input())\n    total = total + sold\nprint(total)\n\nInputs: 10 10 10 10 10 10 10",
       "options": [
-        "Shows a number on screen",
-        "Asks for input and converts it to a whole number",
-        "Creates a variable",
-        "Multiplies by an integer"
+        "7",
+        "70",
+        "10",
+        "Error"
       ],
       "answer": 1
     },
     {
-      "q": "When would you use float(input()) instead of int(input())?",
+      "q": "What is printed?\n\nprice = float(input())\nprint(\"Total:\", price * 3)\n\nInput: 4.50",
       "options": [
-        "When you want text",
-        "When the answer might have decimal places",
-        "When the number is very large",
-        "When using a for loop"
+        "Total: 4.50",
+        "Total: 13.5",
+        "Total: 13.50",
+        "Error"
       ],
       "answer": 1
     },
     {
-      "q": "What does str(day) do when day = 3?",
+      "q": "What does this print?\n\nfor day in range(1, 4):\n    prompt = \"Day \" + str(day) + \": \"\n    print(prompt)",
       "options": [
-        "Creates a variable called day",
-        "Converts the number 3 to the text \"3\"",
-        "Prints day on screen",
-        "Sets day to a string"
+        "Day 1: Day 2: Day 3:",
+        "Day 1: \\nDay 2: \\nDay 3: ",
+        "Day day day",
+        "Error"
       ],
       "answer": 1
     },
     {
-      "q": "Why do we use range(1, 8) instead of range(7) for 7 days?",
+      "q": "The user types 3 then 7 then -1. What is total?\n\ntotal = 0\nn = int(input())\nwhile n != -1:\n    total = total + n\n    n = int(input())\nprint(total)",
       "options": [
-        "range(7) doesn't work",
-        "So the loop variable goes 1-7 not 0-6",
-        "To make it faster",
-        "range(1, 8) goes 8 times"
+        "9",
+        "10",
+        "11",
+        "-1"
       ],
       "answer": 1
     },
     {
-      "q": "In the total pattern, what should total be set to before the loop?",
+      "q": "What is highest after this code?\n\nhighest = -999\nfor t in [5, 32, 15, 20]:\n    if t > highest:\n        highest = t\nprint(highest)",
+      "options": [
+        "5",
+        "20",
+        "32",
+        "-999"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "The user types 60, 40, 80, 20, -1. How many passed (score >= 50)?\n\npasses = 0\nscore = int(input())\nwhile score >= 0:\n    if score >= 50:\n        passes = passes + 1\n    score = int(input())\nprint(passes)",
       "options": [
         "1",
-        "-1",
-        "None",
-        "0"
+        "2",
+        "3",
+        "4"
       ],
-      "answer": 3
+      "answer": 1
     },
     {
-      "q": "In the count pattern, what do you add to count inside the loop?",
+      "q": "What is the bug?\n\nage = int(input(\"Age: \"))\nwhile age < 11 and age > 18:\n    print(\"Invalid\")\n    age = int(input(\"Age: \"))",
       "options": [
-        "The value itself",
+        "Should use int(input)",
+        "Should use or, not and",
+        "Missing colon",
+        "No bug"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "Inputs are 5.0, 5.0, 5.0. What does this print?\n\ntotal = 0.0\nfor i in range(1, 4):\n    total = total + float(input())\nprint(\"Average:\", total / 3)",
+      "options": [
+        "Average: 5",
+        "Average: 5.0",
+        "Average: 15.0",
+        "Average: 3"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this print for the number 9?\n\nif 9 % 15 == 0:\n    print(\"FizzBuzz\")\nelif 9 % 3 == 0:\n    print(\"Fizz\")\nelif 9 % 5 == 0:\n    print(\"Buzz\")\nelse:\n    print(9)",
+      "options": [
+        "FizzBuzz",
+        "Fizz",
+        "Buzz",
+        "9"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What is lowest after this runs?\n\nlowest = 9999\nfor s in [50, 15, 80, 30]:\n    if s < lowest:\n        lowest = s\nprint(lowest)",
+      "options": [
+        "9999",
+        "50",
+        "15",
+        "30"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "The user types 200, 150, 200. What is printed?\n\ntotal = 0.0\nwhile total < 500:\n    deposit = float(input())\n    total = total + deposit\nprint(\"Done:\", total)",
+      "options": [
+        "Done: 500.0",
+        "Done: 550.0",
+        "Done: 350.0",
+        "Runs forever"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does colour.lower() == \"red\" evaluate to when colour = \"RED\"?",
+      "options": [
+        "False",
+        "True",
+        "Error",
+        "\"red\""
+      ],
+      "answer": 1
+    },
+    {
+      "q": "The user types 8 hours each day for 5 days. Hourly rate is 15. What is the wage?\n\ntotal_hours = 0\nfor day in range(1, 6):\n    hours = float(input())\n    total_hours = total_hours + hours\nwage = total_hours * 15\nprint(wage)",
+      "options": [
+        "120",
+        "40.0",
+        "600.0",
+        "8"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What does this print?\n\ncount = 0\nfor i in range(1, 11):\n    if i % 2 == 0 and i % 3 == 0:\n        count = count + 1\nprint(count)",
+      "options": [
         "1",
-        "count",
-        "0"
+        "2",
+        "3",
+        "5"
+      ],
+      "answer": 0
+    },
+    {
+      "q": "Inputs: 10, 20, 30, 40, 50. What is printed?\n\ntotal = 0\nfor i in range(1, 6):\n    mark = int(input())\n    total = total + mark\nprint(\"Average:\", total / 5)",
+      "options": [
+        "Average: 25",
+        "Average: 30.0",
+        "Average: 150",
+        "Average: 30"
       ],
       "answer": 1
-    },
-    {
-      "q": "To find the highest value, what should highest be set to before the loop?",
-      "options": [
-        "0",
-        "1",
-        "A very large number",
-        "A very small number like -9999"
-      ],
-      "answer": 3
-    },
-    {
-      "q": "What is a sentinel value in a while loop?",
-      "options": [
-        "The first value entered",
-        "The loop counter",
-        "A special value that signals the end of input",
-        "The answer to the question"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "In the prime-the-pump pattern, input() appears…",
-      "options": [
-        "Only inside the loop",
-        "Only before the loop",
-        "Once before the loop and once inside",
-        "Twice inside the loop"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "What does number != -1 mean as a while condition?",
-      "options": [
-        "number is -1",
-        "number is not equal to -1",
-        "number is less than -1",
-        "number is greater than -1"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "What does .lower() do to a string?",
-      "options": [
-        "Makes it shorter",
-        "Converts all letters to lowercase",
-        "Removes spaces",
-        "Converts it to a number"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "To validate an age between 11 and 18, which while condition is correct?",
-      "options": [
-        "while age < 11 and age > 18:",
-        "while age > 11 or age < 18:",
-        "while age < 11 or age > 18:",
-        "while age == 11 or age == 18:"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "What does total = total + number do each loop iteration?",
-      "options": [
-        "Replaces total with number",
-        "Adds number to the running total",
-        "Multiplies total by number",
-        "Resets total to 0"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "For a times table, which range gives multipliers 1 to 12?",
-      "options": [
-        "range(12)",
-        "range(1, 12)",
-        "range(1, 13)",
-        "range(0, 12)"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "Which conversion is needed when asking for a price?",
-      "options": [
-        "int(input())",
-        "str(input())",
-        "float(input())",
-        "bool(input())"
-      ],
-      "answer": 2
     }
   ]
 }

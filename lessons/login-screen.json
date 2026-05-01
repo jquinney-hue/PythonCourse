@@ -134,154 +134,154 @@
   ],
   "quizQuestions": [
     {
-      "q": "What does print() do?",
+      "q": "What does this code print?\n\nprint(\"Hello\", \"World\")",
       "options": [
-        "Stores a value",
-        "Shows text on the screen",
-        "Asks the user a question",
-        "Adds two numbers"
+        "HelloWorld",
+        "Hello World",
+        "Hello,World",
+        "\"Hello\" \"World\""
       ],
       "answer": 1
     },
     {
-      "q": "Which line correctly shows the word Hello?",
+      "q": "What does this code print?\n\nname = \"Sam\"\nprint(\"Hi\", name)",
       "options": [
-        "print Hello",
-        "print(\"Hello\")",
-        "show(\"Hello\")",
-        "display Hello"
+        "Hi name",
+        "Hi Sam",
+        "name Sam",
+        "Error"
       ],
       "answer": 1
     },
     {
-      "q": "What are the quotes in print(\"Hello\") for?",
+      "q": "What is stored in x after this runs?\n\nx = 5\nx = x + 3",
       "options": [
-        "They are decoration",
-        "They mark the start and end of text",
-        "They make the text bold",
-        "They tell Python to print twice"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "What does this print? print(\"Hi\", \"there\")",
-      "options": [
-        "Hi,there",
-        "Hi there",
-        "Hithere",
-        "Hi\nthere"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "A variable is like…",
-      "options": [
-        "A question Python asks",
-        "A labelled box that stores a value",
-        "A type of bracket",
-        "A way to show text"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "Which line stores the number 10 in a box called score?",
-      "options": [
-        "score == 10",
-        "10 = score",
-        "score = 10",
-        "store score 10"
+        "5",
+        "3",
+        "8",
+        "x + 3"
       ],
       "answer": 2
     },
     {
-      "q": "What does input() do?",
-      "options": [
-        "Shows text on screen",
-        "Adds two numbers",
-        "Waits for the user to type something",
-        "Creates a variable"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "What is wrong with: if age = 18:",
-      "options": [
-        "age should be in quotes",
-        "Should use == not =",
-        "Missing brackets",
-        "Nothing is wrong"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "What does else do in an if/else?",
-      "options": [
-        "Runs when the if condition is True",
-        "Runs when the if condition is False",
-        "Asks the user a question",
-        "Prints extra text"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "What will this print? x = 5\\nif x > 3:\\n    print(\"Big\")",
+      "q": "What does this code print?\n\nage = 15\nif age >= 13:\n    print(\"Teen\")",
       "options": [
         "Nothing",
+        "Teen",
+        "age",
+        "Error"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this code print?\n\nscore = 40\nif score >= 50:\n    print(\"Pass\")\nelse:\n    print(\"Fail\")",
+      "options": [
+        "Pass",
+        "Fail",
+        "Nothing",
+        "Error"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "Which line has a mistake?\n\nusername = input(\"Name: \")\nif username = \"alice\":\n    print(\"Hello\")",
+      "options": [
+        "Line 1",
+        "Line 2",
+        "Line 3",
+        "No mistake"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this print?\n\nx = 10\nif x > 5:\n    print(\"Big\")\nif x > 20:\n    print(\"Huge\")",
+      "options": [
+        "Big Huge",
         "Big",
-        "x",
-        "Error"
+        "Huge",
+        "Nothing"
       ],
       "answer": 1
     },
     {
-      "q": "What does check_password(\"alice\", \"Sunshine7\") return if the password is correct?",
+      "q": "What does this code print?\n\nresult = check_password(\"alice\", \"wrong\")\nif result == True:\n    print(\"Access granted\")\nelse:\n    print(\"Access denied\")",
       "options": [
-        "\"correct\"",
-        "1",
+        "Access granted",
+        "Access denied",
         "True",
-        "OK"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "Which symbol checks if two things are the same?",
-      "options": [
-        "=",
-        "==",
-        "!=",
-        "=>"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "What does this show? print(\"Score:\", 100)",
-      "options": [
-        "Score:100",
-        "Score: 100",
-        "\"Score:\" 100",
         "Error"
       ],
       "answer": 1
     },
     {
-      "q": "What happens if you type the wrong password in a login screen?",
+      "q": "What is printed?\n\nprint(\"Score:\", 10 + 5)",
       "options": [
-        "The program crashes",
-        "Nothing happens",
-        "Access denied is shown",
-        "The program restarts"
+        "Score: 10 + 5",
+        "Score:15",
+        "Score: 15",
+        "Error"
       ],
       "answer": 2
     },
     {
-      "q": "Which of these is a valid variable name?",
+      "q": "What does this code print?\n\na = \"Hello\"\nb = \"World\"\nprint(a, b)",
       "options": [
-        "2score",
-        "my score",
-        "my_score",
-        "my-score"
+        "ab",
+        "HelloWorld",
+        "Hello World",
+        "a b"
       ],
       "answer": 2
+    },
+    {
+      "q": "The user types 'bob'. What is printed?\n\nname = input(\"Name: \")\nif name == \"alice\":\n    print(\"Welcome\")\nelse:\n    print(\"Unknown user\")",
+      "options": [
+        "Welcome",
+        "Unknown user",
+        "bob",
+        "Nothing"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this print?\n\nfor i in range(3):\n    print(\"Go\")",
+      "options": [
+        "Go",
+        "Go Go Go",
+        "Go\\nGo\\nGo",
+        "3"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What is wrong?\n\nname = input(\"Name: \")\nprint(\"Hello\" + name)",
+      "options": [
+        "Nothing — it works fine",
+        "input() is spelt wrong",
+        "You can't use + with input",
+        "print needs brackets"
+      ],
+      "answer": 0
+    },
+    {
+      "q": "What does this code output?\n\nx = 7\nif x > 10:\n    print(\"Big\")\nelif x > 5:\n    print(\"Medium\")\nelse:\n    print(\"Small\")",
+      "options": [
+        "Big",
+        "Medium",
+        "Small",
+        "Big Medium"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "The user types 'alice' and then 'Sunshine7'. What is printed?\n\nuser = input(\"Username: \")\npw = input(\"Password: \")\nprint(user, pw)",
+      "options": [
+        "alice Sunshine7",
+        "Username: Password:",
+        "user pw",
+        "Error"
+      ],
+      "answer": 0
     }
   ]
 }

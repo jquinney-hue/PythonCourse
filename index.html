@@ -2083,9 +2083,9 @@ async function startNextQuestion() {
   });
 
   // Render host question view
-  document.getElementById('qh-q-text').textContent = q.q;
+  safeText(document.getElementById('qh-q-text'), q.q);
   q.options.forEach(function(opt, i) {
-    document.getElementById('qh-opt-' + i).textContent = opt;
+    safeText(document.getElementById('qh-opt-' + i), opt);
   });
   document.getElementById('qh-q-progress').textContent =
     'Question ' + (nextIdx + 1) + ' of ' + quiz.questions.length;
@@ -2139,7 +2139,7 @@ async function showAnswerReveal() {
   // Show correct answer
   var colours = ['bg-red-600','bg-blue-600','bg-yellow-500','bg-green-600'];
   var revealEl = document.getElementById('qh-reveal-answer');
-  revealEl.textContent = q.options[q.answer];
+  safeText(revealEl, q.options[q.answer]);
   revealEl.className = 'text-2xl font-bold rounded-xl px-8 py-4 mb-6 ' + colours[q.answer];
 
   // Show answer breakdown
@@ -2171,11 +2171,65 @@ async function showAnswerReveal() {
 
 async function endQuiz() {
   clearInterval(quiz.timerInterval);
-  await quiz.sessionRef.update({ state: 'finished' });
+  // Cancel the onDisconnect removal BEFORE writing finished state,
+  // otherwise Firebase deletes the session immediately after the write
+  // causing WebSocket errors on connected clients.
+  if (quiz.sessionRef) {
+    quiz.sessionRef.onDisconnect().cancel();
+  }
+  // Compute leaderboard before marking finished
+  var leaderboard = await buildLeaderboard();
+  await quiz.sessionRef.update({ state: 'finished', leaderboard: leaderboard });
+  renderHostLeaderboard(leaderboard);
   setQuizHostView('finished');
   // Clean up listeners
   quiz.unsubscribers.forEach(function(fn) { fn(); });
   quiz.unsubscribers = [];
+  // Delete session from Firebase after a delay so students see finished state
+  setTimeout(function() {
+    if (quiz.sessionRef) quiz.sessionRef.remove().catch(function(){});
+  }, 30000);
+}
+
+async function buildLeaderboard() {
+  var scores = {};
+  for (var qIdx = 0; qIdx < quiz.questions.length; qIdx++) {
+    var q = quiz.questions[qIdx];
+    var snap = await quiz.sessionRef.child('answers/' + qIdx).get();
+    if (!snap.exists()) continue;
+    snap.forEach(function(child) {
+      var code   = child.key;
+      var answer = child.child('answer').val();
+      if (!scores[code]) scores[code] = 0;
+      if (answer === q.answer) scores[code]++;
+    });
+  }
+  // Add players who answered nothing
+  var playersSnap = await quiz.sessionRef.child('players').get();
+  if (playersSnap.exists()) {
+    playersSnap.forEach(function(child) {
+      if (!scores[child.key]) scores[child.key] = 0;
+    });
+  }
+  // Sort descending
+  return Object.keys(scores)
+    .map(function(code) { return { code: code, score: scores[code] }; })
+    .sort(function(a, b) { return b.score - a.score; });
+}
+
+function renderHostLeaderboard(leaderboard) {
+  var el = document.getElementById('qh-final-scores');
+  el.innerHTML = '';
+  var medals = ['🥇','🥈','🥉'];
+  leaderboard.forEach(function(entry, i) {
+    var row = document.createElement('div');
+    row.className = 'flex items-center justify-between gap-6 bg-gray-800 rounded-lg px-6 py-3 min-w-64';
+    row.innerHTML =
+      '<span class="text-lg">' + (medals[i] || (i+1)+'.') + '</span>' +
+      '<span class="font-mono text-gray-300 flex-1 text-left ml-2">' + entry.code + '</span>' +
+      '<span class="font-bold text-yellow-400 text-lg">' + entry.score + ' / ' + quiz.questions.length + '</span>';
+    el.appendChild(row);
+  });
 }
 
 // ── STUDENT: Join quiz ─────────────────────────────────────────
@@ -2295,6 +2349,9 @@ function showStudentScreen(lobbyCode, questions) {
       setStudentView('finished');
       document.getElementById('qs-final-score').textContent =
         'You scored ' + quiz.myScore + ' / ' + quiz.questions.length;
+      // Show leaderboard if available
+      var lb = snap.child('leaderboard').val();
+      if (lb) renderStudentLeaderboard(lb);
       quiz.unsubscribers.forEach(function(fn) { fn(); });
       quiz.unsubscribers = [];
     }
@@ -2302,12 +2359,31 @@ function showStudentScreen(lobbyCode, questions) {
   quiz.unsubscribers.push(function() { sessionRef.off('value', stateListener); });
 }
 
+function safeText(el, text) {
+  // Questions use \n\n to separate the question from the code snippet.
+  // Render the code part in monospace for readability.
+  var str = String(text || '');
+  var parts = str.split('\n\n');
+  if (parts.length >= 2) {
+    // First part: question text; rest: code snippet
+    var questionText = parts[0];
+    var codeText = parts.slice(1).join('\n\n');
+    el.innerHTML =
+      '<span>' + questionText.replace(/\n/g, '<br>') + '</span>' +
+      '<pre class="mt-3 bg-gray-700/60 rounded-lg px-4 py-3 text-left text-sm font-mono text-green-300 whitespace-pre-wrap">' +
+      codeText.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+      '</pre>';
+  } else {
+    el.innerHTML = str.replace(/\n/g, '<br>');
+  }
+}
+
 function renderStudentQuestion(qIdx, questionStart, duration) {
   setStudentView('question');
   var q = quiz.questions[qIdx];
   if (!q) return;
 
-  document.getElementById('qs-q-text').textContent = q.q;
+  safeText(document.getElementById('qs-q-text'), q.q);
   document.getElementById('qs-q-progress').textContent =
     'Question ' + (qIdx + 1) + ' of ' + quiz.questions.length;
   document.getElementById('qs-answered-msg').classList.add('hidden');
@@ -2315,9 +2391,10 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   // Show answer buttons
   document.getElementById('qs-answer-grid').classList.remove('hidden');
   document.querySelectorAll('.quiz-ans-btn').forEach(function(btn, i) {
-    btn.querySelector('span').textContent = q.options[i];
+    safeText(btn.querySelector('span'), q.options[i]);
     btn.disabled = false;
     btn.style.opacity = '1';
+    btn.style.outline = '';
     btn.onclick = function() { submitStudentAnswer(qIdx, i, btn); };
   });
 
@@ -2338,6 +2415,26 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   }
   tick();
   quiz.timerInterval = setInterval(tick, 500);
+}
+
+function renderStudentLeaderboard(lb) {
+  var el = document.getElementById('qs-final-score');
+  var total = quiz.questions.length;
+  var medals = ['🥇','🥈','🥉'];
+  var html = '<div class="space-y-2 mt-4 w-full max-w-xs">';
+  var lbArr = Array.isArray(lb) ? lb : Object.values(lb);
+  lbArr.forEach(function(entry, i) {
+    var isMe = entry.code === state.uid;
+    html += '<div class="flex items-center gap-3 rounded-lg px-4 py-2 ' +
+      (isMe ? 'bg-yellow-600/40 border border-yellow-400' : 'bg-white/10') + '">' +
+      '<span>' + (medals[i] || (i+1)+'.') + '</span>' +
+      '<span class="font-mono flex-1 text-sm ' + (isMe ? 'text-yellow-300 font-bold' : 'text-gray-300') + '">' +
+      entry.code + (isMe ? ' (you)' : '') + '</span>' +
+      '<span class="font-bold text-yellow-400">' + entry.score + '/' + total + '</span>' +
+      '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function lockStudentAnswers() {

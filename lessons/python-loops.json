@@ -126,107 +126,87 @@
   ],
   "quizQuestions": [
     {
-      "q": "What does a loop do?",
+      "q": "What does this print?\n\nfor i in range(3):\n    print(i)",
       "options": [
-        "Asks the user a question",
-        "Repeats code multiple times",
-        "Stores a value",
-        "Shows text once"
+        "1 2 3",
+        "0 1 2 3",
+        "0 1 2",
+        "1 2 3 4"
       ],
-      "answer": 1
+      "answer": 2
     },
     {
-      "q": "How many times does this run? for i in range(5):",
+      "q": "How many times does 'Hello' print?\n\nfor i in range(4):\n    print(\"Hello\")",
       "options": [
+        "3",
         "4",
         "5",
-        "6",
         "0"
       ],
       "answer": 1
     },
     {
-      "q": "What numbers does range(3) produce?",
+      "q": "What does this print?\n\nfor i in range(1, 4):\n    print(i)",
       "options": [
-        "1, 2, 3",
-        "0, 1, 2, 3",
-        "0, 1, 2",
-        "1, 2"
+        "0 1 2 3",
+        "1 2 3 4",
+        "1 2 3",
+        "0 1 2"
       ],
       "answer": 2
     },
     {
-      "q": "What is i in: for i in range(5): print(i)?",
+      "q": "What is the value of total after this runs?\n\ntotal = 0\nfor i in range(1, 4):\n    total = total + i",
       "options": [
-        "A fixed value",
-        "Always 5",
-        "The loop counter",
-        "A string"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "What does range(1, 6) produce?",
-      "options": [
-        "0,1,2,3,4,5",
-        "1,2,3,4,5,6",
-        "1,2,3,4,5",
-        "0,1,2,3,4"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "What symbol means remainder in Python?",
-      "options": [
-        "/",
-        "//",
-        "%",
-        "*"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "How do you check if a number is even?",
-      "options": [
-        "n % 2 == 1",
-        "n / 2 == 0",
-        "n % 2 == 0",
-        "n * 2 == 0"
-      ],
-      "answer": 2
-    },
-    {
-      "q": "What is the total pattern used for?",
-      "options": [
-        "Counting how many match a condition",
-        "Adding numbers up",
-        "Finding the biggest number",
-        "Printing a list"
+        "3",
+        "6",
+        "4",
+        "10"
       ],
       "answer": 1
     },
     {
-      "q": "A while loop runs…",
+      "q": "What does this print?\n\nfor i in range(1, 6):\n    if i % 2 == 0:\n        print(i)",
       "options": [
-        "Exactly 10 times",
-        "As long as a condition is True",
-        "Only once",
-        "Until you press Enter"
+        "1 3 5",
+        "2 4 6",
+        "2 4",
+        "1 2 3 4 5"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What is the output?\n\ncount = 0\nwhile count < 3:\n    print(count)\n    count = count + 1",
+      "options": [
+        "1 2 3",
+        "0 1 2 3",
+        "0 1 2",
+        "Runs forever"
+      ],
+      "answer": 2
+    },
+    {
+      "q": "What does this print?\n\nfor i in range(5, 0, -1):\n    print(i)",
+      "options": [
+        "5 4 3 2 1 0",
+        "5 4 3 2 1",
+        "4 3 2 1",
+        "0 1 2 3 4"
       ],
       "answer": 1
     },
     {
-      "q": "What is a sentinel value?",
+      "q": "What is highest after this runs?\n\nhighest = -999\nfor n in [3, 7, 2, 9, 4]:\n    if n > highest:\n        highest = n",
       "options": [
-        "The biggest number in a list",
-        "A special value that stops the loop",
-        "The loop counter",
-        "The first item in a list"
+        "3",
+        "4",
+        "7",
+        "9"
       ],
-      "answer": 1
+      "answer": 3
     },
     {
-      "q": "FizzBuzz: what do you print for a multiple of both 3 and 5?",
+      "q": "What does FizzBuzz print for the number 15?",
       "options": [
         "Fizz",
         "Buzz",
@@ -236,42 +216,62 @@
       "answer": 2
     },
     {
-      "q": "Why must you check FizzBuzz (divisible by both) FIRST?",
+      "q": "What does this print?\n\ntotal = 0\nfor i in range(1, 4):\n    total = total + i\nprint(total)",
       "options": [
-        "It makes the code shorter",
-        "Otherwise 15 would just show Fizz or Buzz",
-        "Python requires it",
-        "To make it faster"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "What does count = count + 1 do?",
-      "options": [
-        "Sets count to 1",
-        "Adds 1 to count",
-        "Multiplies count by 1",
-        "Resets count"
-      ],
-      "answer": 1
-    },
-    {
-      "q": "How do you count down from 10 to 1 using range?",
-      "options": [
-        "range(10)",
-        "range(10, 0)",
-        "range(10, 0, -1)",
-        "range(1, 10, -1)"
+        "3",
+        "4",
+        "6",
+        "7"
       ],
       "answer": 2
     },
     {
-      "q": "What is the highest pattern used for?",
+      "q": "What does this code print?\n\nfor i in range(3):\n    print(\"*\" * (i + 1))",
       "options": [
-        "Adding all numbers",
-        "Finding the biggest value seen so far",
-        "Counting even numbers",
-        "Stopping a loop"
+        "* ** ***",
+        "*** ** *",
+        "* * *",
+        "***"
+      ],
+      "answer": 0
+    },
+    {
+      "q": "The user types 10 then 20 then -1. What is printed?\n\ntotal = 0\nn = int(input())\nwhile n != -1:\n    total = total + n\n    n = int(input())\nprint(total)",
+      "options": [
+        "29",
+        "30",
+        "31",
+        "-1"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What is count after this runs?\n\ncount = 0\nfor i in range(1, 11):\n    if i % 3 == 0:\n        count = count + 1",
+      "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What does this print?\n\nfor i in range(2, 10, 2):\n    print(i)",
+      "options": [
+        "2 4 6 8 10",
+        "2 4 6 8",
+        "2 4 6",
+        "0 2 4 6 8"
+      ],
+      "answer": 1
+    },
+    {
+      "q": "What is wrong?\n\ntotal = 0\nfor i in range(5)\n    total = total + i",
+      "options": [
+        "total should start at 1",
+        "Missing colon after range(5)",
+        "range(5) should be range(1,5)",
+        "Nothing is wrong"
       ],
       "answer": 1
     }
