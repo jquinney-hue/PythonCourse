@@ -107,13 +107,13 @@
 
 <!-- ── ADMIN MODAL ────────────────────────────────────────── -->
 <div id="modal-admin" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl max-h-[85vh] flex flex-col">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-lg font-semibold">Admin Panel</h2>
       <button id="btn-admin-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&#x2715;</button>
     </div>
 
-    <!-- Generate / add codes -->
+    <!-- Top toolbar: generate / add / import -->
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
       <!-- Bulk generate -->
       <p class="text-sm font-medium text-gray-700 mb-3">Generate codes for a class</p>
@@ -128,25 +128,27 @@
           <input id="input-code-count" type="number" min="1" max="60" value="30"
             class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
         </div>
-        <button id="btn-gen-codes" class="px-4 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700 whitespace-nowrap">
-          Generate Codes
-        </button>
-        <button id="btn-refresh-codes" class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">
-          Refresh
-        </button>
+        <button id="btn-gen-codes" class="px-4 py-1.5 rounded bg-green-600 text-white text-sm hover:bg-green-700 whitespace-nowrap">Generate Codes</button>
+        <button id="btn-refresh-codes" class="px-3 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-50">Refresh</button>
       </div>
-      <!-- Add single code -->
-      <div class="border-t border-gray-200 pt-3 flex gap-2 items-end">
+      <!-- Add single + import -->
+      <div class="flex gap-2 items-end border-t border-gray-200 pt-3">
         <div class="flex-1">
           <label class="block text-xs text-gray-500 mb-1">Add one student to existing class</label>
           <input id="input-single-class" type="text" placeholder="Class name (e.g. 7Y1)"
             class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 uppercase" />
         </div>
-        <button id="btn-add-single" class="px-4 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 whitespace-nowrap">
-          Add One Code
-        </button>
+        <button id="btn-add-single" class="px-4 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 whitespace-nowrap">Add One Code</button>
+        <div class="border-l border-gray-200 pl-3 flex gap-2 items-end">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Import names from spreadsheet</label>
+            <input type="file" id="input-import-names" accept=".xlsx,.xls" class="hidden" />
+            <button id="btn-import-names" class="px-3 py-1.5 rounded border border-purple-300 text-purple-700 text-sm hover:bg-purple-50 whitespace-nowrap">&#x1F4C2; Import Names</button>
+          </div>
+        </div>
       </div>
-      <p id="gen-status" class="text-xs mt-2 text-gray-500 hidden"></p>
+      <div id="import-status" class="text-xs mt-2 text-gray-500 hidden"></div>
+      <p id="gen-status" class="text-xs mt-1 text-gray-500 hidden"></p>
     </div>
 
     <!-- Classes table -->
@@ -559,6 +561,7 @@ var state = {
   progress: {},
   stepStartTime: null,
   stepInjectedStyle: null,
+  nameMap: {},           // { code → "First Last" } — local only, never sent to Firebase
 };
 
 // ── Utilities ────────────────────────────────────────────────
@@ -1079,6 +1082,19 @@ async function showAdmin() {
   await refreshAdminTable();
 }
 
+// ── Helpers ───────────────────────────────────────────────────
+function studentName(code) {
+  return state.nameMap[code] || null;
+}
+
+function stepStatus(prog, lid, sid) {
+  var s = (prog[lid] && prog[lid][sid]) || {};
+  if (s.completed)              return 'complete';
+  if (s.started || s.startedAt) return 'started';
+  return 'not started';
+}
+
+// ── Admin table ───────────────────────────────────────────────
 async function refreshAdminTable() {
   var container = document.getElementById('admin-classes-container');
   container.innerHTML = '<p class="text-gray-400 text-sm text-center py-4">Loading\u2026</p>';
@@ -1100,57 +1116,133 @@ async function refreshAdminTable() {
       var className = classSnap.key;
       var codes     = classSnap.child('codes').val() || {};
       var codeList  = Object.keys(codes);
+      var hasNames  = codeList.some(function(c) { return !!state.nameMap[c]; });
 
-      // Section header with delete class button
+      // Section header
       var header = document.createElement('div');
-      header.className = 'flex items-center justify-between py-2 px-1 mb-1 mt-3 border-b-2 border-gray-200';
+      header.className = 'flex items-center justify-between py-2 px-1 mb-2 mt-4 border-b-2 border-gray-200';
       header.innerHTML =
         '<span class="font-semibold text-gray-800">' + className + '</span>' +
-        '<span class="text-xs text-gray-500 mr-auto ml-3">' + codeList.length + ' code' + (codeList.length !== 1 ? 's' : '') + '</span>' +
+        '<span class="text-xs text-gray-400 mr-auto ml-3">' + codeList.length + ' student' + (codeList.length !== 1 ? 's' : '') + '</span>' +
         '<div class="flex gap-2">' +
-          '<button class="btn-export-class px-3 py-1 rounded border border-blue-300 text-blue-600 text-xs hover:bg-blue-50" data-class="' + className + '">&#x2193; Export</button>' +
-          '<button class="btn-delete-class px-3 py-1 rounded border border-red-300 text-red-600 text-xs hover:bg-red-50" data-class="' + className + '">&#x1F5D1; Delete class</button>' +
+          '<button class="btn-export-detail px-3 py-1 rounded border border-green-300 text-green-700 text-xs hover:bg-green-50" data-class="' + className + '">&#x2193; Detailed Report</button>' +
+          '<button class="btn-export-class px-3 py-1 rounded border border-blue-300 text-blue-600 text-xs hover:bg-blue-50" data-class="' + className + '">&#x2193; Codes Sheet</button>' +
+          '<button class="btn-delete-class px-3 py-1 rounded border border-red-300 text-red-600 text-xs hover:bg-red-50" data-class="' + className + '">\uD83D\uDDD1 Delete class</button>' +
         '</div>';
       container.appendChild(header);
 
-      // Codes table
+      // Build columns: Name (if names loaded), Code, then per-lesson columns
       var table = document.createElement('table');
-      table.className = 'w-full text-sm mb-2';
-      table.innerHTML =
-        '<thead>' +
-          '<tr class="text-left text-gray-500 text-xs">' +
-            '<th class="pb-1 pr-4 font-normal">Code</th>' +
-            '<th class="pb-1 pr-4 font-normal">Lessons started</th>' +
-            '<th class="pb-1 pr-4 font-normal">Steps done</th>' +
-            '<th class="pb-1 pr-4 font-normal">Time spent</th>' +
-            '<th class="pb-1 font-normal"></th>' +
-          '</tr>' +
-        '</thead>';
-      var tbody = document.createElement('tbody');
+      table.className = 'w-full text-xs mb-4 border-collapse';
 
+      // Header row
+      var thead = document.createElement('thead');
+      var htr   = document.createElement('tr');
+      htr.className = 'text-left text-gray-500 bg-gray-50';
+
+      function th(text, cls) {
+        var cell = document.createElement('th');
+        cell.className = 'border border-gray-200 px-2 py-1.5 font-medium ' + (cls || '');
+        cell.textContent = text;
+        return cell;
+      }
+
+      if (hasNames) htr.appendChild(th('Name', 'min-w-[120px]'));
+      htr.appendChild(th('Code', 'font-mono'));
+      htr.appendChild(th('Steps done'));
+      htr.appendChild(th('Time'));
+
+      // One column per lesson
+      state.allLessons.forEach(function(lesson) {
+        var cell = th(lesson.data.title, 'text-center');
+        cell.colSpan = lesson.data.steps.length;
+        htr.appendChild(cell);
+      });
+
+      thead.appendChild(htr);
+
+      // Sub-header: step names
+      var htr2 = document.createElement('tr');
+      htr2.className = 'text-left text-gray-400 bg-gray-50';
+      if (hasNames) htr2.appendChild(th(''));
+      htr2.appendChild(th(''));
+      htr2.appendChild(th(''));
+      htr2.appendChild(th(''));
+      state.allLessons.forEach(function(lesson) {
+        lesson.data.steps.forEach(function(step) {
+          var cell = document.createElement('th');
+          cell.className = 'border border-gray-200 px-1 py-1 font-normal text-center text-gray-400 whitespace-nowrap';
+          cell.style.maxWidth = '80px';
+          cell.style.overflow = 'hidden';
+          cell.style.textOverflow = 'ellipsis';
+          cell.title = step.title;
+          cell.textContent = step.title.length > 10 ? step.title.slice(0, 9) + '\u2026' : step.title;
+          htr2.appendChild(cell);
+        });
+      });
+      thead.appendChild(htr2);
+      table.appendChild(thead);
+
+      // Data rows
+      var tbody = document.createElement('tbody');
       codeList.forEach(function(code) {
         var prog = allProg[code] || {};
-        var lessonsStarted = 0, stepsDone = 0, totalMs = 0;
+        var name = state.nameMap[code] || null;
+
+        // Compute totals
+        var stepsDone = 0, totalMs = 0;
         Object.keys(prog).forEach(function(lid) {
-          var lStarted = false;
           Object.keys(prog[lid]).forEach(function(sid) {
             var s = prog[lid][sid];
-            if (s.startedAt || s.started) lStarted = true;
             if (s.completed) stepsDone++;
             if (s.totalMs)   totalMs += s.totalMs;
           });
-          if (lStarted) lessonsStarted++;
         });
+
         var tr = document.createElement('tr');
-        tr.className = 'border-b border-gray-50';
-        tr.innerHTML =
-          '<td class="py-1.5 pr-4 font-mono text-xs">' + code + '</td>' +
-          '<td class="py-1.5 pr-4">' + (lessonsStarted || '—') + '</td>' +
-          '<td class="py-1.5 pr-4">' + (stepsDone || '—') + '</td>' +
-          '<td class="py-1.5 pr-4">' + (totalMs ? fmtMs(totalMs) : '—') + '</td>' +
-          '<td class="py-1.5">' +
-            '<button class="btn-delete-code text-red-400 hover:text-red-600 text-xs" data-class="' + className + '" data-code="' + code + '">Remove</button>' +
-          '</td>';
+        tr.className = 'border-b border-gray-100 hover:bg-gray-50';
+
+        function td(text, cls) {
+          var cell = document.createElement('td');
+          cell.className = 'border border-gray-100 px-2 py-1.5 ' + (cls || '');
+          cell.textContent = text;
+          return cell;
+        }
+
+        if (hasNames) tr.appendChild(td(name || '—', name ? 'font-medium text-gray-800' : 'text-gray-400'));
+        tr.appendChild(td(code, 'font-mono text-gray-500'));
+        tr.appendChild(td(stepsDone || '—', 'text-center'));
+        tr.appendChild(td(totalMs ? fmtMs(totalMs) : '—'));
+
+        // Per-step cells
+        state.allLessons.forEach(function(lesson) {
+          lesson.data.steps.forEach(function(step) {
+            var status = stepStatus(prog, lesson.meta.id, step.id);
+            var cell   = document.createElement('td');
+            cell.className = 'border border-gray-100 text-center px-1 py-1';
+            var ms = (prog[lesson.meta.id] && prog[lesson.meta.id][step.id] && prog[lesson.meta.id][step.id].totalMs) || 0;
+            if (status === 'complete') {
+              cell.innerHTML = '<span title="Complete' + (ms ? ' \u00b7 ' + fmtMs(ms) : '') + '" class="text-green-600 font-bold">\u2713</span>';
+            } else if (status === 'started') {
+              cell.innerHTML = '<span title="Started' + (ms ? ' \u00b7 ' + fmtMs(ms) : '') + '" class="text-yellow-500">\u25CB</span>';
+            } else {
+              cell.innerHTML = '<span class="text-gray-200">\u2013</span>';
+            }
+            tr.appendChild(cell);
+          });
+        });
+
+        // Delete button cell
+        var delTd = document.createElement('td');
+        delTd.className = 'border border-gray-100 px-2 py-1';
+        var delBtn = document.createElement('button');
+        delBtn.className = 'btn-delete-code text-red-400 hover:text-red-600';
+        delBtn.dataset.class = className;
+        delBtn.dataset.code  = code;
+        delBtn.textContent   = 'Remove';
+        delTd.appendChild(delBtn);
+        tr.appendChild(delTd);
+
         tbody.appendChild(tr);
       });
 
@@ -1158,45 +1250,32 @@ async function refreshAdminTable() {
       container.appendChild(table);
     });
 
-    // Wire up export buttons
+    // ── Wire up buttons ──────────────────────────────────────
     container.querySelectorAll('.btn-export-class').forEach(function(btn) {
-      btn.onclick = function() { exportClassSpreadsheet(btn.dataset.class); };
+      btn.onclick = function() { exportCodesSheet(btn.dataset.class); };
     });
 
-    // Wire up delete class buttons
+    container.querySelectorAll('.btn-export-detail').forEach(function(btn) {
+      btn.onclick = function() { exportDetailedReport(btn.dataset.class); };
+    });
+
     container.querySelectorAll('.btn-delete-class').forEach(function(btn) {
       btn.onclick = async function() {
-        var className = btn.dataset.class;
-        if (!confirm('Delete all codes for class ' + className + '? This cannot be undone.')) return;
-        btn.disabled = true;
-        btn.textContent = 'Deleting\u2026';
-        try {
-          await state.db.ref('classes/' + className).remove();
-          await refreshAdminTable();
-        } catch(e) {
-          alert('Error deleting class: ' + e.message);
-          btn.disabled = false;
-          btn.textContent = '\uD83D\uDDD1 Delete class';
-        }
+        var cn = btn.dataset.class;
+        if (!confirm('Delete all codes for class ' + cn + '? This cannot be undone.')) return;
+        btn.disabled = true; btn.textContent = 'Deleting\u2026';
+        try { await state.db.ref('classes/' + cn).remove(); await refreshAdminTable(); }
+        catch(e) { alert('Error: ' + e.message); btn.disabled = false; btn.textContent = '\uD83D\uDDD1 Delete class'; }
       };
     });
 
-    // Wire up delete single code buttons
     container.querySelectorAll('.btn-delete-code').forEach(function(btn) {
       btn.onclick = async function() {
-        var code = btn.dataset.code;
-        var className = btn.dataset.class;
-        if (!confirm('Remove code ' + code + ' from class ' + className + '?')) return;
-        btn.disabled = true;
-        btn.textContent = '\u2026';
-        try {
-          await state.db.ref('classes/' + className + '/codes/' + code).remove();
-          await refreshAdminTable();
-        } catch(e) {
-          alert('Error removing code: ' + e.message);
-          btn.disabled = false;
-          btn.textContent = 'Remove';
-        }
+        var code = btn.dataset.code, cn = btn.dataset.class;
+        if (!confirm('Remove code ' + code + ' from ' + cn + '?')) return;
+        btn.disabled = true; btn.textContent = '\u2026';
+        try { await state.db.ref('classes/' + cn + '/codes/' + code).remove(); await refreshAdminTable(); }
+        catch(e) { alert('Error: ' + e.message); btn.disabled = false; btn.textContent = 'Remove'; }
       };
     });
 
@@ -1205,32 +1284,179 @@ async function refreshAdminTable() {
   }
 }
 
-function exportClassSpreadsheet(className) {
-  // Fetch the codes for this class then build the xlsx
+// ── Export: codes-only sheet (for handing out to students) ─────
+function exportCodesSheet(className) {
   state.db.ref('classes/' + className + '/codes').get().then(function(snap) {
     var codes = snap.exists() ? Object.keys(snap.val()) : [];
-
-    // Build worksheet data: header row + one row per code with blank Name column
+    var wb = XLSX.utils.book_new();
     var wsData = [['Name', 'Code']];
-    codes.forEach(function(code) { wsData.push(['', code]); });
+    codes.forEach(function(code) { wsData.push([state.nameMap[code] || '', code]); });
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{ wch: 30 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Codes');
+    XLSX.writeFile(wb, 'PyLearn-' + className + '-codes.xlsx');
+  }).catch(function(e) { alert('Could not export: ' + e.message); });
+}
+
+// ── Export: detailed report workbook ─────────────────────────
+async function exportDetailedReport(className) {
+  try {
+    var results = await Promise.all([
+      state.db.ref('classes/' + className + '/codes').get(),
+      state.db.ref('progress').get(),
+    ]);
+    var codesSnap = results[0];
+    var allProg   = results[1].exists() ? results[1].val() : {};
+    if (!codesSnap.exists()) { alert('No codes found for ' + className); return; }
+    var codes = Object.keys(codesSnap.val());
 
     var wb = XLSX.utils.book_new();
-    var ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    // Column widths
-    ws['!cols'] = [{ wch: 30 }, { wch: 20 }];
+    // ── Sheet 1: Codes ──────────────────────────────────────
+    var codesData = [['Name', 'Code']];
+    codes.forEach(function(code) { codesData.push([state.nameMap[code] || '', code]); });
+    var wsCodesSheet = XLSX.utils.aoa_to_sheet(codesData);
+    wsCodesSheet['!cols'] = [{ wch: 30 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, wsCodesSheet, 'Codes');
 
-    // Style header row bold (basic — SheetJS CE supports limited styling)
-    // Apply bold via cell format
-    ['A1', 'B1'].forEach(function(ref) {
-      if (ws[ref]) ws[ref].s = { font: { bold: true }, fill: { fgColor: { rgb: 'F3F4F6' } } };
+    // ── Sheet 2: Summary ────────────────────────────────────
+    var summaryHdr = ['Name', 'Code', 'Total Steps Done', 'Total Time'];
+    state.allLessons.forEach(function(lesson) {
+      summaryHdr.push(lesson.data.title + ' Steps Done');
+      summaryHdr.push(lesson.data.title + ' Time');
+    });
+    var summaryData = [summaryHdr];
+
+    codes.forEach(function(code) {
+      var prog = allProg[code] || {};
+      var name = state.nameMap[code] || '';
+      var totalDone = 0, totalMs = 0;
+      var row = [name, code];
+      var lessonCells = [];
+      state.allLessons.forEach(function(lesson) {
+        var done = 0, ms = 0;
+        lesson.data.steps.forEach(function(step) {
+          var s = (prog[lesson.meta.id] && prog[lesson.meta.id][step.id]) || {};
+          if (s.completed) { done++; totalDone++; }
+          if (s.totalMs)   { ms += s.totalMs; totalMs += s.totalMs; }
+        });
+        lessonCells.push(done + ' / ' + lesson.data.steps.length);
+        lessonCells.push(ms ? fmtMs(ms) : '—');
+      });
+      row.push(totalDone);
+      row.push(totalMs ? fmtMs(totalMs) : '—');
+      summaryData.push(row.concat(lessonCells));
     });
 
-    XLSX.utils.book_append_sheet(wb, ws, className);
-    XLSX.writeFile(wb, 'PyLearn-' + className + '-codes.xlsx');
-  }).catch(function(e) {
-    alert('Could not export: ' + e.message);
-  });
+    var wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    wsSummary['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 16 }, { wch: 14 }];
+    state.allLessons.forEach(function() {
+      wsSummary['!cols'].push({ wch: 18 }); wsSummary['!cols'].push({ wch: 12 });
+    });
+
+    // Add chart data for step completion (simple bar chart source)
+    var chartAnchorRow = summaryData.length + 3;
+    var chartHdr = ['Student'].concat(state.allLessons.map(function(l) { return l.data.title; }));
+    var chartData = [chartHdr];
+    codes.forEach(function(code) {
+      var prog = allProg[code] || {};
+      var name = state.nameMap[code] || code;
+      var row = [name];
+      state.allLessons.forEach(function(lesson) {
+        var done = 0;
+        lesson.data.steps.forEach(function(step) {
+          var s = (prog[lesson.meta.id] && prog[lesson.meta.id][step.id]) || {};
+          if (s.completed) done++;
+        });
+        row.push(done);
+      });
+      chartData.push(row);
+    });
+
+    XLSX.utils.sheet_add_aoa(wsSummary, chartData, { origin: { r: chartAnchorRow, c: 0 } });
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+    // ── One sheet per lesson ─────────────────────────────────
+    state.allLessons.forEach(function(lesson) {
+      var lid  = lesson.meta.id;
+      var steps = lesson.data.steps;
+
+      var hdr = ['Name', 'Code'];
+      steps.forEach(function(step) { hdr.push(step.title); hdr.push(step.title + ' Time'); });
+      hdr.push('Total Done'); hdr.push('Total Time');
+
+      var wsData = [hdr];
+      codes.forEach(function(code) {
+        var prog = allProg[code] || {};
+        var name = state.nameMap[code] || '';
+        var row  = [name, code];
+        var totalDone = 0, totalMs = 0;
+        steps.forEach(function(step) {
+          var s    = (prog[lid] && prog[lid][step.id]) || {};
+          var done = s.completed ? 1 : 0;
+          var ms   = s.totalMs  || 0;
+          totalDone += done;
+          totalMs   += ms;
+          row.push(done ? '\u2713' : (s.started || s.startedAt ? '\u25CB' : '\u2013'));
+          row.push(ms ? fmtMs(ms) : '—');
+        });
+        row.push(totalDone + ' / ' + steps.length);
+        row.push(totalMs ? fmtMs(totalMs) : '—');
+        wsData.push(row);
+      });
+
+      var ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws['!cols'] = [{ wch: 25 }, { wch: 20 }];
+      steps.forEach(function() { ws['!cols'].push({ wch: 8 }); ws['!cols'].push({ wch: 10 }); });
+      ws['!cols'].push({ wch: 10 }); ws['!cols'].push({ wch: 10 });
+
+      // Truncate sheet name to 31 chars (Excel limit)
+      var sheetName = lesson.data.title.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    XLSX.writeFile(wb, 'PyLearn-' + className + '-report.xlsx');
+
+  } catch(e) { alert('Export failed: ' + e.message); }
+}
+
+// ── Import names from spreadsheet ────────────────────────────
+function importNamesFromSheet(file) {
+  var statusEl = document.getElementById('import-status');
+  statusEl.textContent = 'Reading file\u2026';
+  statusEl.classList.remove('hidden');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var wb   = XLSX.read(data, { type: 'array' });
+      // Find the Codes sheet (first sheet, or sheet named 'Codes')
+      var sheetName = wb.SheetNames.includes('Codes') ? 'Codes' : wb.SheetNames[0];
+      var ws   = wb.Sheets[sheetName];
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      var imported = 0;
+      rows.forEach(function(row, idx) {
+        if (idx === 0) return; // skip header
+        var name = (row[0] || '').toString().trim();
+        var code = (row[1] || '').toString().trim().toUpperCase();
+        if (name && code && code.length > 5) {
+          state.nameMap[code] = name;
+          imported++;
+        }
+      });
+
+      if (imported === 0) {
+        statusEl.textContent = '\u26A0\uFE0F No names found. Make sure column A = Name, column B = Code.';
+      } else {
+        statusEl.textContent = '\u2705 Imported ' + imported + ' name' + (imported !== 1 ? 's' : '') + '. Names are local only \u2014 not shared to Firebase.';
+        refreshAdminTable();
+      }
+    } catch(err) {
+      statusEl.textContent = '\u274C Error reading file: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 document.getElementById('btn-gen-codes').onclick = async function() {
@@ -1278,6 +1504,19 @@ document.getElementById('btn-add-single').onclick = async function() {
     await refreshAdminTable();
   } catch(e) {
     statusEl.textContent = '\u274c Error: ' + e.message;
+  }
+};
+
+// Import names: clicking button triggers hidden file input
+document.getElementById('btn-import-names').onclick = function() {
+  document.getElementById('input-import-names').click();
+};
+document.getElementById('input-import-names').onchange = function(e) {
+  var file = e.target.files[0];
+  if (file) {
+    importNamesFromSheet(file);
+    // Reset so the same file can be re-imported
+    e.target.value = '';
   }
 };
 
