@@ -200,22 +200,41 @@ window.PyLearn = (() => {
 
   // ── Core runner ─────────────────────────────────────────────
   // opts:
-  //   onOutput?(text)          — called live as Python prints
-  //   inputFn?(prompt)->str    — supply answers; triggers silent mode (no prompts in output)
+  //   onOutput?(text)     — called live as Python prints
+  //   inputs?: string[]   — pre-supplied answers for input() calls (validator mode)
+  //                         Prepends a Python input() shim — prompts never hit stdout
+  //   inputFn?(p)->str    — legacy / live keyboard handler (no prompt suppression)
   //
-  // When inputFn supplied: prepends a Python input() shim into the code before running.
-  // The shim shadows Skulpt's built-in entirely — prompts never reach stdout.
-  // output contains ONLY what print() produces. Proven to work regardless of Skulpt internals.
-  //
-  // When inputFn absent: normal live run, user types into the output panel.
+  // Returns { output, error }
+  // When opts.inputs is supplied, output contains ONLY print() text.
   function runPython(code, opts) {
+    // Back-compat: bare function as second arg → live inputFn
     if (typeof opts === 'function') opts = { inputFn: opts };
     opts = opts || {};
 
-    const onOutput    = opts.onOutput || null;
-    const userInputFn = opts.inputFn  || null;
+    const onOutput = opts.onOutput || null;
 
-    function skRun(codeToRun, inputfunImpl) {
+    // ── Validator mode: inputs array ──────────────────────────
+    // Prepend a Python input() shim that returns answers from a list.
+    // Skulpt's built-in input() is never called, so nothing touches stdout.
+    if (Array.isArray(opts.inputs)) {
+      var pyList = '[' + opts.inputs.map(function(s) {
+        // Escape backslashes and single quotes for safe embedding in Python string
+        return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+      }).join(', ') + ']';
+
+      var shim = (
+        '_pylearn_answers = ' + pyList + '\n' +
+        '_pylearn_idx = [0]\n' +
+        'def input(prompt=""):\n' +
+        '    i = _pylearn_idx[0]\n' +
+        '    _pylearn_idx[0] = i + 1\n' +
+        '    if i < len(_pylearn_answers):\n' +
+        '        return _pylearn_answers[i]\n' +
+        '    return ""\n' +
+        '\n'
+      );
+
       return new Promise(function(resolve) {
         var output = '';
         Sk.configure({
@@ -228,11 +247,11 @@ window.PyLearn = (() => {
               throw new Error("File not found: '" + file + "'");
             return Sk.builtinFiles.files[file];
           },
-          inputfun: inputfunImpl,
+          inputfun: function() { return Promise.resolve(''); },
           inputfunTakesPromise: true,
         });
         Sk.misceval.asyncToPromise(
-          function() { return Sk.importMainWithBody('<stdin>', false, codeToRun, true); }
+          function() { return Sk.importMainWithBody('<stdin>', false, shim + code, true); }
         ).then(
           function()    { resolve({ output: output, error: null }); },
           function(err) { resolve({ output: output, error: err.toString() }); }
@@ -240,58 +259,32 @@ window.PyLearn = (() => {
       });
     }
 
-    // ── Silent / validator mode ───────────────────────────────
-    // Prepend a Python input() shim that returns answers from a list without
-    // printing anything to stdout. Skulpt's built-in input() is never called.
-    if (userInputFn) {
-      // We need the answers as a Python list. Collect them by running a dry
-      // pass — but we don't know how many input() calls there are.
-      // Instead: use a JS closure that calls userInputFn, and inject a Python
-      // shim that calls a special Skulpt external function.
-      //
-      // Simplest reliable approach: give Skulpt a no-output inputfun.
-      // We set Sk.output to a null sink during inputfun execution.
-      // JS is single-threaded — we can swap Sk.output temporarily.
-      return new Promise(function(resolve) {
-        var output = '';
-        var realOutput = function(text) {
+    // ── Live / inputFn mode ───────────────────────────────────
+    // Used for the interactive editor (user types) or legacy single-answer inputFn.
+    // Prompts appear in output — do not use for output comparison.
+    var liveFn = opts.inputFn || function() { return Promise.resolve(''); };
+    return new Promise(function(resolve) {
+      var output = '';
+      Sk.configure({
+        output: function(text) {
           output += text;
           if (onOutput) onOutput(text);
-        };
-        var nullOutput = function(text) { /* drop prompts */ };
-
-        Sk.configure({
-          output: realOutput,
-          read: function(file) {
-            if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
-              throw new Error("File not found: '" + file + "'");
-            return Sk.builtinFiles.files[file];
-          },
-          inputfun: function(prompt) {
-            // Swap to null output synchronously — Skulpt cannot write the prompt
-            // until control returns to the event loop, by which time Sk.output
-            // points at nullOutput.
-            Sk.output = nullOutput;
-            return Promise.resolve(userInputFn(prompt || '')).then(function(answer) {
-              // Restore real output for subsequent print() calls
-              Sk.output = realOutput;
-              return answer;
-            });
-          },
-          inputfunTakesPromise: true,
-        });
-
-        Sk.misceval.asyncToPromise(
-          function() { return Sk.importMainWithBody('<stdin>', false, code, true); }
-        ).then(
-          function()    { resolve({ output: output, error: null }); },
-          function(err) { resolve({ output: output, error: err.toString() }); }
-        );
+        },
+        read: function(file) {
+          if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
+            throw new Error("File not found: '" + file + "'");
+          return Sk.builtinFiles.files[file];
+        },
+        inputfun: liveFn,
+        inputfunTakesPromise: true,
       });
-    }
-
-    // ── Live / interactive mode ───────────────────────────────
-    return skRun(code, opts.liveInputFn || function() { return Promise.resolve(''); });
+      Sk.misceval.asyncToPromise(
+        function() { return Sk.importMainWithBody('<stdin>', false, code, true); }
+      ).then(
+        function()    { resolve({ output: output, error: null }); },
+        function(err) { resolve({ output: output, error: err.toString() }); }
+      );
+    });
   }
 
   // ── Editor factory ───────────────────────────────────────────
@@ -583,14 +576,75 @@ var state = {
 };
 
 // ── Utilities ────────────────────────────────────────────────
-function genCode() {
-  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  var seg = function() {
-    return Array.from({length:4}, function() {
-      return chars[Math.random()*chars.length|0];
-    }).join('');
-  };
-  return seg()+'-'+seg()+'-'+seg();
+// ── Word bank for memorable codes ─────────────────────────────
+var WORDS = {
+  adjectives: [
+    'Amber','Ancient','Arctic','Autumn','Azure','Bold','Brave','Bright','Breezy','Bronze',
+    'Calm','Cheerful','Chill','Clever','Cloud','Cobalt','Comet','Cool','Copper','Coral',
+    'Cosmic','Cozy','Crisp','Crimson','Crystal','Curious','Daring','Dark','Dawn','Deep',
+    'Dusty','Emerald','Epic','Faded','Fearless','Fiery','Fizzy','Fluffy','Forest','Frosty',
+    'Frozen','Gentle','Giant','Glowing','Gold','Golden','Grand','Green','Happy','Hidden',
+    'Icy','Indigo','Jade','Jolly','Jumpy','Keen','Kind','Large','Lavender','Lemon',
+    'Light','Lunar','Lush','Majestic','Marble','Midnight','Mighty','Mint','Misty','Moody',
+    'Mystic','Neon','Noble','Olive','Orange','Peachy','Pink','Plum','Polar','Purple',
+    'Quiet','Quick','Radiant','Rapid','Regal','River','Rocky','Rose','Royal','Ruby',
+    'Rusty','Sandy','Sapphire','Secret','Shadow','Shiny','Silent','Silver','Sleepy','Slim',
+    'Snowy','Solar','Speedy','Spring','Starry','Steel','Stone','Storm','Strange','Summer',
+    'Sunny','Swift','Tall','Teal','Tiny','Topaz','Turquoise','Velvet','Vivid','Warm',
+    'Wild','Windy','Winter','Wise','Yellow','Young','Zesty','Zippy','Brave','Calm',
+    'Dashing','Eager','Famous','Grand','Heroic','Jolly','Lively','Lucky','Merry','Neat',
+    'Proud','Quirky','Rare','Smart','Snappy','Trusty','Ultra','Vast','Witty','Zany'
+  ],
+  colours: [
+    'Aqua','Azure','Beige','Black','Blue','Bronze','Brown','Coral','Cream','Crimson',
+    'Cyan','Fuchsia','Gold','Green','Grey','Indigo','Ivory','Jade','Khaki','Lavender',
+    'Lemon','Lilac','Lime','Magenta','Maroon','Mint','Navy','Olive','Orange','Peach',
+    'Pink','Plum','Purple','Red','Rose','Ruby','Russet','Salmon','Sapphire','Scarlet',
+    'Silver','Slate','Teal','Turquoise','Violet','White','Yellow','Amber','Apricot','Blush',
+    'Bronze','Cerise','Chartreuse','Chocolate','Cinnamon','Cobalt','Denim','Emerald','Flax',
+    'Flamingo','Glacier','Grape','Hazel','Honey','Lapis','Mango','Mauve','Mustard','Onyx',
+    'Papaya','Periwinkle','Pine','Powder','Raspberry','Saffron','Sage','Sand','Sky','Snow',
+    'Steel','Tangerine','Taupe','Terra','Thistle','Umber','Vanilla','Wisteria','Burgundy','Caramel'
+  ],
+  animals: [
+    'Albatross','Alligator','Alpaca','Antelope','Armadillo','Axolotl','Badger','Bat','Bear',
+    'Beaver','Bison','Bumblebee','Butterfly','Camel','Capybara','Chameleon','Cheetah','Chipmunk',
+    'Cobra','Coyote','Crab','Crane','Crocodile','Dalmation','Deer','Dolphin','Donkey','Dragon',
+    'Dragonfly','Duck','Eagle','Elephant','Falcon','Flamingo','Fox','Frog','Gazelle','Giraffe',
+    'Gorilla','Hamster','Hedgehog','Hippo','Hummingbird','Iguana','Jaguar','Jellyfish','Kangaroo',
+    'Koala','Lemur','Leopard','Lion','Lizard','Llama','Lobster','Lynx','Manatee','Meerkat',
+    'Mongoose','Monkey','Moose','Narwhal','Octopus','Otter','Owl','Panda','Panther','Parrot',
+    'Peacock','Pelican','Penguin','Platypus','Porcupine','Puffin','Rabbit','Raccoon','Raven',
+    'Reindeer','Rhino','Salamander','Seahorse','Seal','Shark','Sloth','Snail','Sparrow',
+    'Squirrel','Stingray','Swan','Tiger','Toucan','Turtle','Vulture','Walrus','Weasel',
+    'Whale','Wolf','Wolverine','Wombat','Woodpecker','Yak','Zebra','Bison','Buffalo','Chimpanzee'
+  ]
+};
+
+// Generate one candidate code: AdjectiveColourAnimal
+function genCodeCandidate() {
+  var adj    = WORDS.adjectives[Math.random() * WORDS.adjectives.length | 0];
+  var colour = WORDS.colours[Math.random()    * WORDS.colours.length    | 0];
+  var animal = WORDS.animals[Math.random()    * WORDS.animals.length    | 0];
+  return adj + colour + animal;
+}
+
+// Generate `count` unique codes that don't clash with `existingSet` (a Set of strings).
+// Falls back gracefully if the word bank is somehow exhausted.
+function genUniqueCodes(count, existingSet) {
+  var codes   = [];
+  var used    = new Set(existingSet);
+  var maxTries = count * 20;
+  var tries    = 0;
+  while (codes.length < count && tries < maxTries) {
+    tries++;
+    var c = genCodeCandidate();
+    if (!used.has(c)) {
+      used.add(c);
+      codes.push(c);
+    }
+  }
+  return codes;
 }
 
 function fmtMs(ms) {
@@ -1503,15 +1557,23 @@ document.getElementById('btn-gen-codes').onclick = async function() {
   document.getElementById('btn-gen-codes').disabled = true;
 
   try {
-    var updates = {};
-    var generated = [];
-    for (var i = 0; i < count; i++) {
-      var code = genCode();
-      generated.push(code);
-      updates['classes/' + rawName + '/codes/' + code] = { createdAt: Date.now() };
+    // Fetch all existing codes across all classes to avoid duplicates
+    var existingSnap = await state.db.ref('classes').get();
+    var existingCodes = new Set();
+    if (existingSnap.exists()) {
+      existingSnap.forEach(function(classSnap) {
+        var codes = classSnap.child('codes').val() || {};
+        Object.keys(codes).forEach(function(c) { existingCodes.add(c); });
+      });
     }
+
+    var generated = genUniqueCodes(count, existingCodes);
+    var updates = {};
+    generated.forEach(function(code) {
+      updates['classes/' + rawName + '/codes/' + code] = { createdAt: Date.now() };
+    });
     await state.db.ref().update(updates);
-    statusEl.textContent = '\u2705 Generated ' + count + ' codes for ' + rawName + '.';
+    statusEl.textContent = '\u2705 Generated ' + generated.length + ' codes for ' + rawName + '.';
     await refreshAdminTable();
   } catch(e) {
     statusEl.textContent = '\u274c Error: ' + e.message;
@@ -1529,7 +1591,17 @@ document.getElementById('btn-add-single').onclick = async function() {
   statusEl.textContent = 'Adding code to ' + className + '\u2026';
   statusEl.classList.remove('hidden');
   try {
-    var code = genCode();
+    // Fetch all existing codes to avoid duplicates
+    var existingSnap = await state.db.ref('classes').get();
+    var existingCodes = new Set();
+    if (existingSnap.exists()) {
+      existingSnap.forEach(function(classSnap) {
+        var codes = classSnap.child('codes').val() || {};
+        Object.keys(codes).forEach(function(c) { existingCodes.add(c); });
+      });
+    }
+    var codes = genUniqueCodes(1, existingCodes);
+    var code = codes[0];
     await state.db.ref('classes/' + className + '/codes/' + code).set({ createdAt: Date.now() });
     statusEl.textContent = '\u2705 Added code ' + code + ' to ' + className + '.';
     await refreshAdminTable();
