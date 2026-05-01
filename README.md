@@ -33,7 +33,7 @@ For admin access to all progress data, either:
 The admin code is set in `lessons/index.json` → `"adminCode"`.
 Change this to any secret string before going live.
 
-**Default admin code:** `ADMIN-X7K2-M9PQ-R4LW-V6NT`
+**Default admin code:** ``
 
 The admin can:
 - Generate new student login codes
