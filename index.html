@@ -201,31 +201,22 @@ window.PyLearn = (() => {
   // ── Core runner ─────────────────────────────────────────────
   // opts: { onOutput?(text), inputFn?(prompt) -> Promise<string> }
   // Returns { output, error, prompts } where:
-  //   output  - only real print() output — input() prompts are excluded
+  //   output  - only real print() output — input() prompts are stripped out
   //   prompts - array of prompt strings passed to each input() call
   //   error   - error string if execution failed, else null
   function runPython(code, opts) {
     if (typeof opts === 'function') opts = { inputFn: opts };
     opts = opts || {};
     return new Promise((resolve) => {
-      let output = '';
+      let rawOutput = '';   // everything Skulpt writes — prompts AND print() output
       const prompts     = [];
       const onOutput    = opts.onOutput || null;
       const userInputFn = opts.inputFn  || (() => Promise.resolve(''));
 
-      // Skulpt's call order for input("prompt"):
-      //   1. calls inputfun("prompt")   <- our function starts here
-      //   2. writes "prompt" to output  <- output callback fires while we await
-      //   3. inputfun promise resolves  <- we get here after prompt is already in output
-      //
-      // Strategy: note output.length when inputfun starts, then after the
-      // userInputFn resolves remove everything Skulpt added in the meantime
-      // (which is exactly the prompt text).
-
       Sk.configure({
         output(text) {
-          output += text;
-          if (onOutput) onOutput(text);
+          rawOutput += text;
+          if (onOutput) onOutput(text);  // live UI still sees everything
         },
         read(file) {
           if (!Sk.builtinFiles || !Sk.builtinFiles.files[file])
@@ -233,16 +224,9 @@ window.PyLearn = (() => {
           return Sk.builtinFiles.files[file];
         },
         inputfun: function(prompt) {
+          // Collect the prompt — we'll strip it from output after the run
           prompts.push(prompt || '');
-          // Snapshot output length NOW — the prompt hasn't been written yet
-          var outputLenBefore = output.length;
-          return Promise.resolve(userInputFn(prompt || '')).then(function(answer) {
-            // By now Skulpt has written the prompt to output.
-            // Remove everything that was added between our snapshot and now —
-            // that's exactly the prompt text (and nothing else at this moment).
-            output = output.slice(0, outputLenBefore);
-            return answer;
-          });
+          return Promise.resolve(userInputFn(prompt || ''));
         },
         inputfunTakesPromise: true,
       });
@@ -250,8 +234,23 @@ window.PyLearn = (() => {
       Sk.misceval.asyncToPromise(
         () => Sk.importMainWithBody('<stdin>', false, code, true)
       ).then(
-        ()    => resolve({ output, prompts, error: null }),
-        (err) => resolve({ output, prompts, error: err.toString() })
+        function() {
+          // Strip all prompt strings from the raw output.
+          // This works regardless of whether Skulpt writes prompts before or
+          // after calling inputfun — we just remove them all at the end.
+          var cleanOutput = rawOutput;
+          prompts.forEach(function(p) {
+            if (p) cleanOutput = cleanOutput.split(p).join('');
+          });
+          resolve({ output: cleanOutput, prompts: prompts, error: null });
+        },
+        function(err) {
+          var cleanOutput = rawOutput;
+          prompts.forEach(function(p) {
+            if (p) cleanOutput = cleanOutput.split(p).join('');
+          });
+          resolve({ output: cleanOutput, prompts: prompts, error: err.toString() });
+        }
       );
     });
   }
