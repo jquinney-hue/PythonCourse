@@ -1156,7 +1156,15 @@ async function showAdmin() {
 
 // ── Helpers ───────────────────────────────────────────────────
 function studentName(code) {
-  return state.nameMap[code] || null;
+  // Exact match first
+  if (state.nameMap[code]) return state.nameMap[code];
+  // Case-insensitive fallback — sheet may have different capitalisation
+  var lower = code.toLowerCase();
+  var keys = Object.keys(state.nameMap);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase() === lower) return state.nameMap[keys[i]];
+  }
+  return null;
 }
 
 function stepStatus(prog, lid, sid) {
@@ -1259,7 +1267,7 @@ async function refreshAdminTable() {
       var tbody = document.createElement('tbody');
       codeList.forEach(function(code) {
         var prog = allProg[code] || {};
-        var name = state.nameMap[code] || null;
+        var name = studentName(code);
 
         // Compute totals
         var stepsDone = 0, totalMs = 0;
@@ -1362,7 +1370,7 @@ function exportCodesSheet(className) {
     var codes = snap.exists() ? Object.keys(snap.val()) : [];
     var wb = XLSX.utils.book_new();
     var wsData = [['Name', 'Code']];
-    codes.forEach(function(code) { wsData.push([state.nameMap[code] || '', code]); });
+    codes.forEach(function(code) { wsData.push([studentName(code) || '', code]); });
     var ws = XLSX.utils.aoa_to_sheet(wsData);
     ws['!cols'] = [{ wch: 30 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Codes');
@@ -1386,7 +1394,7 @@ async function exportDetailedReport(className) {
 
     // ── Sheet 1: Codes ──────────────────────────────────────
     var codesData = [['Name', 'Code']];
-    codes.forEach(function(code) { codesData.push([state.nameMap[code] || '', code]); });
+    codes.forEach(function(code) { codesData.push([studentName(code) || '', code]); });
     var wsCodesSheet = XLSX.utils.aoa_to_sheet(codesData);
     wsCodesSheet['!cols'] = [{ wch: 30 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, wsCodesSheet, 'Codes');
@@ -1401,7 +1409,7 @@ async function exportDetailedReport(className) {
 
     codes.forEach(function(code) {
       var prog = allProg[code] || {};
-      var name = state.nameMap[code] || '';
+      var name = studentName(code) || '';
       var totalDone = 0, totalMs = 0;
       var row = [name, code];
       var lessonCells = [];
@@ -1432,7 +1440,7 @@ async function exportDetailedReport(className) {
     var chartData = [chartHdr];
     codes.forEach(function(code) {
       var prog = allProg[code] || {};
-      var name = state.nameMap[code] || code;
+      var name = studentName(code) || code;
       var row = [name];
       state.allLessons.forEach(function(lesson) {
         var done = 0;
@@ -1460,7 +1468,7 @@ async function exportDetailedReport(className) {
       var wsData = [hdr];
       codes.forEach(function(code) {
         var prog = allProg[code] || {};
-        var name = state.nameMap[code] || '';
+        var name = studentName(code) || '';
         var row  = [name, code];
         var totalDone = 0, totalMs = 0;
         steps.forEach(function(step) {
@@ -1502,25 +1510,36 @@ function importNamesFromSheet(file) {
     try {
       var data = new Uint8Array(e.target.result);
       var wb   = XLSX.read(data, { type: 'array' });
-      // Find the Codes sheet (first sheet, or sheet named 'Codes')
       var sheetName = wb.SheetNames.indexOf('Codes') !== -1 ? 'Codes' : wb.SheetNames[0];
       var ws   = wb.Sheets[sheetName];
       var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
+      // Build a lowercase → correct-case map of all known stored codes
+      // so we can match case-insensitively and store under the right key
+      var storedCodeMap = {};  // lowercase → stored case
+      state.allLessons.forEach(function() {}); // allLessons isn't per-code
+      // We'll match against nameMap keys already loaded, plus fetch from the admin table
+      // Simpler: just preserve code as-is from the sheet and normalise on lookup
+      // The nameMap key must match what Firebase uses, so look up the exact stored code
+      // by searching state.db in memory isn't possible here — instead store the code
+      // as typed but normalise case when doing lookups in the admin table display.
+      // Best approach: store in nameMap with the code trimmed exactly as written in sheet,
+      // and in the admin table do a case-insensitive lookup.
+
       var imported = 0;
       var skipped  = 0;
-      rows.forEach(function(row, idx) {
-        // Skip the header row — detect it by checking if column B looks like a code
-        // Don't just skip idx===0 blindly in case the sheet has no header
+      rows.forEach(function(row) {
         var name = (row[0] || '').toString().trim();
-        var code = (row[1] || '').toString().trim().toUpperCase().replace(/\s+/g, '');
+        var code = (row[1] || '').toString().trim();  // preserve original case
 
-        // If this looks like the header row, skip it
+        // Skip header row
         if (name.toLowerCase() === 'name' && code.toLowerCase() === 'code') return;
-        // Also skip truly empty rows
+        // Skip empty rows
         if (!name && !code) return;
 
-        if (name && code && code.match(/^[A-Z0-9]{3,}-/)) {
+        // Accept any code that is at least 6 characters (word codes are ~20+, old codes were 14)
+        if (name && code && code.length >= 6) {
+          // Store under the trimmed code; admin table does case-insensitive lookup
           state.nameMap[code] = name;
           imported++;
         } else {
@@ -1529,10 +1548,10 @@ function importNamesFromSheet(file) {
       });
 
       if (imported === 0) {
-        statusEl.textContent = '\u26A0\uFE0F No names imported. Make sure column A = Name, column B = Code (format like XXXX-XXXX-XXXX). Rows skipped: ' + skipped;
+        statusEl.textContent = '\u26A0\uFE0F No names imported. Make sure column A = Name, column B = Code. Rows skipped: ' + skipped;
       } else {
         var msg = '\u2705 Imported ' + imported + ' name' + (imported !== 1 ? 's' : '') + '.';
-        if (skipped > 0) msg += ' (' + skipped + ' rows skipped — missing name or unrecognised code format.)';
+        if (skipped > 0) msg += ' (' + skipped + ' rows skipped \u2014 missing name or code too short.)';
         msg += ' Names are local only \u2014 not saved to Firebase.';
         statusEl.textContent = msg;
         refreshAdminTable();
