@@ -209,24 +209,22 @@ window.PyLearn = (() => {
     opts = opts || {};
     return new Promise((resolve) => {
       let output = '';
-      const prompts = [];
-      const onOutput    = opts.onOutput   || null;
-      const userInputFn = opts.inputFn    || (() => Promise.resolve(''));
+      const prompts     = [];
+      const onOutput    = opts.onOutput || null;
+      const userInputFn = opts.inputFn  || (() => Promise.resolve(''));
 
-      // Flag: while true, text arriving at Sk.output is a prompt — route it to
-      // promptBuffer, not output. Cleared once inputfun resolves.
-      let readingInput = false;
-      let promptBuffer = '';
+      // Skulpt's call order for input("prompt"):
+      //   1. calls inputfun("prompt")   <- our function starts here
+      //   2. writes "prompt" to output  <- output callback fires while we await
+      //   3. inputfun promise resolves  <- we get here after prompt is already in output
+      //
+      // Strategy: note output.length when inputfun starts, then after the
+      // userInputFn resolves remove everything Skulpt added in the meantime
+      // (which is exactly the prompt text).
 
       Sk.configure({
         output(text) {
-          if (readingInput) {
-            // This text is part of the input() prompt — don't add to output
-            promptBuffer += text;
-          } else {
-            output += text;
-          }
-          // Always call onOutput so the live UI still shows prompts to the student
+          output += text;
           if (onOutput) onOutput(text);
         },
         read(file) {
@@ -235,32 +233,14 @@ window.PyLearn = (() => {
           return Sk.builtinFiles.files[file];
         },
         inputfun: function(prompt) {
-          // Skulpt calls output(prompt) before calling inputfun.
-          // Set the flag BEFORE that happens by doing it synchronously here.
-          // We can't set it truly before Skulpt's own output call, but we can
-          // strip promptBuffer from output after each input call instead.
-          var p = prompt || '';
-          prompts.push(p);
-          // Strip the prompt from output — Skulpt writes prompt to stdout
-          // synchronously just before calling inputfun, so it's at the end of output
-          if (p && output.endsWith(p)) {
-            output = output.slice(0, -p.length);
-          } else if (p) {
-            // Skulpt may write it with a trailing newline or differently —
-            // try stripping the trimmed version too
-            var trimmed = output.trimEnd();
-            if (trimmed.endsWith(p.trimEnd())) {
-              output = trimmed.slice(0, -p.trimEnd().length);
-            } else {
-              // As a last resort, strip any occurrence of the prompt string from output
-              output = output.split(p).join('');
-            }
-          }
-          readingInput = true;
-          promptBuffer = '';
-          return Promise.resolve(userInputFn(p)).then(function(answer) {
-            readingInput = false;
-            promptBuffer = '';
+          prompts.push(prompt || '');
+          // Snapshot output length NOW — the prompt hasn't been written yet
+          var outputLenBefore = output.length;
+          return Promise.resolve(userInputFn(prompt || '')).then(function(answer) {
+            // By now Skulpt has written the prompt to output.
+            // Remove everything that was added between our snapshot and now —
+            // that's exactly the prompt text (and nothing else at this moment).
+            output = output.slice(0, outputLenBefore);
             return answer;
           });
         },
@@ -1431,25 +1411,38 @@ function importNamesFromSheet(file) {
       var data = new Uint8Array(e.target.result);
       var wb   = XLSX.read(data, { type: 'array' });
       // Find the Codes sheet (first sheet, or sheet named 'Codes')
-      var sheetName = wb.SheetNames.includes('Codes') ? 'Codes' : wb.SheetNames[0];
+      var sheetName = wb.SheetNames.indexOf('Codes') !== -1 ? 'Codes' : wb.SheetNames[0];
       var ws   = wb.Sheets[sheetName];
-      var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
       var imported = 0;
+      var skipped  = 0;
       rows.forEach(function(row, idx) {
-        if (idx === 0) return; // skip header
+        // Skip the header row — detect it by checking if column B looks like a code
+        // Don't just skip idx===0 blindly in case the sheet has no header
         var name = (row[0] || '').toString().trim();
-        var code = (row[1] || '').toString().trim().toUpperCase();
-        if (name && code && code.length > 5) {
+        var code = (row[1] || '').toString().trim().toUpperCase().replace(/\s+/g, '');
+
+        // If this looks like the header row, skip it
+        if (name.toLowerCase() === 'name' && code.toLowerCase() === 'code') return;
+        // Also skip truly empty rows
+        if (!name && !code) return;
+
+        if (name && code && code.match(/^[A-Z0-9]{3,}-/)) {
           state.nameMap[code] = name;
           imported++;
+        } else {
+          skipped++;
         }
       });
 
       if (imported === 0) {
-        statusEl.textContent = '\u26A0\uFE0F No names found. Make sure column A = Name, column B = Code.';
+        statusEl.textContent = '\u26A0\uFE0F No names imported. Make sure column A = Name, column B = Code (format like XXXX-XXXX-XXXX). Rows skipped: ' + skipped;
       } else {
-        statusEl.textContent = '\u2705 Imported ' + imported + ' name' + (imported !== 1 ? 's' : '') + '. Names are local only \u2014 not shared to Firebase.';
+        var msg = '\u2705 Imported ' + imported + ' name' + (imported !== 1 ? 's' : '') + '.';
+        if (skipped > 0) msg += ' (' + skipped + ' rows skipped — missing name or unrecognised code format.)';
+        msg += ' Names are local only \u2014 not saved to Firebase.';
+        statusEl.textContent = msg;
         refreshAdminTable();
       }
     } catch(err) {
