@@ -15,6 +15,12 @@
           "title": "Loops",
           "file": "lessons/python-loops.json",
           "order": 2
+        },
+        {
+          "id": "pybot-loops",
+          "title": "PyBot Loops",
+          "file": "lessons/pybot-loops.json",
+          "order": 3
         }
       ]
     },
