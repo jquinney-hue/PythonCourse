@@ -26,6 +26,190 @@ var GOOGLE_ADMIN_BOOTSTRAP_UIDS = {
   V3q0I1cfjjOrVSJJNZHHbdt4tsB3: true
 };
 
+var GOOGLE_STUDENT_SHEET_NAME = 'Classroom Student Codes';
+var googleStudentTokenClient = null;
+var googleStudentAccessToken = null;
+
+function getGoogleStudentScopes() {
+  return [
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/spreadsheets.readonly'
+  ].join(' ');
+}
+
+function requestGoogleStudentToken() {
+  return new Promise(function(resolve, reject) {
+    var clientId = state.config && state.config.googleClientId;
+    if (!clientId) {
+      reject(new Error('Google login is not configured yet.'));
+      return;
+    }
+    if (!window.google || !google.accounts || !google.accounts.oauth2) {
+      reject(new Error('Google sign-in has not finished loading. Please try again in a moment.'));
+      return;
+    }
+    googleStudentTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: getGoogleStudentScopes(),
+      prompt: 'select_account',
+      callback: function(response) {
+        if (!response || response.error) {
+          reject(new Error((response && response.error_description) || 'Google sign-in was cancelled or failed.'));
+          return;
+        }
+        googleStudentAccessToken = response.access_token;
+        resolve(response.access_token);
+      }
+    });
+    googleStudentTokenClient.requestAccessToken();
+  });
+}
+
+async function googleStudentApiRequest(url, options) {
+  if (!googleStudentAccessToken) throw new Error('Google access token is missing.');
+  var response = await fetch(url, Object.assign({}, options || {}, {
+    headers: Object.assign({}, (options && options.headers) || {}, {
+      Authorization: 'Bearer ' + googleStudentAccessToken
+    })
+  }));
+  var body = await response.json().catch(function() { return {}; });
+  if (!response.ok) {
+    var msg = body && body.error && (body.error.message || body.error.status);
+    throw new Error(msg || response.statusText || 'Google request failed.');
+  }
+  return body;
+}
+
+function quoteGoogleSheetName(title) {
+  return "'" + String(title || '').replace(/'/g, "''") + "'";
+}
+
+async function getGoogleStudentEmail() {
+  var profile = await googleStudentApiRequest('https://www.googleapis.com/oauth2/v3/userinfo');
+  if (!profile || !profile.email) throw new Error('Google did not return an email address.');
+  return String(profile.email).trim().toLowerCase();
+}
+
+async function findGoogleCodeSpreadsheet() {
+  var folderId = state.config && state.config.driveFolderId;
+  if (!folderId) throw new Error('No Drive folder ID is configured for student code lookup.');
+  var sheetName = (state.config && state.config.googleStudentSpreadsheetName) || GOOGLE_STUDENT_SHEET_NAME;
+  var escapedName = sheetName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  var query = [
+    "'" + folderId + "' in parents",
+    "mimeType='application/vnd.google-apps.spreadsheet'",
+    "name='" + escapedName + "'",
+    "trashed=false"
+  ].join(' and ');
+  var params = new URLSearchParams({
+    q: query,
+    fields: 'files(id,name)',
+    pageSize: '10',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true'
+  });
+  var result = await googleStudentApiRequest('https://www.googleapis.com/drive/v3/files?' + params.toString());
+  return (result.files || [])[0] || null;
+}
+
+async function findGoogleStudentCode(spreadsheetId, email) {
+  var metadata = await googleStudentApiRequest(
+    'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId) + '?fields=sheets.properties'
+  );
+  var sheets = metadata.sheets || [];
+  for (var i = 0; i < sheets.length; i++) {
+    var title = sheets[i].properties && sheets[i].properties.title;
+    if (!title) continue;
+    var range = quoteGoogleSheetName(title) + '!A2:D500';
+    var values = await googleStudentApiRequest(
+      'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId) + '/values/' + encodeURIComponent(range)
+    );
+    var rows = values.values || [];
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r] || [];
+      if (String(row[0] || '').trim().toLowerCase() === email) {
+        return {
+          className: title,
+          firstName: String(row[1] || '').trim(),
+          lastName: String(row[2] || '').trim(),
+          code: String(row[3] || '').trim()
+        };
+      }
+    }
+  }
+  return null;
+}
+
+async function completeStudentCodeLogin(first, last, code, preferredClass) {
+  var foundCode = null;
+  var foundClass = preferredClass || null;
+  var idxSnap = await state.db.ref('codeIndex/' + code.toLowerCase()).get();
+  if (idxSnap.exists()) {
+    var idxData = idxSnap.val() || {};
+    foundCode = idxData.storedCode || code;
+    foundClass = idxData.className || foundClass;
+  }
+  if (!foundCode) throw new Error('Invalid code. Please ask your teacher.');
+
+  var firebaseUid = state.auth && state.auth.currentUser && state.auth.currentUser.uid;
+  localStorage.setItem('pylearn_name', JSON.stringify({ first: first, last: last }));
+  localStorage.setItem('pylearn_code', foundCode);
+  localStorage.removeItem('pylearn_auth_mode');
+  localStorage.removeItem('pylearn_is_teacher');
+  localStorage.removeItem('pylearn_teacher_perms');
+  state.uid = foundCode;
+  state.className = foundClass;
+  state.isAdmin = false;
+  state.isTeacher = false;
+  if (firebaseUid) {
+    await state.db.ref('studentSessions/' + firebaseUid).set({
+      code: foundCode,
+      codeLower: foundCode.toLowerCase(),
+      className: foundClass || '',
+      loggedInAt: Date.now()
+    });
+  }
+  await loadProgress();
+  renderLessonTabs();
+  renderStepBar();
+  updateAuthUI(first, last, false);
+  logStudentAccess(foundCode, first + ' ' + last, foundClass);
+  startForcedQuizWatcher(foundClass);
+  startForcedAssessmentWatcher(foundClass);
+  startIndividualForcedApWatcher(foundClass, foundCode);
+  return { code: foundCode, className: foundClass };
+}
+
+async function signInGoogleStudent() {
+  setLoginError('');
+  var button = document.getElementById('btn-google-student-login');
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Finding your code...';
+    }
+    await requestGoogleStudentToken();
+    var email = await getGoogleStudentEmail();
+    var spreadsheet = await findGoogleCodeSpreadsheet();
+    if (!spreadsheet) throw new Error('Could not find the classroom code spreadsheet in the configured Drive folder.');
+    var match = await findGoogleStudentCode(spreadsheet.id, email);
+    if (!match) throw new Error('No student code was found for ' + email + '. Please use your normal code or ask your teacher.');
+    if (!match.code) throw new Error('Your row was found, but the code cell is empty.');
+    var first = match.firstName || document.getElementById('input-first').value.trim() || 'Student';
+    var last = match.lastName || document.getElementById('input-last').value.trim() || '';
+    await completeStudentCodeLogin(first, last, match.code, match.className);
+    document.getElementById('modal-login').classList.add('hidden');
+  } catch(e) {
+    setLoginError(e && e.message ? e.message : 'Google student sign-in failed.');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Find my code with Google';
+    }
+  }
+}
+
 async function completeGoogleAdminLogin(user, fallbackFirst, fallbackLast) {
   if (!user || !user.uid) throw new Error('Google sign-in did not return a user.');
   if (!isGoogleAuthUser(user)) throw new Error('Admin login must use Google sign-in.');
@@ -85,6 +269,8 @@ function setupAuthUI() {
 
   document.getElementById('btn-login-cancel').onclick = function() { modalLogin.classList.add('hidden'); };
   document.getElementById('btn-google-admin-login').onclick = signInGoogleAdmin;
+  var studentGoogleBtn = document.getElementById('btn-google-student-login');
+  if (studentGoogleBtn) studentGoogleBtn.onclick = signInGoogleStudent;
 
   document.getElementById('btn-login-submit').onclick = async function() {
     var first = document.getElementById('input-first').value.trim();
@@ -132,36 +318,13 @@ function setupAuthUI() {
     }
     try {
       // Try the fast code index first (single point-read — avoids downloading the full classes tree)
-      var foundCode = null;
-      var foundClass = null;
-      var idxSnap = await state.db.ref('codeIndex/' + code.toLowerCase()).get();
-      if (idxSnap.exists()) {
-        var idxData = idxSnap.val() || {};
-        foundCode = idxData.storedCode || code;
-        foundClass = idxData.className || null;
-      }
-      if (!foundCode) { errEl.textContent='Invalid code. Please ask your teacher.'; errEl.classList.remove('hidden'); return; }
-      localStorage.setItem('pylearn_name', JSON.stringify({first:first,last:last}));
-      localStorage.setItem('pylearn_code', foundCode);
-      localStorage.removeItem('pylearn_auth_mode');
-      state.uid=foundCode; state.className=foundClass; state.isAdmin=false;
-      if (firebaseUid) {
-        state.db.ref('studentSessions/' + firebaseUid).set({
-          code: foundCode,
-          codeLower: foundCode.toLowerCase(),
-          className: foundClass || '',
-          loggedInAt: Date.now()
-        }).catch(function(){});
-      }
-      await loadProgress();
-      renderLessonTabs(); renderStepBar();
+      await completeStudentCodeLogin(first, last, code);
       modalLogin.classList.add('hidden');
-      updateAuthUI(first,last,false);
-      logStudentAccess(foundCode, first + ' ' + last, foundClass);
-      startForcedQuizWatcher(foundClass);
-      startForcedAssessmentWatcher(foundClass);
-      startIndividualForcedApWatcher(foundClass, foundCode);
-    } catch(e) { errEl.textContent='Error connecting. Please try again.'; errEl.classList.remove('hidden'); }
+      return;
+    } catch(e) {
+      errEl.textContent = e && e.message ? e.message : 'Error connecting. Please try again.';
+      errEl.classList.remove('hidden');
+    }
   };
 
   document.getElementById('btn-logout').onclick = async function() {
