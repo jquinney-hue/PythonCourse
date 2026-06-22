@@ -239,6 +239,16 @@
       for (var x = x1; x <= x2; x++) {
         var v = '';
         try { v = sheet.getValueFromCoords(x, y, false); } catch (e) {}
+        // If the cell holds a formula, resolve it so SUM/SUMIF/etc. see the
+        // calculated value rather than the raw formula string.
+        if (typeof v === 'string' && v.charAt(0) === '=') {
+          var evaled = evaluateSupportedFormula(sheet, v);
+          if (evaled !== null) {
+            v = evaled;
+          } else {
+            try { v = sheet.getValueFromCoords(x, y, true); } catch (e2) {}
+          }
+        }
         vals.push(v == null ? '' : v);
       }
     }
@@ -344,6 +354,19 @@
     raw = String(raw == null ? '' : raw).trim();
     var formula = raw.charAt(0) === '=' ? raw.slice(1).trim() : raw;
     var m = formula.match(/^([A-Z]+)\s*\((.*)\)$/i);
+    // Verify the match is truly a pure function call: the opening '(' must close
+    // at the very end of the formula.  Without this check, SUMIF(x)/SUMIF(y)
+    // matches the regex with m[2] = 'x)/SUMIF(y' — a mangled argument string.
+    if (m) {
+      var _op = formula.indexOf('(');
+      var _d = 1, _k = _op + 1;
+      while (_k < formula.length && _d > 0) {
+        if (formula[_k] === '(') _d++;
+        else if (formula[_k] === ')') _d--;
+        _k++;
+      }
+      if (_k !== formula.length) m = null; // composite expression like SUMIF()/SUMIF()
+    }
     if (!m) {
       // Formula may contain function calls combined with arithmetic, e.g. SUMIF(...)/5.
       // Resolve any embedded function calls first, then evaluate the arithmetic.
