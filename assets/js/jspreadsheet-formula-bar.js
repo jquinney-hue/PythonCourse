@@ -309,11 +309,48 @@
     }
   }
 
+  // Replaces all known function calls inside an expression with their numeric
+  // result so that arithmetic like SUMIF(...)/5 can be evaluated correctly.
+  // Returns the rewritten expression, or null if any sub-call couldn't be resolved.
+  function resolveNestedFunctions(sheet, expr) {
+    var KNOWN = /\b(SUMIF|COUNTIF|AVERAGEIF|SUM|AVERAGE|MAX|MIN|COUNT|IF)\s*\(/gi;
+    var result = '';
+    var last = 0;
+    var changed = false;
+    var match;
+    KNOWN.lastIndex = 0;
+    while ((match = KNOWN.exec(expr)) !== null) {
+      var start = match.index;
+      var depth = 1;
+      var i = match.index + match[0].length; // position after '('
+      while (i < expr.length && depth > 0) {
+        if (expr[i] === '(') depth++;
+        else if (expr[i] === ')') depth--;
+        i++;
+      }
+      var subFormula = '=' + expr.slice(start, i);
+      var val = evaluateSupportedFormula(sheet, subFormula);
+      if (val === null) return null;
+      result += expr.slice(last, start) + String(val);
+      last = i;
+      KNOWN.lastIndex = i;
+      changed = true;
+    }
+    if (!changed) return null;
+    return result + expr.slice(last);
+  }
+
   function evaluateSupportedFormula(sheet, raw) {
     raw = String(raw == null ? '' : raw).trim();
     var formula = raw.charAt(0) === '=' ? raw.slice(1).trim() : raw;
     var m = formula.match(/^([A-Z]+)\s*\((.*)\)$/i);
-    if (!m) return evaluateArithmeticFormula(sheet, formula);
+    if (!m) {
+      // Formula may contain function calls combined with arithmetic, e.g. SUMIF(...)/5.
+      // Resolve any embedded function calls first, then evaluate the arithmetic.
+      var resolved = resolveNestedFunctions(sheet, formula);
+      if (resolved !== null) return evaluateArithmeticFormula(sheet, resolved);
+      return evaluateArithmeticFormula(sheet, formula);
+    }
     var fn = m[1].toUpperCase();
     var args = splitFormulaArgs(m[2]);
     if (fn === 'SUM' && args.length >= 1) {
