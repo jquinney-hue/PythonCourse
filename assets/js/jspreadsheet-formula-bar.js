@@ -432,9 +432,17 @@
     if (typeof sheet.parseValue === 'function') {
       var origParseValue = sheet.parseValue.bind(sheet);
       sheet.parseValue = function(col, row, value, cell) {
+        // Resolve formula cells via our custom evaluator
         if (typeof value === 'string' && value.charAt(0) === '=') {
           var fixed = evaluateSupportedFormula(sheet, value);
-          if (fixed !== null) return origParseValue(col, row, fixed, cell);
+          if (fixed !== null) value = fixed;
+        }
+        // Apply number formatting here, inside parseValue, so jspreadsheet sets
+        // the formatted text directly rather than us racing it with a setTimeout.
+        var cn = colName(col) + (row + 1);
+        if (sheet._jhnccNumberFormats && sheet._jhnccNumberFormats[cn]) {
+          var displayed = origParseValue(col, row, value, cell);
+          return formatNumberDisplay(displayed, sheet._jhnccNumberFormats[cn]);
         }
         return origParseValue(col, row, value, cell);
       };
