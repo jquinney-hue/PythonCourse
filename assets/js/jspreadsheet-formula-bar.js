@@ -473,8 +473,12 @@
 
   window.JHNCCAddFormulaBar = function (holder, sheet) {
     if (!holder || !sheet || !holder.parentNode) return;
+    // Remove any stale formula bar from a previous init so it isn't left wired
+    // to the old sheet instance when the holder is re-used.
     if (holder.previousSibling && holder.previousSibling.classList &&
-        holder.previousSibling.classList.contains('jhncc-fbar')) return; // already added
+        holder.previousSibling.classList.contains('jhncc-fbar')) {
+      holder.previousSibling.parentNode.removeChild(holder.previousSibling);
+    }
     ensureStyles();
     installFormulaFixes(holder, sheet);
 
@@ -567,6 +571,19 @@
   // borders, alignment and simple conditional formatting. Works fully offline.
   window.JHNCCAddFormatToolbar = function (holder, sheet) {
     if (!holder || !sheet || !holder.parentNode) return;
+    // Guard: if a toolbar is already present as a sibling, remove it first so we
+    // don't end up with two ribbons when the same holder is re-initialised.
+    (function() {
+      var prev = holder.previousElementSibling;
+      while (prev) {
+        var next = prev.previousElementSibling;
+        if (prev.classList && prev.classList.contains('jhncc-toolbar')) {
+          prev.parentNode.removeChild(prev);
+        }
+        if (!prev.classList || !prev.classList.contains('jhncc-fbar')) break;
+        prev = next;
+      }
+    })();
     ensureStyles();
     if (sheet.options) sheet.options.contextMenu = false;
 

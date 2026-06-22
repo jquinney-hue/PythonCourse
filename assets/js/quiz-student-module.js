@@ -434,7 +434,7 @@ function ensureQuizSpreadsheetAssets(cb) {
   addCss('assets/css/jspreadsheet.css');
   addScript('assets/js/jsuites.js', function() {
     addScript('assets/js/jspreadsheet.js', function() {
-      addScript('assets/js/jspreadsheet-formula-bar.js?v=26', function() {
+      addScript('assets/js/jspreadsheet-formula-bar.js?v=27', function() {
         addScript('assets/js/jspreadsheet-chart.js?v=2', cb);
       });
     });
@@ -460,6 +460,18 @@ function renderQuizSpreadsheetTask(qIdx, q) {
   btn.onclick = null;
   ensureQuizSpreadsheetAssets(function() {
     holder.innerHTML = '';
+    // Remove any toolbar / formula-bar siblings left over from a previous init.
+    // These are inserted as siblings (not children) of holder, so innerHTML = ''
+    // does not remove them — they must be cleaned up explicitly.
+    (function() {
+      var prev = holder.previousElementSibling;
+      while (prev && prev.classList &&
+             (prev.classList.contains('jhncc-toolbar') || prev.classList.contains('jhncc-fbar'))) {
+        var toRemove = prev;
+        prev = prev.previousElementSibling;
+        toRemove.parentNode.removeChild(toRemove);
+      }
+    })();
     var columns = Array.isArray(q.columns) && q.columns.length ? q.columns : null;
     if (!columns && Array.isArray(q.sheetData) && q.sheetData[0]) {
       columns = q.sheetData[0].map(function() { return { width: 120 }; });
