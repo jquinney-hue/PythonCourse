@@ -538,9 +538,9 @@ function renderBlockbenchSnapshotPreview(container, snapshot) {
   container.appendChild(canvas);
   var ctx = canvas.getContext('2d');
   var cubes = snapshot && Array.isArray(snapshot.cubes) ? snapshot.cubes : [];
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (!cubes.length) {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#94a3b8';
     ctx.font = '16px sans-serif';
     ctx.textAlign = 'center';
@@ -564,13 +564,25 @@ function renderBlockbenchSnapshotPreview(container, snapshot) {
   var scale = Math.min(12, 420 / span);
   var ox = canvas.width / 2;
   var oy = canvas.height * 0.68;
-  function iso(p) {
-    var x = (p[0] - (minX + maxX) / 2);
-    var y = (p[1] - minY);
-    var z = (p[2] - (minZ + maxZ) / 2);
+  var cx = (minX + maxX) / 2;
+  var cz = (minZ + maxZ) / 2;
+  var cy = minY;
+  function rotatePoint(p, angle) {
+    var x = p[0] - cx;
+    var z = p[2] - cz;
+    var cos = Math.cos(angle);
+    var sin = Math.sin(angle);
+    return [
+      x * cos - z * sin,
+      p[1] - cy,
+      x * sin + z * cos
+    ];
+  }
+  function isoRotated(p, angle) {
+    var r = rotatePoint(p, angle);
     return {
-      x: ox + (x - z) * scale * 0.9,
-      y: oy - y * scale - (x + z) * scale * 0.45
+      x: ox + (r[0] - r[2]) * scale * 0.9,
+      y: oy - r[1] * scale - (r[0] + r[2]) * scale * 0.45
     };
   }
   function poly(points2, fill, stroke) {
@@ -586,27 +598,42 @@ function renderBlockbenchSnapshotPreview(container, snapshot) {
     ctx.lineWidth = 1;
     ctx.stroke();
   }
-  cubes.slice().sort(function(a, b) {
-    var af = blockbenchArray3(a.from, [0,0,0]);
-    var bf = blockbenchArray3(b.from, [0,0,0]);
-    return (af[0] + af[1] + af[2]) - (bf[0] + bf[1] + bf[2]);
-  }).forEach(function(cube, idx) {
-    var f = blockbenchArray3(cube.from, [0, 0, 0]);
-    var t = blockbenchArray3(cube.to, [8, 8, 8]);
-    var base = palette[Math.abs(Number(cube.color) || idx) % palette.length];
-    var p000 = iso([f[0], f[1], f[2]]);
-    var p100 = iso([t[0], f[1], f[2]]);
-    var p010 = iso([f[0], t[1], f[2]]);
-    var p110 = iso([t[0], t[1], f[2]]);
-    var p001 = iso([f[0], f[1], t[2]]);
-    var p101 = iso([t[0], f[1], t[2]]);
-    var p011 = iso([f[0], t[1], t[2]]);
-    var p111 = iso([t[0], t[1], t[2]]);
-    poly([p010, p110, p111, p011], base, 'rgba(15,23,42,0.55)');
-    poly([p001, p101, p111, p011], shadeBlockbenchColour(base, -18), 'rgba(15,23,42,0.55)');
-    poly([p100, p101, p111, p110], shadeBlockbenchColour(base, -34), 'rgba(15,23,42,0.55)');
-    poly([p000, p100, p110, p010], shadeBlockbenchColour(base, -48), 'rgba(15,23,42,0.35)');
-  });
+  function drawFrame(now) {
+    if (!canvas.isConnected) return;
+    var angle = (now || 0) * 0.00045;
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var prepared = cubes.map(function(cube, idx) {
+      var f = blockbenchArray3(cube.from, [0, 0, 0]);
+      var t = blockbenchArray3(cube.to, [8, 8, 8]);
+      var mid = [(f[0] + t[0]) / 2, (f[1] + t[1]) / 2, (f[2] + t[2]) / 2];
+      var rotatedMid = rotatePoint(mid, angle);
+      return { cube: cube, idx: idx, depth: rotatedMid[0] + rotatedMid[2] + rotatedMid[1] * 0.15 };
+    }).sort(function(a, b) {
+      return a.depth - b.depth;
+    });
+    prepared.forEach(function(item) {
+      var cube = item.cube;
+      var idx = item.idx;
+      var f = blockbenchArray3(cube.from, [0, 0, 0]);
+      var t = blockbenchArray3(cube.to, [8, 8, 8]);
+      var base = palette[Math.abs(Number(cube.color) || idx) % palette.length];
+      var p000 = isoRotated([f[0], f[1], f[2]], angle);
+      var p100 = isoRotated([t[0], f[1], f[2]], angle);
+      var p010 = isoRotated([f[0], t[1], f[2]], angle);
+      var p110 = isoRotated([t[0], t[1], f[2]], angle);
+      var p001 = isoRotated([f[0], f[1], t[2]], angle);
+      var p101 = isoRotated([t[0], f[1], t[2]], angle);
+      var p011 = isoRotated([f[0], t[1], t[2]], angle);
+      var p111 = isoRotated([t[0], t[1], t[2]], angle);
+      poly([p010, p110, p111, p011], base, 'rgba(15,23,42,0.55)');
+      poly([p001, p101, p111, p011], shadeBlockbenchColour(base, -18), 'rgba(15,23,42,0.55)');
+      poly([p100, p101, p111, p110], shadeBlockbenchColour(base, -34), 'rgba(15,23,42,0.55)');
+      poly([p000, p100, p110, p010], shadeBlockbenchColour(base, -48), 'rgba(15,23,42,0.35)');
+    });
+    requestAnimationFrame(drawFrame);
+  }
+  requestAnimationFrame(drawFrame);
 }
 
 function shadeBlockbenchColour(hex, amount) {
