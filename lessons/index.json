@@ -139,12 +139,6 @@
               "title": "TEST: Canvas Drawing Quiz",
               "file": "lessons/test-canvas-quiz.json",
               "order": 1
-            },
-            {
-              "id": "test-blockbench-quiz",
-              "title": "TEST: Blockbench Model Quiz",
-              "file": "lessons/test-blockbench-quiz.json",
-              "order": 2
             }
           ]
         },
@@ -235,6 +229,12 @@
               "title": "L1: Introduction to 3D Modelling",
               "file": "lessons/year9-3d-modelling-lesson-1.json",
               "order": 1
+            },
+            {
+              "id": "test-blockbench-quiz",
+              "title": "TEST: Blockbench Model Quiz",
+              "file": "lessons/test-blockbench-quiz.json",
+              "order": 2
             }
           ]
         }
