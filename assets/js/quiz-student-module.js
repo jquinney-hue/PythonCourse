@@ -33,6 +33,8 @@ function startForcedQuizWatcher(className) {
     }
     if (state.forcedQuizCode === forced.lobbyCode && quiz.sessionRef) return;
     state.forcedQuizCode = forced.lobbyCode;
+    // Collapse any open fullscreen editor so the quiz is visible
+    try { exitAllEditorFullscreens(); } catch(e) {}
     joinQuizByCode(String(forced.lobbyCode), { forced: true, allowLate: true }).catch(function(e) {
       console.warn('Forced quiz join failed:', e.message);
     });

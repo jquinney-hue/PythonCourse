@@ -599,6 +599,8 @@ function startForcedAssessmentWatcher(className) {
     }
     if (state.forcedAssessmentCode === forced.lobbyCode && assessment.sessionRef) return;
     state.forcedAssessmentCode = forced.lobbyCode;
+    // Collapse any open fullscreen editor so the AP is visible
+    try { exitAllEditorFullscreens(); } catch(e) {}
     joinAssessmentByCode(String(forced.lobbyCode), { forced: true }).catch(function(e) {
       console.warn('Forced AP join failed:', e.message);
     });
@@ -625,6 +627,8 @@ function startIndividualForcedApWatcher(className, uid) {
     // Use own guard — completely independent of the class-AP watcher
     if (state.individualForcedApCode === data.lobbyCode && assessment.sessionRef) return;
     state.individualForcedApCode = data.lobbyCode;
+    // Collapse any open fullscreen editor so the AP is visible
+    try { exitAllEditorFullscreens(); } catch(e) {}
     joinAssessmentByCode(String(data.lobbyCode), { forced: true }).catch(function(e) {
       console.warn('Individual forced AP join failed:', e.message);
     });

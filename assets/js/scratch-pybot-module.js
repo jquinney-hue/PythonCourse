@@ -1,3 +1,25 @@
+// ── Close any open editor fullscreen ──────────────────────────
+// Called whenever a forced quiz/AP fires so the fullscreen overlay
+// (z-index:9999, position:fixed) doesn't block the incoming modal.
+function exitAllEditorFullscreens() {
+  var pairs = [
+    { wrap: 'qs-scratch-wrap',    cls: 'qs-scratch-fullscreen',    toggle: function() { try { toggleQsScratchFullscreen();    } catch(e) {} } },
+    { wrap: 'qs-pybot-wrap',      cls: 'qs-pybot-fullscreen',      toggle: function() { try { toggleQsPyBotFullscreen();      } catch(e) {} } },
+    { wrap: 'qs-blockbench-wrap', cls: 'qs-blockbench-fullscreen', toggle: function() { try { toggleQsBlockbenchFullscreen(); } catch(e) {} } },
+    { wrap: 'qs-pyscratch-wrap',  cls: 'qs-pyscratch-fullscreen',  toggle: function() { try { toggleQsPyScratchFullscreen();  } catch(e) {} } },
+  ];
+  pairs.forEach(function(p) {
+    var el = document.getElementById(p.wrap);
+    if (el && el.classList.contains(p.cls)) p.toggle();
+  });
+  // Also collapse any open chart/spreadsheet fullscreen overlay
+  document.querySelectorAll('.jhncc-fullscreen').forEach(function(el) {
+    el.classList.remove('jhncc-fullscreen');
+    var btn = el.querySelector('[title="Exit full screen"], [title="Fullscreen"]');
+    if (btn) btn.innerHTML = '&#x26F6;';
+  });
+}
+
 function scaleScratchQuizFrame() {
   var frame  = document.getElementById('qs-scratch-frame');
   var wrap   = document.getElementById('qs-scratch-wrap');
