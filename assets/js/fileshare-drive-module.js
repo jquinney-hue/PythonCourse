@@ -3,30 +3,42 @@
  *
  * Google Drive backbone for quiz file-sharing activities (e.g. canvas art competition).
  *
- * Teacher flow  — uses the existing classroomState.token (already has drive scope).
- *   driveSetupSession(courseId, lobbyCode)
- *     → creates / reuses "JHNCC Computing" root folder (teacher-only)
- *     → creates session subfolder named by lobbyCode
- *     → fetches student emails from Classroom
- *     → grants each student writer permission on the session folder
- *     → returns { rootFolderId, sessionFolderId }
+ * ── Permission model ────────────────────────────────────────────────────────
  *
- * Student flow  — separate drive.file token, re-prompted until all scopes granted.
- *   driveEnsureStudentToken(statusEl)
- *     → returns a valid access token, retrying with clear UI until user accepts
- *   driveUploadFile(folderId, filename, blob, mimeType, token)
- *     → multipart upload, returns { id, name }
- *   driveFetchFileAsDataUrl(fileId, token)
- *     → returns a data-URL string for gallery display
+ *   JHNCC Computing/           teacher-only (not shared)
+ *     Session XXXX/            all students → reader  (so they can see the gallery)
+ *       John Smith/            John → writer           (so he can upload his own work)
+ *       Jane Doe/              Jane → writer
+ *       ...
  *
- * Firebase stores ONLY metadata (folder IDs, file IDs) — no file content.
+ * This costs 2N Drive API calls (N reader grants on session + N writer grants on
+ * individual subfolders) rather than N² cross-grants.
+ *
+ * Students CANNOT write to each other's subfolders — they only have reader there.
+ * Students CANNOT see JHNCC Computing (not shared with them).
+ * Students CANNOT see the teacher's Drive — they only see what's explicitly shared.
+ *
+ * ── Student OAuth scopes ────────────────────────────────────────────────────
+ *
+ *   drive.file     — create/upload their own PNG (write to their subfolder)
+ *   drive.readonly — read gallery (list files in subfolders shared with them)
+ *   userinfo.email — identify which subfolder belongs to them
+ *
+ * ── Firebase (metadata only, no file content) ───────────────────────────────
+ *
+ *   quizSessions/{code}/
+ *     driveFolderId:   session subfolder ID
+ *     studentFolders/
+ *       {emailKey}/    (email with dots→commas to satisfy Firebase key rules)
+ *         folderId:    Drive folder ID for this student
+ *         name:        display name
  */
 
 (function () {
 
-  // ── Helpers ────────────────────────────────────────────────────
+  // ── Drive API helper ───────────────────────────────────────────
 
-  function driveRequest(url, options, token) {
+  function driveReq(url, options, token) {
     return fetch(url, Object.assign({}, options || {}, {
       headers: Object.assign({}, (options && options.headers) || {}, {
         Authorization: 'Bearer ' + token
@@ -42,44 +54,43 @@
     });
   }
 
-  // Find or create a folder with a given name inside parentId.
-  // Returns the folder's Drive ID.
-  async function driveCreateOrReuseFolder(name, parentId, token) {
+  // Normalise an email to a safe Firebase key (dots → commas).
+  function emailKey(email) {
+    return String(email || '').toLowerCase().trim().replace(/\./g, ',');
+  }
+
+  // ── Folder helpers (teacher token) ────────────────────────────
+
+  async function findOrCreateFolder(name, parentId, token) {
     var q = 'mimeType="application/vnd.google-apps.folder"' +
             ' and name=' + JSON.stringify(name) +
             ' and trashed=false' +
             (parentId ? ' and "' + parentId + '" in parents' : '');
-    var search = await driveRequest(
-      'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
-      '&fields=files(id,name)&pageSize=10',
-      { method: 'GET' },
-      token
+    var res = await driveReq(
+      'https://www.googleapis.com/drive/v3/files' +
+      '?q=' + encodeURIComponent(q) + '&fields=files(id)&pageSize=5',
+      { method: 'GET' }, token
     );
-    if (search.files && search.files.length) return search.files[0].id;
+    if (res.files && res.files.length) return res.files[0].id;
 
     var meta = { name: name, mimeType: 'application/vnd.google-apps.folder' };
     if (parentId) meta.parents = [parentId];
-    var created = await driveRequest(
-      'https://www.googleapis.com/drive/v3/files?fields=id,name',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(meta)
-      },
+    var created = await driveReq(
+      'https://www.googleapis.com/drive/v3/files?fields=id',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) },
       token
     );
     return created.id;
   }
 
-  // Grant a single email address writer access to a Drive file/folder.
-  async function driveGrantPermission(fileId, email, token) {
-    await driveRequest(
+  async function grantPermission(fileId, email, role, token) {
+    await driveReq(
       'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) +
       '/permissions?sendNotificationEmail=false',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'user', role: 'writer', emailAddress: email })
+        body: JSON.stringify({ type: 'user', role: role, emailAddress: email })
       },
       token
     );
@@ -88,75 +99,94 @@
   // ── Teacher: full session setup ────────────────────────────────
 
   /**
-   * driveSetupSession(courseId, lobbyCode)
+   * driveSetupSession(courseId, lobbyCode, onProgress)
    *
-   * Requires classroomState.token to already be set (call getClassroomToken() first).
-   * Returns { rootFolderId, sessionFolderId, studentCount }.
+   * Requires classroomState.token (call getClassroomToken() first).
+   *
+   * Creates:
+   *   JHNCC Computing/ (reused if exists)
+   *     Session {lobbyCode}/
+   *       {Student Name}/  — per student
+   *
+   * Permissions:
+   *   Session folder: every student → reader
+   *   Student subfolder: that student → writer
+   *
+   * Returns { rootFolderId, sessionFolderId, studentFolders }
+   * where studentFolders is { emailKey: { folderId, name, email } }
    */
   window.driveSetupSession = async function (courseId, lobbyCode, onProgress) {
     var token = window.classroomState && window.classroomState.token;
-    if (!token) throw new Error('No classroom/Drive token. Please authenticate first.');
-
+    if (!token) throw new Error('No Drive token — authenticate first.');
     onProgress = onProgress || function () {};
 
-    // 1. Root folder
     onProgress('Creating JHNCC Computing folder…');
-    var rootId = await driveCreateOrReuseFolder('JHNCC Computing', null, token);
+    var rootId = await findOrCreateFolder('JHNCC Computing', null, token);
 
-    // 2. Session subfolder
     onProgress('Creating session folder…');
-    var sessionId = await driveCreateOrReuseFolder('Session ' + lobbyCode, rootId, token);
+    var sessionId = await findOrCreateFolder('Session ' + lobbyCode, rootId, token);
 
-    // 3. Fetch students from Classroom
     onProgress('Fetching class roster…');
     var students = await classroomListStudents(courseId);
-    var emails = students
-      .map(function (s) { return s.email || (s.profile && s.profile.emailAddress); })
-      .filter(Boolean);
+    // classroomListStudents returns objects with .name and .email (see admin-module)
+    students = students.filter(function (s) { return s.email; });
 
-    // 4. Grant permissions
-    onProgress('Granting access to ' + emails.length + ' student(s)…');
-    var granted = 0;
-    for (var i = 0; i < emails.length; i++) {
-      try {
-        await driveGrantPermission(sessionId, emails[i], token);
-        granted++;
-        onProgress('Granting access… (' + granted + '/' + emails.length + ')');
-      } catch (e) {
-        console.warn('[Drive] Could not grant access to', emails[i], e.message);
+    var studentFolders = {}; // emailKey → { folderId, name, email }
+    var total = students.length;
+    var done  = 0;
+
+    // Pass 1: create a subfolder per student and give them writer on it
+    onProgress('Creating student folders (0/' + total + ')…');
+    for (var i = 0; i < students.length; i++) {
+      var s = students[i];
+      var displayName = s.fullName || ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || s.email;
+      var fid = await findOrCreateFolder(displayName, sessionId, token);
+      try { await grantPermission(fid, s.email, 'writer', token); } catch (e) {
+        console.warn('[Drive] writer grant failed for', s.email, e.message);
+      }
+      studentFolders[emailKey(s.email)] = { folderId: fid, name: displayName, email: s.email };
+      onProgress('Creating student folders (' + (++done) + '/' + total + ')…');
+    }
+
+    // Pass 2: grant every student reader on the session folder
+    // (so they can see the gallery — all subfolders — but not write outside their own)
+    onProgress('Granting gallery access…');
+    for (var j = 0; j < students.length; j++) {
+      try { await grantPermission(sessionId, students[j].email, 'reader', token); } catch (e) {
+        console.warn('[Drive] reader grant failed for', students[j].email, e.message);
       }
     }
 
-    onProgress('Done — ' + granted + ' student(s) granted access.');
-    return { rootFolderId: rootId, sessionFolderId: sessionId, studentCount: granted };
+    onProgress('Done — ' + total + ' student folder(s) ready.');
+    return { rootFolderId: rootId, sessionFolderId: sessionId, studentFolders: studentFolders };
   };
 
-  // ── Student: token management with retry UI ────────────────────
+  // ── Student: token management with retry ──────────────────────
 
-  var _studentDriveToken = null;
-  var STUDENT_DRIVE_SCOPES = [
-    'https://www.googleapis.com/auth/drive.file',
+  var _studentToken = null;
+  var _studentEmail = null;
+
+  var STUDENT_SCOPES = [
+    'https://www.googleapis.com/auth/drive.file',     // upload to their own folder
+    'https://www.googleapis.com/auth/drive.readonly', // read gallery (others' folders)
+    'https://www.googleapis.com/auth/userinfo.email', // identify their folder
     'https://www.googleapis.com/auth/userinfo.profile'
-  ];
+  ].join(' ');
 
   /**
    * driveEnsureStudentToken(statusEl)
    *
-   * Requests a drive.file token for the student.  If the user declines any scope,
-   * shows an error inside statusEl and returns a Promise that resolves only after
-   * the user successfully grants all permissions (re-prompting each time they click
-   * "Try Again").
-   *
-   * statusEl: a DOM element used to show status/error messages.
+   * Requests a student Drive token. If any scope is denied, shows an inline
+   * error with a "Try Again" button and waits — never resolves until all
+   * scopes are granted. statusEl is a DOM element for status messages.
    * Returns the access token string.
    */
   window.driveEnsureStudentToken = function (statusEl) {
     return new Promise(function (resolve, reject) {
-
-      function setStatus(html, isError) {
+      function setMsg(html, err) {
         if (!statusEl) return;
         statusEl.innerHTML = html;
-        statusEl.style.color = isError ? '#f87171' : '#94a3b8';
+        statusEl.style.color = err ? '#f87171' : '#94a3b8';
       }
 
       function attempt() {
@@ -165,125 +195,109 @@
         if (!window.google || !google.accounts || !google.accounts.oauth2) {
           reject(new Error('Google Identity Services not loaded.')); return;
         }
+        setMsg('Waiting for Google sign-in…', false);
 
-        setStatus('Waiting for Google sign-in…', false);
-
-        var client = google.accounts.oauth2.initTokenClient({
+        google.accounts.oauth2.initTokenClient({
           client_id: clientId,
-          scope: STUDENT_DRIVE_SCOPES.join(' '),
+          scope: STUDENT_SCOPES,
           callback: function (resp) {
             if (!resp || resp.error) {
-              var msg = (resp && resp.error_description) || 'Sign-in cancelled.';
-              setStatus(
-                '<span>' + escHtml(msg) + '</span> ' +
-                '<button id="drive-retry-btn" style="margin-left:8px;padding:2px 10px;' +
-                'background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem">' +
-                'Try Again</button>',
-                true
-              );
-              var btn = statusEl && statusEl.querySelector('#drive-retry-btn');
-              if (btn) btn.onclick = attempt;
-              return;
+              return showRetry((resp && resp.error_description) || 'Sign-in cancelled or failed.');
             }
-
-            // Verify scopes
             var granted = String(resp.scope || '').split(' ');
-            var missing = STUDENT_DRIVE_SCOPES.filter(function (s) {
+            var required = STUDENT_SCOPES.split(' ');
+            var missing  = required.filter(function (s) {
               return !granted.some(function (g) { return g === s; });
             });
             if (missing.length) {
-              setStatus(
-                '⚠️ Some permissions were not granted. Drive upload requires Google Drive access. ' +
-                '<button id="drive-retry-btn" style="margin-left:8px;padding:2px 10px;' +
-                'background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem">' +
-                'Try Again</button>',
-                true
+              return showRetry(
+                'Some permissions were not granted. ' +
+                'Google Drive access is required to upload and view submissions. ' +
+                'Please allow all permissions when prompted.'
               );
-              var btn2 = statusEl && statusEl.querySelector('#drive-retry-btn');
-              if (btn2) btn2.onclick = attempt;
-              return;
             }
-
-            _studentDriveToken = resp.access_token;
-            setStatus('✓ Google Drive connected', false);
-            resolve(_studentDriveToken);
+            _studentToken = resp.access_token;
+            setMsg('✓ Google Drive connected', false);
+            // Fetch email so we can look up the student's folder
+            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: 'Bearer ' + _studentToken }
+            }).then(function (r) { return r.json(); }).then(function (profile) {
+              _studentEmail = String(profile.email || '').toLowerCase().trim();
+              resolve(_studentToken);
+            }).catch(function () { resolve(_studentToken); });
           },
           error_callback: function (err) {
-            setStatus(
-              '⚠️ ' + escHtml(err.type || 'OAuth error') + '. ' +
-              '<button id="drive-retry-btn" style="margin-left:8px;padding:2px 10px;' +
-              'background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem">' +
-              'Try Again</button>',
-              true
-            );
-            var btn3 = statusEl && statusEl.querySelector('#drive-retry-btn');
-            if (btn3) btn3.onclick = attempt;
+            showRetry(err.type || 'OAuth error');
           }
-        });
-        client.requestAccessToken({ prompt: 'consent' });
+        }).requestAccessToken({ prompt: 'consent' });
       }
 
-      // If we already have a valid token, reuse it
-      if (_studentDriveToken) {
-        setStatus('✓ Google Drive connected', false);
-        resolve(_studentDriveToken);
-        return;
+      function showRetry(msg) {
+        setMsg(
+          '<span>' + escHtml(msg) + '</span>' +
+          ' <button id="fs-retry-btn" style="margin-left:8px;padding:2px 10px;' +
+          'background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem">' +
+          'Try Again</button>', true
+        );
+        var btn = statusEl && statusEl.querySelector('#fs-retry-btn');
+        if (btn) btn.onclick = function () { _studentToken = null; attempt(); };
       }
+
+      if (_studentToken) { setMsg('✓ Google Drive connected', false); resolve(_studentToken); return; }
       attempt();
     });
   };
 
-  // Clear cached student token (call on sign-out / quiz exit)
-  window.driveClearStudentToken = function () { _studentDriveToken = null; };
+  /** Returns the email address of the signed-in student (null if not yet signed in). */
+  window.driveStudentEmail = function () { return _studentEmail; };
 
-  // ── Student: file upload ───────────────────────────────────────
+  /** Clear cached credentials (call on quiz exit). */
+  window.driveClearStudentToken = function () { _studentToken = null; _studentEmail = null; };
+
+  // ── Student: find their folder from Firebase ───────────────────
+
+  /**
+   * driveLookupStudentFolder(sessionRef, email)
+   * Returns the Drive folder ID for the student, or null if not found.
+   */
+  window.driveLookupStudentFolder = async function (sessionRef, email) {
+    var snap = await sessionRef.child('studentFolders/' + emailKey(email)).get();
+    return snap.exists() ? snap.child('folderId').val() : null;
+  };
+
+  // ── Student: upload file ───────────────────────────────────────
 
   /**
    * driveUploadFile(folderId, filename, blob, mimeType, token)
-   * Multipart upload to Drive. Returns { id, name }.
+   * Multipart upload. Returns { id, name }.
    */
   window.driveUploadFile = async function (folderId, filename, blob, mimeType, token) {
-    mimeType = mimeType || 'application/octet-stream';
-    var meta = JSON.stringify({ name: filename, parents: [folderId] });
+    mimeType = mimeType || 'image/png';
+    var meta  = JSON.stringify({ name: filename, parents: [folderId] });
     var boundary = 'jhncc_' + Math.random().toString(36).slice(2);
-    var metaPart =
-      '--' + boundary + '\r\n' +
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-      meta + '\r\n';
-    var dataPart =
-      '--' + boundary + '\r\n' +
-      'Content-Type: ' + mimeType + '\r\n\r\n';
-    var ending = '\r\n--' + boundary + '--';
 
-    var metaBytes = new TextEncoder().encode(metaPart);
-    var dataPartBytes = new TextEncoder().encode(dataPart);
-    var endBytes = new TextEncoder().encode(ending);
+    var enc       = new TextEncoder();
+    var metaPart  = enc.encode('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + meta + '\r\n');
+    var dataPart  = enc.encode('--' + boundary + '\r\nContent-Type: ' + mimeType + '\r\n\r\n');
+    var endPart   = enc.encode('\r\n--' + boundary + '--');
     var fileBytes = new Uint8Array(await blob.arrayBuffer());
 
-    var body = new Uint8Array(
-      metaBytes.length + dataPartBytes.length + fileBytes.length + endBytes.length
-    );
-    var offset = 0;
-    [metaBytes, dataPartBytes, fileBytes, endBytes].forEach(function (chunk) {
-      body.set(chunk, offset); offset += chunk.length;
-    });
+    var body = new Uint8Array(metaPart.length + dataPart.length + fileBytes.length + endPart.length);
+    var off  = 0;
+    [metaPart, dataPart, fileBytes, endPart].forEach(function (c) { body.set(c, off); off += c.length; });
 
-    return driveRequest(
+    return driveReq(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
-        body: body
-      },
+      { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: body },
       token
     );
   };
 
-  // ── Student: fetch file as data URL ───────────────────────────
+  // ── Student: fetch file as data URL (for gallery) ─────────────
 
   /**
    * driveFetchFileAsDataUrl(fileId, token)
-   * Downloads a Drive file and returns a data-URL (for gallery display).
+   * Downloads via Drive API (requires drive.readonly or drive.file on that specific file).
    */
   window.driveFetchFileAsDataUrl = async function (fileId, token) {
     var resp = await fetch(
@@ -294,10 +308,24 @@
     var blob = await resp.blob();
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
-      reader.onload = function () { resolve(reader.result); };
+      reader.onload  = function () { resolve(reader.result); };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  };
+
+  /**
+   * driveListFolderFiles(folderId, token)
+   * Returns array of { id, name } for files inside a folder.
+   */
+  window.driveListFolderFiles = async function (folderId, token) {
+    var res = await driveReq(
+      'https://www.googleapis.com/drive/v3/files' +
+      '?q=' + encodeURIComponent('"' + folderId + '" in parents and trashed=false') +
+      '&fields=files(id,name)&pageSize=10',
+      { method: 'GET' }, token
+    );
+    return (res.files || []);
   };
 
   // ── Utility ───────────────────────────────────────────────────

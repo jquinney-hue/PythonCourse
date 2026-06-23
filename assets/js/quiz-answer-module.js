@@ -325,29 +325,29 @@ function renderGalleryReveal(q, qIdx) {
   grid.innerHTML  = '';
   statusEl.textContent = 'Loading submissions…';
 
-  // Watch all answers for this question live (submissions trickle in)
-  var answersRef = quiz.sessionRef.child('answers/' + qIdx);
-  var votesRef   = quiz.sessionRef.child('votes/' + qIdx);
+  var votesRef = quiz.sessionRef.child('votes/' + qIdx);
 
-  var submissions = {};  // uid → { fileId, fileName, dataUrl }
+  // submissions keyed by emailKey → { name, fileId, fileName, dataUrl }
+  var submissions = {};
   var myVote = null;
 
   function renderGrid() {
     grid.innerHTML = '';
-    var uids = Object.keys(submissions);
-    if (!uids.length) { statusEl.textContent = 'No submissions yet.'; return; }
-    statusEl.textContent = uids.length + ' submission' + (uids.length === 1 ? '' : 's') +
-      (myVote ? ' · You voted ✓' : ' · Tap an image to vote!');
+    var keys = Object.keys(submissions);
+    if (!keys.length) { statusEl.textContent = 'No submissions yet.'; return; }
+    var voted = myVote ? ' · You voted ✓' : ' · Tap to vote!';
+    statusEl.textContent = keys.length + ' submission' + (keys.length === 1 ? '' : 's') + voted;
 
-    uids.forEach(function(uid) {
-      var sub = submissions[uid];
+    keys.forEach(function(key) {
+      var sub = submissions[key];
       var card = document.createElement('div');
-      card.style.cssText = 'background:#1e293b;border-radius:8px;overflow:hidden;border:2px solid ' +
-        (myVote === uid ? '#4ade80' : '#334155') + ';cursor:pointer;transition:border-color .2s';
+      card.style.cssText = 'background:#1e293b;border-radius:8px;overflow:hidden;' +
+        'border:2px solid ' + (myVote === key ? '#4ade80' : '#334155') +
+        ';cursor:pointer;transition:border-color .2s';
 
-      var name = document.createElement('p');
-      name.textContent = sub.fileName ? sub.fileName.replace(/\.png$/i, '') : 'Student';
-      name.style.cssText = 'font-size:0.75rem;color:#94a3b8;padding:4px 8px;text-align:center;margin:0';
+      var label = document.createElement('p');
+      label.textContent = sub.name || 'Student';
+      label.style.cssText = 'font-size:0.75rem;color:#94a3b8;padding:4px 8px;text-align:center;margin:0';
 
       if (sub.dataUrl) {
         var img = document.createElement('img');
@@ -355,17 +355,18 @@ function renderGalleryReveal(q, qIdx) {
         img.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;object-fit:cover';
         card.appendChild(img);
       } else {
-        var placeholder = document.createElement('div');
-        placeholder.style.cssText = 'width:100%;aspect-ratio:17/10;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.75rem';
-        placeholder.textContent = 'Loading…';
-        card.appendChild(placeholder);
+        var ph = document.createElement('div');
+        ph.style.cssText = 'width:100%;aspect-ratio:17/10;background:#0f172a;display:flex;' +
+          'align-items:center;justify-content:center;color:#475569;font-size:0.75rem';
+        ph.textContent = sub.fileId ? 'Loading…' : 'Not submitted';
+        card.appendChild(ph);
       }
-      card.appendChild(name);
+      card.appendChild(label);
 
       card.onclick = function() {
-        if (myVote === uid) return; // already voted for this one
-        myVote = uid;
-        votesRef.child(state.uid).set(uid).catch(function(e) {
+        if (myVote === key || !sub.fileId) return;
+        myVote = key;
+        votesRef.child(state.uid).set(key).catch(function(e) {
           console.warn('[Gallery] Vote failed:', e.message);
         });
         renderGrid();
@@ -374,37 +375,46 @@ function renderGalleryReveal(q, qIdx) {
     });
   }
 
-  // Load all submissions and fetch images
-  answersRef.get().then(function(snap) {
-    if (!snap.exists()) { statusEl.textContent = 'No submissions yet.'; return; }
-    var answers = snap.val() || {};
-    var uids = Object.keys(answers);
-    statusEl.textContent = 'Loading ' + uids.length + ' image(s)…';
+  // Load student folders from Firebase, then fetch submitted files from Drive
+  quiz.sessionRef.child('studentFolders').get().then(function(foldersSnap) {
+    if (!foldersSnap.exists()) { statusEl.textContent = 'No student folders found.'; return; }
+    var folders = foldersSnap.val(); // emailKey → { folderId, name, email }
 
-    // Populate with placeholders first
-    uids.forEach(function(uid) {
-      var ans = answers[uid];
-      submissions[uid] = { fileId: ans.fileId, fileName: ans.fileName, dataUrl: null };
+    // Populate with placeholders
+    Object.keys(folders).forEach(function(key) {
+      submissions[key] = { name: folders[key].name, fileId: null, dataUrl: null };
     });
     renderGrid();
 
-    // Fetch images using student's token
+    // Get Drive token, then load each student's submitted file
     window.driveEnsureStudentToken(statusEl).then(function(token) {
-      uids.forEach(function(uid) {
-        var fileId = answers[uid] && answers[uid].fileId;
-        if (!fileId) return;
-        window.driveFetchFileAsDataUrl(fileId, token).then(function(dataUrl) {
-          submissions[uid].dataUrl = dataUrl;
-          renderGrid();
-        }).catch(function(e) {
-          console.warn('[Gallery] Could not load image for', uid, e.message);
+      // Also look at Firebase answers to get the specific fileId for each submission
+      quiz.sessionRef.child('answers/' + qIdx).get().then(function(answersSnap) {
+        var answers = answersSnap.exists() ? answersSnap.val() : {};
+
+        // Map uid→answer; we need to cross-reference with studentFolders by email
+        // The answer stores { fileId, fileName }; look up by iterating studentFolders
+        Object.keys(folders).forEach(function(key) {
+          var folderId = folders[key].folderId;
+          // Find file in Drive folder (student may have uploaded)
+          window.driveListFolderFiles(folderId, token).then(function(files) {
+            if (!files.length) return; // not submitted yet
+            var file = files[0];
+            submissions[key].fileId = file.id;
+            renderGrid();
+            // Fetch image
+            window.driveFetchFileAsDataUrl(file.id, token).then(function(dataUrl) {
+              submissions[key].dataUrl = dataUrl;
+              renderGrid();
+            }).catch(function(e) { console.warn('[Gallery] Image load failed:', key, e.message); });
+          }).catch(function(e) { console.warn('[Gallery] Folder list failed:', key, e.message); });
         });
       });
     }).catch(function(e) {
-      statusEl.textContent = '⚠️ Sign in to Google Drive to view images.';
+      statusEl.textContent = '⚠️ Sign in to Google Drive to view the gallery.';
     });
 
-    // Watch for new votes (live)
+    // Live vote updates
     votesRef.on('value', function(vSnap) {
       var votes = vSnap.val() || {};
       if (votes[state.uid]) myVote = votes[state.uid];

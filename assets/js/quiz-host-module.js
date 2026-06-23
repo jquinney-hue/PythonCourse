@@ -76,7 +76,9 @@ function refreshQuizSetupQuestions() {
     drivePanel.classList.toggle('hidden', !hasCanvas);
     if (hasCanvas) populateDriveClassPicker();
   }
-  quiz._driveFolderId = null; // reset on lesson change
+  quiz._driveFolderId       = null; // reset on lesson change
+  quiz._driveClassId        = null;
+  quiz._driveStudentFolders = null;
 
   var customList = document.getElementById('quiz-custom-list');
   customList.innerHTML = '';
@@ -292,8 +294,8 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
 
   // If any canvas questions are included, Drive setup must have completed first
   var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas'; });
-  if (hasCanvas && !quiz._driveFolderId) {
-    alert('This quiz includes a drawing activity. Please connect Google Drive and set up the folder before starting.');
+  if (hasCanvas && !quiz._driveClassId) {
+    alert('This quiz includes a drawing activity. Please click "Connect Google Drive" and select a class before starting.');
     document.getElementById('modal-quiz-setup').classList.remove('hidden');
     return;
   }
@@ -317,6 +319,26 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   quiz.forced = !!forceClass;
   quiz.hostPlayers = {};
   quiz.sessionRef = state.db.ref('quizSessions/' + lobbyCode);
+
+  // Now that we have the real lobby code, create Drive folders if needed
+  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas'; });
+  if (hasCanvas && quiz._driveClassId) {
+    var driveStatusEl = document.getElementById('quiz-drive-status');
+    try {
+      var driveResult = await window.driveSetupSession(quiz._driveClassId, lobbyCode, function(msg) {
+        if (driveStatusEl) { driveStatusEl.textContent = msg; driveStatusEl.style.color = '#1d4ed8'; }
+      });
+      quiz._driveFolderId       = driveResult.sessionFolderId;
+      quiz._driveStudentFolders = driveResult.studentFolders;
+      var count = Object.keys(driveResult.studentFolders || {}).length;
+      if (driveStatusEl) { driveStatusEl.textContent = '✓ ' + count + ' folder(s) created.'; driveStatusEl.style.color = '#15803d'; }
+    } catch (e) {
+      // Non-fatal — quiz continues but canvas submissions won't have a folder
+      console.error('[Drive] Setup failed:', e.message);
+      if (driveStatusEl) { driveStatusEl.textContent = '⚠️ Drive setup failed: ' + e.message; driveStatusEl.style.color = '#dc2626'; }
+    }
+  }
+
   var firebaseUid = state.auth.currentUser && state.auth.currentUser.uid;
   await quiz.sessionRef.set({
     hostUid:       firebaseUid,
@@ -326,7 +348,8 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
     className:     quiz.className || null,
     forced:        !!forceClass,
     createdAt:     Date.now(),
-    driveFolderId: quiz._driveFolderId || null,
+    driveFolderId:     quiz._driveFolderId || null,
+    studentFolders:    quiz._driveStudentFolders || null,
     questions:   selectedQs.map(function(q) {
       var isCodeType = q.type === 'code_regex' || q.type === 'code_output';
       return {
@@ -522,55 +545,35 @@ document.getElementById('btn-quiz-drive-connect').onclick = async function() {
   btn.disabled = true;
   statusEl.style.color = '#1d4ed8';
 
-  // Ensure we have a full Drive + Classroom token, re-prompting if denied
-  async function ensureToken() {
-    while (true) {
-      try {
-        if (!window.classroomState || !window.classroomState.token) {
-          await getClassroomToken();
-        }
-        return;
-      } catch (e) {
-        statusEl.textContent = '⚠️ ' + e.message + ' — please try again.';
-        statusEl.style.color = '#dc2626';
-        // Wait for user to click Try Again (re-add button)
-        await new Promise(function(resolve) {
-          btn.disabled = false;
-          btn.textContent = 'Try Again';
-          btn.onclick = async function() {
-            btn.onclick = null;
-            btn.textContent = 'Connect Google Drive & Set Up Folder';
-            window.classroomState.token = null;
-            resolve();
-          };
-        });
-        btn.disabled = true;
+  // Authenticate and verify token — re-prompt until accepted.
+  // Folder creation is deferred to lobby creation so the real lobby code is used.
+  var authenticated = false;
+  while (!authenticated) {
+    try {
+      if (!window.classroomState || !window.classroomState.token) {
+        await getClassroomToken();
       }
+      authenticated = true;
+    } catch (e) {
+      statusEl.textContent = '⚠️ ' + e.message;
+      statusEl.style.color = '#dc2626';
+      await new Promise(function(resolve) {
+        btn.disabled    = false;
+        btn.textContent = 'Try Again';
+        btn.onclick     = function() { btn.onclick = null; btn.textContent = 'Connect Google Drive'; window.classroomState && (window.classroomState.token = null); resolve(); };
+      });
+      btn.disabled = true;
+      statusEl.style.color = '#1d4ed8';
     }
   }
 
-  await ensureToken();
-  btn.onclick = null;
-
-  try {
-    var lobbyCodePreview = 'PREVIEW'; // actual code assigned at lobby creation
-    var result = await window.driveSetupSession(courseId, lobbyCodePreview, function(msg) {
-      statusEl.textContent = msg;
-      statusEl.style.color = '#1d4ed8';
-    });
-    quiz._driveFolderId   = result.sessionFolderId;
-    quiz._driveClassId    = courseId;
-    statusEl.textContent  = '✓ Drive ready — ' + result.studentCount + ' student(s) granted access.';
-    statusEl.style.color  = '#15803d';
-    btn.textContent       = '✓ Connected';
-    btn.disabled          = true;
-  } catch (e) {
-    statusEl.textContent = '❌ ' + e.message;
-    statusEl.style.color = '#dc2626';
-    btn.disabled         = false;
-    btn.textContent      = 'Retry';
-    btn.onclick = document.getElementById('btn-quiz-drive-connect').onclick;
-  }
+  // Store the selected class — actual folder creation happens in createHostedQuizLobby
+  // once the real lobby code is known.
+  quiz._driveClassId = courseId;
+  statusEl.textContent = '✓ Authenticated — folders will be created when the lobby opens.';
+  statusEl.style.color = '#15803d';
+  btn.textContent      = '✓ Ready';
+  btn.disabled         = true;
 };
 
 function openQuizManageStudents() {

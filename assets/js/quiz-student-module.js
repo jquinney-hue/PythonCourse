@@ -600,25 +600,7 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
   feedback.textContent = 'Connecting to Google Drive…';
   feedback.style.color = '#94a3b8';
 
-  // Get session folder ID from Firebase
-  var snap;
-  try {
-    snap = await quiz.sessionRef.child('driveFolderId').get();
-  } catch (e) {
-    feedback.textContent = '❌ Could not reach session data: ' + e.message;
-    feedback.style.color = '#f87171';
-    submitBtn.disabled = false;
-    return;
-  }
-  var folderId = snap.val();
-  if (!folderId) {
-    feedback.textContent = '❌ No Drive folder configured for this session.';
-    feedback.style.color = '#f87171';
-    submitBtn.disabled = false;
-    return;
-  }
-
-  // Ensure student Drive token — keep re-prompting until accepted
+  // Ensure student Drive token first — keep re-prompting until all scopes granted
   var token;
   try {
     token = await window.driveEnsureStudentToken(feedback);
@@ -629,11 +611,38 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
     return;
   }
 
+  // Look up the student's own subfolder using their Google email
+  var studentEmail = window.driveStudentEmail && window.driveStudentEmail();
+  if (!studentEmail) {
+    feedback.textContent = '❌ Could not determine your Google account email.';
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+
+  feedback.textContent = 'Finding your folder…';
+  var folderId;
+  try {
+    folderId = await window.driveLookupStudentFolder(quiz.sessionRef, studentEmail);
+  } catch (e) {
+    feedback.textContent = '❌ Could not load session data: ' + e.message;
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+  if (!folderId) {
+    feedback.textContent = '❌ No folder found for your account (' + studentEmail + '). ' +
+      'Check your teacher set up this quiz with your class.';
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+
   // Convert canvas to PNG blob
   feedback.textContent = 'Uploading…';
   var blob = await new Promise(function(resolve) { canvasEl.toBlob(resolve, 'image/png'); });
   var displayName = (state.auth && state.auth.currentUser && state.auth.currentUser.displayName)
-    || (state.uid || 'Student');
+    || studentEmail || 'Student';
   var filename = displayName + '.png';
 
   var fileResult;
