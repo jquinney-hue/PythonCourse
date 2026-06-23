@@ -185,6 +185,40 @@ document.getElementById('btn-debug-wipe-class-code-names').onclick = async funct
 
 // ── Teacher account management ────────────────────────────────
 
+document.getElementById('btn-debug-delete-quizsessions').onclick = async function() {
+  var statusEl = document.getElementById('debug-quizsessions-status');
+  var btn = this;
+  var first = confirm(
+    'This will permanently delete the entire quizSessions table, including active quiz/AP sessions and old quiz session records.\n\n' +
+    'It will not delete classes, student codes, lesson progress, or saved class/AP history.\n\n' +
+    'Continue?'
+  );
+  if (!first) return;
+  var typed = prompt('Type DELETE quizSessions to confirm the full table wipe.');
+  if (typed !== 'DELETE quizSessions') {
+    if (statusEl) statusEl.textContent = 'Cancelled - confirmation text did not match.';
+    return;
+  }
+  btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Deleting quizSessions...';
+  try {
+    await state.db.ref('quizSessions').remove();
+    if (statusEl) statusEl.textContent = 'quizSessions has been deleted.';
+    if (typeof quiz !== 'undefined') {
+      quiz.sessionRef = null;
+      quiz.lobbyCode = null;
+      quiz.currentState = null;
+    }
+    if (typeof assessment !== 'undefined') {
+      assessment.sessionRef = null;
+      assessment.lobbyCode = null;
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Could not delete quizSessions: ' + e.message;
+  }
+  btn.disabled = false;
+};
+
 var TEACHER_PERMISSION_DEFS = [
   { group: 'Classes & Students', perms: [
     { id: 'viewClasses',    label: 'View classes and student list' },
