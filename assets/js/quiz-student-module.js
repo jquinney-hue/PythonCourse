@@ -1170,7 +1170,7 @@ function quizSafeFirebaseKey(value) {
 
 function blockbenchShareQuestionFilename(qIdx) {
   if (typeof blockbenchShareFilename === 'function') return blockbenchShareFilename(qIdx);
-  return 'question-' + (Number(qIdx) + 1) + '-blockbench-model.json';
+  return 'question-' + (Number(qIdx) + 1) + '-blockbench-model.bbmodel';
 }
 
 async function getQuizStudentFolderId(code) {
@@ -1179,15 +1179,29 @@ async function getQuizStudentFolderId(code) {
   return snap.exists() ? snap.val() : null;
 }
 
-async function loadBlockbenchShareSnapshot(qIdx, code, token) {
+async function loadBlockbenchShareModelText(qIdx, code, token) {
   var folderId = await getQuizStudentFolderId(code);
   if (!folderId) throw new Error('No Drive folder found for this student.');
   var filename = blockbenchShareQuestionFilename(qIdx);
   var file = await window.driveFindLatestFileByName(folderId, filename, token);
+  if (!file || !file.id) {
+    var legacyName = 'question-' + (Number(qIdx) + 1) + '-blockbench-model.json';
+    file = await window.driveFindLatestFileByName(folderId, legacyName, token);
+  }
   if (!file || !file.id) throw new Error('No submitted Blockbench model found.');
-  var text = await window.driveFetchFileAsText(file.id, token);
+  return {
+    text: await window.driveFetchFileAsText(file.id, token),
+    file: file
+  };
+}
+
+async function loadBlockbenchShareSnapshot(qIdx, code, token) {
+  var loaded = await loadBlockbenchShareModelText(qIdx, code, token);
+  var text = loaded.text;
   var snapshot = JSON.parse(text);
-  if (!snapshot || snapshot.format !== 'jhncc-blockbench-snapshot-v1') throw new Error('The model file is not in the expected format.');
+  if (!snapshot || (snapshot.format !== 'jhncc-blockbench-snapshot-v1' && !Array.isArray(snapshot.elements))) {
+    throw new Error('The model file is not in the expected format.');
+  }
   return snapshot;
 }
 
@@ -1270,9 +1284,9 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
     if (imgWrap) {
       imgWrap.innerHTML = '<p style="color:#94a3b8;font-size:0.8rem;text-align:center;padding:1rem">Loading model...</p>';
     }
-    loadBlockbenchShareSnapshot(qIdx, itemCode, token).then(function(snapshot) {
+    loadBlockbenchShareModelText(qIdx, itemCode, token).then(function(loaded) {
       if (voted || !imgWrap) return;
-      renderBlockbenchSnapshotPreview(imgWrap, snapshot);
+      renderBlockbenchModelViewer(imgWrap, loaded.text, { height: 360, spin: true });
     }).catch(function(e) {
       if (imgWrap) imgWrap.innerHTML = '<p style="color:#f87171;font-size:0.8rem;text-align:center;padding:1rem">Could not load model: ' + escapeHtml(e.message) + '</p>';
     });
@@ -1367,8 +1381,8 @@ async function renderStudentShowcase(qIdx) {
       modelPlaceholder.textContent = 'Loading model...';
       card.appendChild(modelPlaceholder);
       (function(ph, codeForModel, tkn) {
-        loadBlockbenchShareSnapshot(qIdx, codeForModel, tkn).then(function(snapshot) {
-          renderBlockbenchSnapshotPreview(ph, snapshot);
+        loadBlockbenchShareModelText(qIdx, codeForModel, tkn).then(function(loaded) {
+          renderBlockbenchModelViewer(ph, loaded.text, { height: 320, spin: true });
         }).catch(function() { ph.textContent = 'Could not load model'; });
       })(modelPlaceholder, code, token);
     } else if (item.fileId && token) {
@@ -1508,8 +1522,8 @@ async function showStudentWorkForCode(code) {
           return;
         }
         if (mq.q.type === 'blockbench_share') {
-          loadBlockbenchShareSnapshot(mq.idx, code, token).then(function(snapshot) {
-            renderBlockbenchSnapshotPreview(contentEl, snapshot);
+          loadBlockbenchShareModelText(mq.idx, code, token).then(function(loaded) {
+            renderBlockbenchModelViewer(contentEl, loaded.text, { height: 480, spin: true });
           }).catch(function(e) {
             contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load model: ' + escapeHtml(e.message) + '</p>';
           });

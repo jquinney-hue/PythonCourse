@@ -1679,8 +1679,8 @@ async function showStudentWorkModal(code) {
         }
         try {
           if (mq.q.type === 'blockbench_share') {
-            var snapshot = await loadBlockbenchShareSnapshot(mq.idx, code, token);
-            renderBlockbenchSnapshotPreview(contentEl, snapshot);
+            var loaded = await loadBlockbenchShareModelText(mq.idx, code, token);
+            renderBlockbenchModelViewer(contentEl, loaded.text, { height: 480, spin: true });
             return;
           }
           var resp = await fetch(

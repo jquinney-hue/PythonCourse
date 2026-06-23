@@ -23,6 +23,27 @@
 	<link rel="stylesheet" href="css/dialogs.css">
 	<style type="text/css" id="theme_css"></style>
 	<style type="text/css" id="theme_thumbnail_css"></style>
+	<style type="text/css">
+		body.jhncc-bb-readonly #status_bar,
+		body.jhncc-bb-readonly #tab_bar,
+		body.jhncc-bb-readonly #left_bar,
+		body.jhncc-bb-readonly #right_bar,
+		body.jhncc-bb-readonly #bottom_bar,
+		body.jhncc-bb-readonly #preview_overlay,
+		body.jhncc-bb-readonly .toolbar,
+		body.jhncc-bb-readonly .panel:not(#preview) {
+			display: none !important;
+		}
+		body.jhncc-bb-readonly #preview,
+		body.jhncc-bb-readonly .preview {
+			position: fixed !important;
+			inset: 0 !important;
+			width: 100vw !important;
+			height: 100vh !important;
+			max-width: none !important;
+			max-height: none !important;
+		}
+	</style>
 </head>
 <body spellcheck="false" class="maximized">
 	<script>
@@ -33,12 +54,119 @@
 		// Respects ?bb_skip_auto=1 so direct visits to /blockbench/index.html still show the menu.
 		(function(){
 			if(window.self===window.top)return; // only auto-start when in an iframe
+			try {
+				var params = new URLSearchParams(window.location.search);
+				if (params.get('bb_skip_auto') === '1' || params.get('jhncc_viewer') === '1') return;
+			} catch(e) {}
 			var t=setInterval(function(){
 				if(window.Blockbench&&window.Blockbench.setup_successful&&typeof window.newProject==='function'&&!window.Project){
 					clearInterval(t);
 					window.newProject('free');
 				}
 			},100);
+		})();
+		(function(){
+			function waitForBlockbenchReady(callback) {
+				var started = Date.now();
+				var timer = setInterval(function() {
+					if (window.Blockbench && window.Blockbench.setup_successful && window.Codecs && window.Codecs.project) {
+						clearInterval(timer);
+						callback();
+					} else if (Date.now() - started > 15000) {
+						clearInterval(timer);
+						callback(new Error('Blockbench did not become ready in time.'));
+					}
+				}, 100);
+			}
+			function stringifyProject(project) {
+				return typeof project === 'string' ? project : JSON.stringify(project);
+			}
+			function setEmbedTextures(value) {
+				try {
+					if (window.settings && window.settings.embed_textures) {
+						var old = window.settings.embed_textures.value;
+						window.settings.embed_textures.value = value;
+						return old;
+					}
+				} catch(e) {}
+				return undefined;
+			}
+			window.jhnccExportBlockbenchProject = function() {
+				if (!window.Codecs || !window.Codecs.project || typeof window.Codecs.project.compile !== 'function') {
+					throw new Error('Blockbench project codec is not available.');
+				}
+				var oldEmbed = setEmbedTextures(true);
+				try {
+					var compiled;
+					var attempts = [
+						{raw: true, embedded_textures: true, embed_textures: true},
+						{compressed: false, embedded_textures: true, embed_textures: true},
+						{}
+					];
+					for (var i = 0; i < attempts.length; i++) {
+						try {
+							compiled = window.Codecs.project.compile(attempts[i]);
+							if (compiled) break;
+						} catch(e) {}
+					}
+					if (!compiled) throw new Error('Could not compile the Blockbench project.');
+					return stringifyProject(compiled);
+				} finally {
+					if (oldEmbed !== undefined) setEmbedTextures(oldEmbed);
+				}
+			};
+			window.jhnccLoadBlockbenchProject = function(projectText, readOnly) {
+				return new Promise(function(resolve, reject) {
+					waitForBlockbenchReady(function(err) {
+						if (err) { reject(err); return; }
+						try {
+							var data = typeof projectText === 'string' ? JSON.parse(projectText) : projectText;
+							if (typeof window.newProject === 'function' && !window.Project) window.newProject('free');
+							if (window.Codecs.project && typeof window.Codecs.project.parse === 'function') {
+								window.Codecs.project.parse(data, 'quiz-model.bbmodel');
+							} else {
+								throw new Error('Blockbench project parser is not available.');
+							}
+							if (readOnly) {
+								document.body.classList.add('jhncc-bb-readonly');
+							}
+							startJhnccSpinPreview();
+							resolve(true);
+						} catch(e) {
+							reject(e);
+						}
+					});
+				});
+			};
+			function startJhnccSpinPreview() {
+				if (window.__jhnccSpinTimer) clearInterval(window.__jhnccSpinTimer);
+				window.__jhnccSpinTimer = setInterval(function() {
+					try {
+						var previews = [];
+						if (window.Preview && Array.isArray(window.Preview.all)) previews = window.Preview.all;
+						else if (window.Preview && typeof window.Preview === 'object') {
+							Object.keys(window.Preview).forEach(function(key) {
+								if (window.Preview[key] && window.Preview[key].controls) previews.push(window.Preview[key]);
+							});
+						}
+						previews.forEach(function(preview) {
+							if (preview.controls) {
+								preview.controls.autoRotate = true;
+								preview.controls.autoRotateSpeed = 1.2;
+								if (typeof preview.controls.update === 'function') preview.controls.update();
+							}
+						});
+					} catch(e) {}
+				}, 50);
+			}
+			window.addEventListener('message', function(event) {
+				var data = event.data || {};
+				if (data.type === 'JHNCC_LOAD_BBMODEL') {
+					window.jhnccLoadBlockbenchProject(data.projectText, data.readOnly !== false)
+						.then(function() { event.source && event.source.postMessage({ type: 'JHNCC_LOAD_BBMODEL_OK', requestId: data.requestId || null }, '*'); })
+						.catch(function(e) { event.source && event.source.postMessage({ type: 'JHNCC_LOAD_BBMODEL_ERROR', requestId: data.requestId || null, error: e.message || String(e) }, '*'); });
+				}
+			});
 		})();
 		if (typeof module === 'object') {window.module = module; module = undefined;}//jQuery Fix
 		
