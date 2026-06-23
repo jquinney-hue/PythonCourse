@@ -510,6 +510,160 @@ function renderQuizSpreadsheetTask(qIdx, q) {
   });
 }
 
+// ── Canvas drawing question ────────────────────────────────────
+
+function initCanvasQuestion(qIdx, q) {
+  var canvasEl  = document.getElementById('qs-canvas-el');
+  var colorPick = document.getElementById('qs-canvas-color');
+  var sizePick  = document.getElementById('qs-canvas-size');
+  var eraserBtn = document.getElementById('qs-canvas-eraser');
+  var clearBtn  = document.getElementById('qs-canvas-clear');
+  var submitBtn = document.getElementById('btn-quiz-submit-canvas');
+  var feedback  = document.getElementById('qs-canvas-feedback');
+
+  // Resize canvas to its CSS width
+  canvasEl.width  = q.canvasWidth  || canvasEl.offsetWidth  || 680;
+  canvasEl.height = q.canvasHeight || 400;
+
+  var ctx = canvasEl.getContext('2d');
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+
+  var drawing  = false;
+  var erasing  = false;
+
+  function getPos(e) {
+    var rect = canvasEl.getBoundingClientRect();
+    var scaleX = canvasEl.width  / rect.width;
+    var scaleY = canvasEl.height / rect.height;
+    var src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    var p = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  }
+  function moveDraw(e) {
+    e.preventDefault();
+    if (!drawing) return;
+    var p = getPos(e);
+    ctx.lineWidth   = parseInt(sizePick.value) || 6;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.strokeStyle = erasing ? '#111827' : colorPick.value;
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  }
+  function stopDraw(e) { drawing = false; }
+
+  // Remove old listeners by replacing the element clone
+  var fresh = canvasEl.cloneNode(true);
+  canvasEl.parentNode.replaceChild(fresh, canvasEl);
+  canvasEl = document.getElementById('qs-canvas-el');
+  // Re-draw background on fresh clone
+  var ctx2 = canvasEl.getContext('2d');
+  ctx2.fillStyle = '#111827';
+  ctx2.fillRect(0, 0, canvasEl.width, canvasEl.height);
+  ctx = ctx2;
+
+  canvasEl.addEventListener('mousedown',  startDraw);
+  canvasEl.addEventListener('mousemove',  moveDraw);
+  canvasEl.addEventListener('mouseup',    stopDraw);
+  canvasEl.addEventListener('mouseleave', stopDraw);
+  canvasEl.addEventListener('touchstart', startDraw, { passive: false });
+  canvasEl.addEventListener('touchmove',  moveDraw,  { passive: false });
+  canvasEl.addEventListener('touchend',   stopDraw);
+
+  eraserBtn.onclick = function() {
+    erasing = !erasing;
+    eraserBtn.style.background = erasing ? '#f87171' : '#334155';
+    eraserBtn.style.color      = erasing ? '#fff'    : '#cbd5e1';
+  };
+  clearBtn.onclick = function() {
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+  };
+
+  feedback.textContent = '';
+  submitBtn.disabled  = false;
+  submitBtn.onclick   = function() { submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn); };
+}
+
+async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
+  submitBtn.disabled = true;
+  feedback.textContent = 'Connecting to Google Drive…';
+  feedback.style.color = '#94a3b8';
+
+  // Get session folder ID from Firebase
+  var snap;
+  try {
+    snap = await quiz.sessionRef.child('driveFolderId').get();
+  } catch (e) {
+    feedback.textContent = '❌ Could not reach session data: ' + e.message;
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+  var folderId = snap.val();
+  if (!folderId) {
+    feedback.textContent = '❌ No Drive folder configured for this session.';
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+
+  // Ensure student Drive token — keep re-prompting until accepted
+  var token;
+  try {
+    token = await window.driveEnsureStudentToken(feedback);
+  } catch (e) {
+    feedback.textContent = '❌ Google Drive access is required to submit. ' + e.message;
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+
+  // Convert canvas to PNG blob
+  feedback.textContent = 'Uploading…';
+  var blob = await new Promise(function(resolve) { canvasEl.toBlob(resolve, 'image/png'); });
+  var displayName = (state.auth && state.auth.currentUser && state.auth.currentUser.displayName)
+    || (state.uid || 'Student');
+  var filename = displayName + '.png';
+
+  var fileResult;
+  try {
+    fileResult = await window.driveUploadFile(folderId, filename, blob, 'image/png', token);
+  } catch (e) {
+    feedback.textContent = '❌ Upload failed: ' + e.message;
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+    return;
+  }
+
+  // Store file ID as the answer in Firebase
+  try {
+    await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
+      fileId:   fileResult.id,
+      fileName: fileResult.name,
+      submittedAt: Date.now()
+    });
+    quiz.myAnswered = true;
+    feedback.textContent = '✓ Drawing submitted!';
+    feedback.style.color = '#4ade80';
+    lockStudentAnswers();
+  } catch (e) {
+    feedback.textContent = '❌ Could not save answer: ' + e.message;
+    feedback.style.color = '#f87171';
+    submitBtn.disabled = false;
+  }
+}
+
 function renderStudentQuestion(qIdx, questionStart, duration) {
   setStudentView('question');
   var q = quiz.questions[qIdx];
@@ -538,8 +692,9 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   var isBlockbench = q.type === 'blockbench_build';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch;
-  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch);
+  var isCanvas = q.type === 'canvas';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isCanvas;
+  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isCanvas);
   document.getElementById('qs-code-answer').classList.toggle('hidden', !isCodeQuestion);
   document.getElementById('qs-text-answer').classList.toggle('hidden', !isTextInput);
   document.getElementById('qs-widget-answer').classList.toggle('hidden', !isWidget);
@@ -548,6 +703,7 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   document.getElementById('qs-blockbench-answer').classList.toggle('hidden', !isBlockbench);
   document.getElementById('qs-spreadsheet-answer').classList.toggle('hidden', !isSpreadsheet);
   document.getElementById('qs-pyscratch-answer').classList.toggle('hidden', !isPyScratch);
+  document.getElementById('qs-canvas-answer').classList.toggle('hidden', !isCanvas);
   if (!isScratch) resetScratchQuizFrame();
   if (!isBlockbench) resetBlockbenchQuizFrame();
   if (!isPyScratch) resetPyScratchQuizFrame();
@@ -725,6 +881,8 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
       }
     };
     document.addEventListener('keydown', window._qsPyScratchEsc);
+  } else if (isCanvas) {
+    initCanvasQuestion(qIdx, q);
   } else if (isSpreadsheet) {
     renderQuizSpreadsheetTask(qIdx, q);
   } else {

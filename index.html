@@ -831,6 +831,16 @@
           <span class="block text-xs text-red-700">Students in this class will be taken straight into the quiz, including after refreshing.</span>
         </span>
       </label>
+      <!-- Drive setup — shown only when canvas questions are selected -->
+      <div id="quiz-drive-setup" class="hidden border border-blue-200 bg-blue-50 rounded-lg p-3 mb-3">
+        <p class="text-sm font-semibold text-blue-800 mb-1">🗂️ Google Drive required</p>
+        <p class="text-xs text-blue-700 mb-2">This quiz includes a drawing activity. Students' submissions will be stored in Google Drive. Choose which class to grant access to:</p>
+        <select id="quiz-drive-class-select" class="w-full text-sm border border-blue-300 rounded p-1 mb-2 bg-white">
+          <option value="">— select a class —</option>
+        </select>
+        <button id="btn-quiz-drive-connect" class="text-sm bg-blue-600 text-white px-4 py-1 rounded font-medium w-full">Connect Google Drive &amp; Set Up Folder</button>
+        <p id="quiz-drive-status" class="text-xs text-blue-700 mt-2"></p>
+      </div>
     </div>
     <button id="btn-quiz-start-host" class="jhncc-primary w-full py-2 rounded font-medium">
       Create Lobby &#x1F680;
@@ -1070,6 +1080,30 @@
           </div>
         </div>
       </div>
+      <!-- Canvas drawing question -->
+      <div id="qs-canvas-answer" class="hidden w-full" style="max-width:700px">
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:0.5rem;overflow:hidden">
+          <!-- Toolbar -->
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0f172a;border-bottom:1px solid #334155;flex-wrap:wrap">
+            <label style="font-size:0.75rem;color:#94a3b8">Colour
+              <input id="qs-canvas-color" type="color" value="#ffffff" style="margin-left:4px;width:32px;height:24px;border:none;background:none;cursor:pointer">
+            </label>
+            <label style="font-size:0.75rem;color:#94a3b8">Size
+              <input id="qs-canvas-size" type="range" min="1" max="40" value="6" style="margin-left:4px;width:80px;vertical-align:middle">
+            </label>
+            <button id="qs-canvas-eraser" style="padding:2px 10px;background:#334155;color:#cbd5e1;border:1px solid #475569;border-radius:4px;font-size:0.75rem;cursor:pointer">Eraser</button>
+            <button id="qs-canvas-clear" style="padding:2px 10px;background:#334155;color:#f87171;border:1px solid #ef4444;border-radius:4px;font-size:0.75rem;cursor:pointer">Clear</button>
+          </div>
+          <!-- Drawing area -->
+          <canvas id="qs-canvas-el" width="680" height="400" style="display:block;width:100%;cursor:crosshair;background:#111827;touch-action:none"></canvas>
+          <!-- Submit bar -->
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#0f172a;border-top:1px solid #334155">
+            <button id="btn-quiz-submit-canvas" class="jhncc-primary px-6 py-2 rounded font-semibold text-sm">Submit Drawing</button>
+            <span id="qs-canvas-feedback" style="font-size:0.82rem;color:#94a3b8;flex:1"></span>
+          </div>
+        </div>
+      </div>
+
       <div id="qs-pyscratch-answer" class="hidden w-full" style="max-width:100%">
         <div id="qs-pyscratch-wrap" style="border-radius:0.5rem;overflow:hidden;border:1px solid #334155">
           <div id="qs-pyscratch-scroll" style="overflow:auto;background:#111827">
@@ -1085,11 +1119,21 @@
     </div>
   </div>
 
-  <!-- Answer reveal -->
-  <div id="qs-reveal" class="hidden flex-1 flex flex-col items-center justify-center px-6">
-    <div id="qs-reveal-result" class="text-4xl mb-3"></div>
-    <div id="qs-reveal-answer" class="text-xl font-bold rounded-xl px-6 py-3 bg-green-600 mb-2"></div>
-    <p class="text-gray-400 text-sm">Next question coming up&#x2026;</p>
+  <!-- Answer reveal (standard + gallery) -->
+  <div id="qs-reveal" class="hidden flex-1 flex flex-col overflow-y-auto">
+    <!-- Standard reveal -->
+    <div id="qs-reveal-standard" class="flex flex-col items-center justify-center flex-1 px-6">
+      <div id="qs-reveal-result" class="text-4xl mb-3"></div>
+      <div id="qs-reveal-answer" class="text-xl font-bold rounded-xl px-6 py-3 bg-green-600 mb-2"></div>
+      <p class="text-gray-400 text-sm">Next question coming up&#x2026;</p>
+    </div>
+    <!-- Gallery reveal (canvas questions) -->
+    <div id="qs-reveal-gallery" class="hidden flex-col flex-1 px-6 py-4">
+      <h2 class="text-xl font-bold text-center mb-1">🎨 Gallery</h2>
+      <p class="text-gray-400 text-sm text-center mb-4">Vote for your favourite!</p>
+      <div id="qs-gallery-status" style="font-size:0.8rem;color:#94a3b8;text-align:center;margin-bottom:8px"></div>
+      <div id="qs-gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px"></div>
+    </div>
   </div>
 
   <!-- Finished -->
@@ -1298,9 +1342,10 @@
 <script src="assets/js/assessment-module.js?v=security-20260605"></script>
 <script src="assets/js/assessment-scratch-module.js?v=security-20260609-ap-score-pdf1"></script>
 <script src="assets/js/assessment-results-module.js?v=security-20260605"></script>
-<script src="assets/js/quiz-host-module.js?v=security-20260608-btec-spreadsheet-quiz1"></script>
-<script src="assets/js/quiz-student-module.js?v=security-20260609-btec-spreadsheet-rounding1"></script>
+<script src="assets/js/fileshare-drive-module.js?v=1"></script>
+<script src="assets/js/quiz-host-module.js?v=drive-canvas-1"></script>
+<script src="assets/js/quiz-student-module.js?v=drive-canvas-1"></script>
 <script src="assets/js/scratch-pybot-module.js?v=security-20260605"></script>
-<script src="assets/js/quiz-answer-module.js?v=security-20260608-btec-spreadsheet-quiz1"></script>
+<script src="assets/js/quiz-answer-module.js?v=drive-canvas-1"></script>
 </body>
 </html>

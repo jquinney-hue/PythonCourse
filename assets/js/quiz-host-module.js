@@ -69,6 +69,15 @@ function refreshQuizSetupQuestions() {
   document.getElementById('btn-quiz-start-host').disabled = !allQs.length;
   document.getElementById('btn-quiz-start-host').classList.toggle('opacity-60', !allQs.length);
 
+  // Show Drive setup panel if any question requires it
+  var hasCanvas = allQs.some(function(q) { return q.type === 'canvas'; });
+  var drivePanel = document.getElementById('quiz-drive-setup');
+  if (drivePanel) {
+    drivePanel.classList.toggle('hidden', !hasCanvas);
+    if (hasCanvas) populateDriveClassPicker();
+  }
+  quiz._driveFolderId = null; // reset on lesson change
+
   var customList = document.getElementById('quiz-custom-list');
   customList.innerHTML = '';
   if (!allQs.length) {
@@ -281,6 +290,14 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
     return gen ? Object.assign({}, gen, { duration: q.duration || 60 }) : q;
   });
 
+  // If any canvas questions are included, Drive setup must have completed first
+  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas'; });
+  if (hasCanvas && !quiz._driveFolderId) {
+    alert('This quiz includes a drawing activity. Please connect Google Drive and set up the folder before starting.');
+    document.getElementById('modal-quiz-setup').classList.remove('hidden');
+    return;
+  }
+
   await createHostedQuizLobby(lesson, selectedQs, forceClass);
 };
 
@@ -302,13 +319,14 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   quiz.sessionRef = state.db.ref('quizSessions/' + lobbyCode);
   var firebaseUid = state.auth.currentUser && state.auth.currentUser.uid;
   await quiz.sessionRef.set({
-    hostUid:     firebaseUid,
-    state:       'lobby',
-    questionIdx: -1,
-    lessonId:    lesson.meta.id,
-    className:   quiz.className || null,
-    forced:      !!forceClass,
-    createdAt:   Date.now(),
+    hostUid:       firebaseUid,
+    state:         'lobby',
+    questionIdx:   -1,
+    lessonId:      lesson.meta.id,
+    className:     quiz.className || null,
+    forced:        !!forceClass,
+    createdAt:     Date.now(),
+    driveFolderId: quiz._driveFolderId || null,
     questions:   selectedQs.map(function(q) {
       var isCodeType = q.type === 'code_regex' || q.type === 'code_output';
       return {
@@ -472,6 +490,88 @@ function renderHostPlayerList(players) {
     list.appendChild(chip);
   });
 }
+
+// ── Drive setup for canvas questions ───────────────────────────
+
+async function populateDriveClassPicker() {
+  var sel = document.getElementById('quiz-drive-class-select');
+  if (!sel || sel.dataset.populated) return;
+  sel.innerHTML = '<option value="">Loading classes…</option>';
+  try {
+    // getClassroomToken is defined in admin-module; reuse if already have a token
+    if (!window.classroomState || !window.classroomState.token) {
+      await getClassroomToken();
+    }
+    var courses = await classroomListCourses();
+    sel.innerHTML = '<option value="">— select a class —</option>' +
+      courses.map(function(c) {
+        return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
+      }).join('');
+    sel.dataset.populated = '1';
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not load classes — ' + escapeHtml(e.message) + '</option>';
+  }
+}
+
+document.getElementById('btn-quiz-drive-connect').onclick = async function() {
+  var btn      = this;
+  var statusEl = document.getElementById('quiz-drive-status');
+  var courseId = document.getElementById('quiz-drive-class-select').value;
+  if (!courseId) { statusEl.textContent = '⚠️ Please select a class first.'; return; }
+
+  btn.disabled = true;
+  statusEl.style.color = '#1d4ed8';
+
+  // Ensure we have a full Drive + Classroom token, re-prompting if denied
+  async function ensureToken() {
+    while (true) {
+      try {
+        if (!window.classroomState || !window.classroomState.token) {
+          await getClassroomToken();
+        }
+        return;
+      } catch (e) {
+        statusEl.textContent = '⚠️ ' + e.message + ' — please try again.';
+        statusEl.style.color = '#dc2626';
+        // Wait for user to click Try Again (re-add button)
+        await new Promise(function(resolve) {
+          btn.disabled = false;
+          btn.textContent = 'Try Again';
+          btn.onclick = async function() {
+            btn.onclick = null;
+            btn.textContent = 'Connect Google Drive & Set Up Folder';
+            window.classroomState.token = null;
+            resolve();
+          };
+        });
+        btn.disabled = true;
+      }
+    }
+  }
+
+  await ensureToken();
+  btn.onclick = null;
+
+  try {
+    var lobbyCodePreview = 'PREVIEW'; // actual code assigned at lobby creation
+    var result = await window.driveSetupSession(courseId, lobbyCodePreview, function(msg) {
+      statusEl.textContent = msg;
+      statusEl.style.color = '#1d4ed8';
+    });
+    quiz._driveFolderId   = result.sessionFolderId;
+    quiz._driveClassId    = courseId;
+    statusEl.textContent  = '✓ Drive ready — ' + result.studentCount + ' student(s) granted access.';
+    statusEl.style.color  = '#15803d';
+    btn.textContent       = '✓ Connected';
+    btn.disabled          = true;
+  } catch (e) {
+    statusEl.textContent = '❌ ' + e.message;
+    statusEl.style.color = '#dc2626';
+    btn.disabled         = false;
+    btn.textContent      = 'Retry';
+    btn.onclick = document.getElementById('btn-quiz-drive-connect').onclick;
+  }
+};
 
 function openQuizManageStudents() {
   document.getElementById('modal-quiz-manage-students').classList.remove('hidden');

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Page</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    iframe { display: block; width: 100%; height: 100vh; border: none; }
+  </style>
+</head>
+<body>
+  <iframe id="bb-frame" src="../blockbench/index.html" allow="fullscreen"></iframe>
+
+  <script>
+    /**
+     * Blockbench Hook
+     * ---------------
+     * Since the iframe is same-origin we can access its globals directly via
+     * contentWindow.  We poll for Blockbench to be defined, then register a
+     * plugin — Blockbench fires onload() immediately if it is already set up,
+     * so late registration works fine.
+     *
+     * Key APIs available inside bb (= iframe.contentWindow):
+     *   bb.Plugin.register(id, { title, onload, onunload })
+     *   bb.MenuBar.addAction(action_or_id, path)   e.g. path = 'file', 'edit', 'help'
+     *   bb.MenuBar.removeAction(id, path)
+     *   bb.Action / bb.BarMenu / bb.Toolbars
+     *   bb.Blockbench.showQuickMessage(text)
+     *   bb.Blockbench.on(event, callback)
+     */
+
+    var frame = document.getElementById('bb-frame');
+
+    frame.addEventListener('load', function () {
+      // Poll until Blockbench's globals are ready (bundle.js runs after iframe load)
+      var attempts = 0;
+      var poll = setInterval(function () {
+        var bb = frame.contentWindow;
+        if (!bb || !bb.Plugin || !bb.MenuBar) {
+          if (++attempts > 100) { clearInterval(poll); console.warn('[JHNCC] Blockbench did not initialise in time'); }
+          return;
+        }
+        clearInterval(poll);
+        injectPlugin(bb);
+      }, 100);
+    });
+
+    function injectPlugin(bb) {
+      bb.Plugin.register('jhncc-tools', {
+        title: 'JHNCC Tools',
+        author: 'JHNCC',
+        description: 'Lesson tools injected from the parent page.',
+        version: '0.0.1',
+        variant: 'web',
+
+        onload: function () {
+          // ── Add a top-level menu ──────────────────────────────────────
+          // MenuBar.addAction can take a plain object; Blockbench wraps it in an Action.
+          // The second argument is the menu path — use an existing menu id ('file',
+          // 'edit', 'display', 'filter', 'tools', 'help') or a dot-path for a submenu.
+
+          bb.MenuBar.addAction({
+            id:   'jhncc.hello',
+            name: 'JHNCC: Hello World',
+            icon: 'school',
+            click: function () {
+              bb.Blockbench.showQuickMessage('Hello from JHNCC!');
+            }
+          }, 'tools');
+
+          console.log('[JHNCC] Plugin loaded — menu entry added to Tools');
+        },
+
+        onunload: function () {
+          bb.MenuBar.removeAction('jhncc.hello', 'tools');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

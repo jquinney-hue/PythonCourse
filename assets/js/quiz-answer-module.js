@@ -260,6 +260,12 @@ function renderStudentReveal(q, qIdx) {
   if (q.type === 'scratch_build') resetScratchQuizFrame();
   if (q.type === 'blockbench_build') resetBlockbenchQuizFrame();
 
+  // Canvas questions get a gallery instead of the standard reveal
+  if (q.type === 'canvas') {
+    renderGalleryReveal(q, qIdx);
+    return;
+  }
+
   quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).get().then(function(snap) {
     var isTextInput = q.type === 'text_input';
     var isWidget = q.type === 'bit_input' || q.type === 'addition_input';
@@ -305,6 +311,118 @@ function renderStudentReveal(q, qIdx) {
 
 document.getElementById('btn-quiz-student-exit').onclick = function() {
   if (confirm('Leave the quiz?')) exitStudentQuiz({ removePlayer: true });
+};
+
+// ── Gallery reveal (canvas questions) ─────────────────────────
+
+function renderGalleryReveal(q, qIdx) {
+  // Show gallery panel, hide standard reveal panel
+  document.getElementById('qs-reveal-standard').classList.add('hidden');
+  document.getElementById('qs-reveal-gallery').classList.remove('hidden');
+
+  var grid      = document.getElementById('qs-gallery-grid');
+  var statusEl  = document.getElementById('qs-gallery-status');
+  grid.innerHTML  = '';
+  statusEl.textContent = 'Loading submissions…';
+
+  // Watch all answers for this question live (submissions trickle in)
+  var answersRef = quiz.sessionRef.child('answers/' + qIdx);
+  var votesRef   = quiz.sessionRef.child('votes/' + qIdx);
+
+  var submissions = {};  // uid → { fileId, fileName, dataUrl }
+  var myVote = null;
+
+  function renderGrid() {
+    grid.innerHTML = '';
+    var uids = Object.keys(submissions);
+    if (!uids.length) { statusEl.textContent = 'No submissions yet.'; return; }
+    statusEl.textContent = uids.length + ' submission' + (uids.length === 1 ? '' : 's') +
+      (myVote ? ' · You voted ✓' : ' · Tap an image to vote!');
+
+    uids.forEach(function(uid) {
+      var sub = submissions[uid];
+      var card = document.createElement('div');
+      card.style.cssText = 'background:#1e293b;border-radius:8px;overflow:hidden;border:2px solid ' +
+        (myVote === uid ? '#4ade80' : '#334155') + ';cursor:pointer;transition:border-color .2s';
+
+      var name = document.createElement('p');
+      name.textContent = sub.fileName ? sub.fileName.replace(/\.png$/i, '') : 'Student';
+      name.style.cssText = 'font-size:0.75rem;color:#94a3b8;padding:4px 8px;text-align:center;margin:0';
+
+      if (sub.dataUrl) {
+        var img = document.createElement('img');
+        img.src = sub.dataUrl;
+        img.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;object-fit:cover';
+        card.appendChild(img);
+      } else {
+        var placeholder = document.createElement('div');
+        placeholder.style.cssText = 'width:100%;aspect-ratio:17/10;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.75rem';
+        placeholder.textContent = 'Loading…';
+        card.appendChild(placeholder);
+      }
+      card.appendChild(name);
+
+      card.onclick = function() {
+        if (myVote === uid) return; // already voted for this one
+        myVote = uid;
+        votesRef.child(state.uid).set(uid).catch(function(e) {
+          console.warn('[Gallery] Vote failed:', e.message);
+        });
+        renderGrid();
+      };
+      grid.appendChild(card);
+    });
+  }
+
+  // Load all submissions and fetch images
+  answersRef.get().then(function(snap) {
+    if (!snap.exists()) { statusEl.textContent = 'No submissions yet.'; return; }
+    var answers = snap.val() || {};
+    var uids = Object.keys(answers);
+    statusEl.textContent = 'Loading ' + uids.length + ' image(s)…';
+
+    // Populate with placeholders first
+    uids.forEach(function(uid) {
+      var ans = answers[uid];
+      submissions[uid] = { fileId: ans.fileId, fileName: ans.fileName, dataUrl: null };
+    });
+    renderGrid();
+
+    // Fetch images using student's token
+    window.driveEnsureStudentToken(statusEl).then(function(token) {
+      uids.forEach(function(uid) {
+        var fileId = answers[uid] && answers[uid].fileId;
+        if (!fileId) return;
+        window.driveFetchFileAsDataUrl(fileId, token).then(function(dataUrl) {
+          submissions[uid].dataUrl = dataUrl;
+          renderGrid();
+        }).catch(function(e) {
+          console.warn('[Gallery] Could not load image for', uid, e.message);
+        });
+      });
+    }).catch(function(e) {
+      statusEl.textContent = '⚠️ Sign in to Google Drive to view images.';
+    });
+
+    // Watch for new votes (live)
+    votesRef.on('value', function(vSnap) {
+      var votes = vSnap.val() || {};
+      if (votes[state.uid]) myVote = votes[state.uid];
+      renderGrid();
+    });
+  });
+}
+
+// Reset gallery state when leaving the reveal (called when a new question starts)
+var _origSetStudentView = setStudentView;
+setStudentView = function(view) {
+  if (view !== 'reveal') {
+    var std = document.getElementById('qs-reveal-standard');
+    var gal = document.getElementById('qs-reveal-gallery');
+    if (std) std.classList.remove('hidden');
+    if (gal) gal.classList.add('hidden');
+  }
+  _origSetStudentView(view);
 };
 
 document.getElementById('btn-quiz-student-home').onclick = function() {
