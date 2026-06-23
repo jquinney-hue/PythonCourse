@@ -1348,10 +1348,12 @@ async function renderStudentShowcase(qIdx) {
 }
 
 function renderStudentLeaderboard(lb) {
+  // Cache so "Load names" can re-render after populating nameMap
+  quiz._lastStudentLeaderboard = Array.isArray(lb) ? lb : Object.values(lb);
   var el = document.getElementById('qs-final-score');
   var total = quizMaxScore(quiz.questions);
   var medals = ['🥇','🥈','🥉'];
-  var lbArr = Array.isArray(lb) ? lb : Object.values(lb);
+  var lbArr = quiz._lastStudentLeaderboard;
 
   var hasMedia = (quiz.questions || []).some(function(q) {
     return q.type === 'canvas' || q.type === 'pyscratch_share';
@@ -1490,3 +1492,77 @@ async function showStudentWorkForCode(code) {
     })(mq, contentEl);
   });
 }
+
+// ── Load names from Drive (student finished screen) ────────────
+// Uses the same student Google token and code spreadsheet from login.
+// All rows in every sheet tab are parsed and mapped code → display name.
+// Names are stored only in state.nameMap / localStorage — never in Firebase.
+document.getElementById('btn-qs-load-names').onclick = async function() {
+  var btn    = this;
+  var status = document.getElementById('qs-load-names-status');
+  btn.disabled    = true;
+  btn.textContent = '⏳ Connecting…';
+  status.textContent = '';
+  status.style.color = '#94a3b8';
+
+  try {
+    // requestGoogleStudentToken() is in auth-module.js and must be called
+    // directly from this onclick to keep the browser's user-gesture chain.
+    if (!window.googleStudentAccessToken) {
+      await requestGoogleStudentToken();
+    }
+
+    btn.textContent = '⏳ Finding sheet…';
+
+    // Reuse the cached spreadsheet ID from login (sessionStorage) if available
+    var spreadsheetId = sessionStorage.getItem('pylearn_student_sheet_id');
+    if (!spreadsheetId) {
+      var sheet = await findGoogleCodeSpreadsheet();
+      if (!sheet) throw new Error('Could not find the code spreadsheet in Drive.');
+      spreadsheetId = sheet.id;
+      sessionStorage.setItem('pylearn_student_sheet_id', spreadsheetId);
+    }
+
+    btn.textContent = '⏳ Reading names…';
+
+    // Single API call returns all sheet tabs with all cell values
+    var sheetData = await fetchAllStudentSheetData(spreadsheetId);
+
+    var imported = 0;
+    sheetData.forEach(function(sheet) {
+      var cols      = googleLookupHeaderIndexes(sheet.rows[0] || []);
+      var hasHeader = cols.email != null || cols.name != null ||
+                      cols.firstName != null || cols.code != null;
+      for (var r = hasHeader ? 1 : 0; r < sheet.rows.length; r++) {
+        var candidate = googleLookupRowToCandidate(
+          sheet.rows[r], sheet.title, hasHeader ? cols : null
+        );
+        if (candidate && candidate.code && candidate.displayName) {
+          state.nameMap[candidate.code] = candidate.displayName;
+          imported++;
+        }
+      }
+    });
+
+    // Persist locally — no Firebase write
+    if (imported) {
+      try { localStorage.setItem('pylearn_name_map', JSON.stringify(state.nameMap)); } catch(_e) {}
+    }
+
+    // Re-render leaderboard with names now showing
+    if (quiz._lastStudentLeaderboard && quiz._lastStudentLeaderboard.length) {
+      renderStudentLeaderboard(quiz._lastStudentLeaderboard);
+    }
+
+    btn.textContent    = '✓ ' + imported + ' names loaded';
+    status.textContent = imported
+      ? ''
+      : 'No names found — check the sheet format.';
+    status.style.color = imported ? '#4ade80' : '#fbbf24';
+  } catch(e) {
+    btn.textContent    = '📋 Load names';
+    btn.disabled       = false;
+    status.textContent = '⚠ ' + (e.message || 'Failed');
+    status.style.color = '#f87171';
+  }
+};

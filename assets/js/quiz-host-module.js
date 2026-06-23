@@ -815,6 +815,7 @@ document.getElementById('btn-quiz-host-home').onclick = function() {
   exitHostQuizScreen();
 };
 
+
 document.getElementById('btn-qh-next-start').onclick = async function() {
   var lesson = quizLessonById(document.getElementById('qh-next-lesson-select').value);
   if (!lesson) { alert('Choose a lesson with quiz questions first.'); return; }
