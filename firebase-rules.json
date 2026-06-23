@@ -109,6 +109,13 @@
               ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $studentCode"
             }
           }
+        },
+        "votes": {
+          "$questionIdx": {
+            "$voterCode": {
+              ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $voterCode"
+            }
+          }
         }
       }
     },
