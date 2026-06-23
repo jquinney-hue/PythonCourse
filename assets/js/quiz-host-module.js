@@ -1163,14 +1163,29 @@ async function startShowcasePhase(qIdx) {
   var ranked = Object.keys(totals).map(function(uid) {
     var t = totals[uid];
     var item = itemMap[uid] || {};
+    var avg = t.count > 0 ? Math.round((t.sum / t.count) * 10) / 10 : 0;
     return {
       uid: uid,
       fileId: item.fileId || null,
       name: item.name || uid,
-      avg: t.count > 0 ? t.sum / t.count : 0,
+      avg: avg,
       voteCount: t.count
     };
   }).sort(function(a, b) { return b.avg - a.avg; }).slice(0, 3);
+
+  // Write vote averages back to each student's answer record so buildLeaderboard
+  // can award points for canvas questions (scored 0–5 based on peer vote average).
+  // Also include students who submitted but received no votes (score 0).
+  var scoreWrites = [];
+  itemsArr.forEach(function(item) {
+    if (!item || !item.uid) return;
+    var t = totals[item.uid];
+    var avg = t ? (t.count > 0 ? Math.round((t.sum / t.count) * 10) / 10 : 0) : 0;
+    scoreWrites.push(
+      quiz.sessionRef.child('answers/' + qIdx + '/' + item.uid + '/score').set(avg)
+    );
+  });
+  await Promise.all(scoreWrites);
 
   // Write showcase items
   var showcaseObj = {};
@@ -1301,7 +1316,10 @@ function pyBotMedalLabel(medal) {
 }
 
 function quizQuestionMaxPoints(q) {
-  return q && q.type === 'pybot_level' ? 5 : 1;
+  if (!q) return 0;
+  if (q.type === 'pybot_level') return 5;
+  if (q.type === 'canvas') return 5; // scored 0–5 by peer vote average
+  return 1;
 }
 
 function quizMaxScore(questions, endExclusive) {
@@ -1318,6 +1336,11 @@ function quizAnswerPoints(q, answerSnap) {
     var stored = answerSnap.child('points').val();
     if (typeof stored === 'number' && isFinite(stored)) return stored;
     return pyBotMedalPoints(answerSnap.child('medal').val(), answerSnap.child('completed').val() === true || answerSnap.exists());
+  }
+  // Canvas: scored 0–5 by peer vote average (written back by startShowcasePhase)
+  if (q.type === 'canvas') {
+    var score = answerSnap.child('score').val();
+    return (typeof score === 'number' && isFinite(score)) ? score : 0;
   }
   if (q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq') {
     return answerSnap.child('correct').val() === true ? 1 : 0;

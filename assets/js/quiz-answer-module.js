@@ -255,6 +255,16 @@ async function submitStudentCodeAnswer(qIdx) {
 
 function renderStudentReveal(q, qIdx) {
   clearStudentTimer();
+  // Canvas questions go through voting/showcase states, never 'answer'.
+  // Guard here in case of a stale Firebase state so students never see "Wrong".
+  if (q && q.type === 'canvas') {
+    setStudentView('reveal');
+    document.getElementById('qs-reveal-result').textContent = '⭐ Drawing submitted';
+    var revealEl = document.getElementById('qs-reveal-answer');
+    revealEl.textContent = 'Voting will begin shortly…';
+    revealEl.className = 'text-xl font-bold rounded-xl px-6 py-3 bg-blue-600 mb-2';
+    return;
+  }
   setStudentView('reveal');
   if (!q) return;
   if (q.type === 'scratch_build') resetScratchQuizFrame();
