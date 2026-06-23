@@ -70,7 +70,7 @@ function refreshQuizSetupQuestions() {
   document.getElementById('btn-quiz-start-host').classList.toggle('opacity-60', !allQs.length);
 
   // Show Drive setup panel if any question requires it
-  var hasCanvas = allQs.some(function(q) { return q.type === 'canvas'; });
+  var hasCanvas = allQs.some(function(q) { return q.type === 'canvas' || q.type === 'pyscratch_share'; });
   var drivePanel = document.getElementById('quiz-drive-setup');
   if (drivePanel) {
     drivePanel.classList.toggle('hidden', !hasCanvas);
@@ -292,10 +292,10 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
     return gen ? Object.assign({}, gen, { duration: q.duration || 60 }) : q;
   });
 
-  // If any canvas questions are included, Drive setup must have completed first
-  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas'; });
+  // If any canvas or pyscratch_share questions are included, Drive setup must have completed first
+  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas' || q.type === 'pyscratch_share'; });
   if (hasCanvas && !quiz._driveClassId) {
-    alert('This quiz includes a drawing activity. Please click "Connect Google Drive" and select a class before starting.');
+    alert('This quiz includes a drawing or game activity. Please click "Connect Google Drive" and select a class before starting.');
     document.getElementById('modal-quiz-setup').classList.remove('hidden');
     return;
   }
@@ -321,7 +321,7 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   quiz.sessionRef = state.db.ref('quizSessions/' + lobbyCode);
 
   // Now that we have the real lobby code, create Drive folders if needed
-  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas'; });
+  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas' || q.type === 'pyscratch_share'; });
   if (hasCanvas && quiz._driveClassId) {
 
     // ── Drive setup loading overlay ──────────────────────────────
@@ -365,21 +365,80 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
       if (msgEl) { msgEl.textContent = text; msgEl.style.color = colour || '#cbd5e1'; }
     }
 
+    // Add a retry sub-section below the spinner (hidden until needed)
+    var retryRow = document.createElement('div');
+    retryRow.id = 'drive-setup-retry-row';
+    retryRow.style.cssText = 'display:none;margin-top:0.9rem;display:none';
+    retryRow.innerHTML =
+      '<button id="drive-setup-retry-btn" style="background:#3b82f6;color:#fff;border:none;' +
+      'border-radius:6px;padding:0.4rem 1.2rem;font-size:0.85rem;font-weight:600;cursor:pointer">' +
+      'Retry now</button>';
+    driveOverlay.querySelector('div').appendChild(retryRow);
+
+    // driveAttempt: tries driveSetupSession, retries with countdown on failure.
+    // RETRY_DELAYS: seconds to wait before each retry (index = attempt number, 0-based).
+    var RETRY_DELAYS = [10, 20, 40, 60];
+
+    async function driveAttempt(attempt) {
+      // Hide retry button, restore spinner colour
+      retryRow.style.display = 'none';
+      var spinner = driveOverlay.querySelector('#drive-setup-spinner');
+      if (spinner) spinner.style.borderTopColor = '#3b82f6';
+      setDriveMsg(attempt > 0 ? 'Retrying…' : 'Initialising…');
+
+      try {
+        var result = await window.driveSetupSession(quiz._driveClassId, lobbyCode, function(msg) {
+          setDriveMsg(msg);
+        });
+        return result; // success — caller handles
+      } catch (e) {
+        console.error('[Drive] Setup attempt ' + (attempt + 1) + ' failed:', e.message);
+        var errText = e.message || 'unknown error';
+
+        if (attempt >= RETRY_DELAYS.length) {
+          // All retries exhausted
+          if (spinner) { spinner.style.borderTopColor = '#f87171'; spinner.style.animation = 'none'; }
+          setDriveMsg('⚠ Setup failed after ' + (attempt + 1) + ' attempts: ' + errText, '#f87171');
+          await new Promise(function(r) { setTimeout(r, 3000); });
+          return null; // caller continues without Drive
+        }
+
+        // Countdown with manual-retry button
+        if (spinner) spinner.style.borderTopColor = '#fbbf24';
+        var delaySecs = RETRY_DELAYS[attempt];
+        var retryBtn = retryRow.querySelector('#drive-setup-retry-btn');
+
+        // Promise that resolves when countdown ends OR retry button clicked
+        await new Promise(function(resolve) {
+          var remaining = delaySecs;
+          retryRow.style.display = 'block';
+
+          function tick() {
+            setDriveMsg(
+              '⚠ ' + errText + '\nRetrying in ' + remaining + ' second' + (remaining === 1 ? '' : 's') + '…',
+              '#fbbf24'
+            );
+            if (remaining <= 0) { clearInterval(interval); resolve(); return; }
+            remaining--;
+          }
+          tick();
+          var interval = setInterval(tick, 1000);
+          retryBtn.onclick = function() { clearInterval(interval); resolve(); };
+        });
+
+        return driveAttempt(attempt + 1);
+      }
+    }
+
     try {
-      var driveResult = await window.driveSetupSession(quiz._driveClassId, lobbyCode, function(msg) {
-        setDriveMsg(msg);
-      });
-      quiz._driveFolderId       = driveResult.sessionFolderId;
-      quiz._driveStudentFolders = driveResult.studentFolders;
-      var count = Object.keys(driveResult.studentFolders || {}).length;
-      setDriveMsg('✓ ' + count + ' folder' + (count === 1 ? '' : 's') + ' created.', '#4ade80');
-      // Brief pause so the teacher sees the success state
-      await new Promise(function(r) { setTimeout(r, 800); });
-    } catch (e) {
-      console.error('[Drive] Setup failed:', e.message);
-      setDriveMsg('⚠ Drive setup failed: ' + (e.message || 'unknown error'), '#f87171');
-      // Give teacher a moment to read the error; quiz still continues
-      await new Promise(function(r) { setTimeout(r, 2500); });
+      var driveResult = await driveAttempt(0);
+      if (driveResult) {
+        quiz._driveFolderId       = driveResult.sessionFolderId;
+        quiz._driveStudentFolders = driveResult.studentFolders;
+        var count = Object.keys(driveResult.studentFolders || {}).length;
+        setDriveMsg('✓ ' + count + ' folder' + (count === 1 ? '' : 's') + ' created.', '#4ade80');
+        await new Promise(function(r) { setTimeout(r, 800); });
+      }
     } finally {
       document.body.removeChild(driveOverlay);
     }
@@ -977,7 +1036,7 @@ async function showAnswerReveal(expectedQIdx, expectedQuestionStart) {
   var q = quiz.questions[qIdx];
   var now = Date.now();
 
-  if (q.type === 'canvas') {
+  if (q.type === 'canvas' || q.type === 'pyscratch_share') {
     await startVotingPhase(qIdx);
     return;
   }
@@ -1158,20 +1217,78 @@ function renderHostVotingView(qIdx) {
   setQuizHostView('voting');
 
   var countEl = document.getElementById('qh-voting-count');
-  // Live vote count listener
-  if (quiz._votingCountRef) quiz._votingCountRef.off('value', quiz._votingCountListener);
-  quiz._votingCountRef = quiz.sessionRef.child('votes/' + qIdx);
-  quiz._votingCountListener = quiz._votingCountRef.on('value', function(snap) {
-    var votes = snap.val() || {};
-    var voterCount = Object.keys(votes).length;
-    var totalStudents = Object.keys(quiz.hostPlayers || {}).filter(function(c) {
-      return quiz.hostPlayers[c] && !quiz.hostPlayers[c].kicked;
-    }).length;
-    if (countEl) countEl.textContent = voterCount + ' / ' + totalStudents + ' voted';
-  });
-  quiz.unsubscribers.push(function() {
+  if (countEl) countEl.innerHTML = '<p style="color:#94a3b8;font-size:0.8rem">Loading…</p>';
+
+  // Fetch voting items once so we know total per student and who submitted
+  quiz.sessionRef.child('votingItems/' + qIdx).get().then(function(snap) {
+    var itemsObj = snap.exists() ? snap.val() : {};
+    var items    = Object.values(itemsObj).filter(Boolean);
+    var totalItems = items.length;
+
+    // Track which UIDs submitted (they skip their own, so their total = totalItems - 1)
+    var submitterSet = {};
+    items.forEach(function(item) { if (item && item.uid) submitterSet[item.uid] = true; });
+
+    // Live votes listener
     if (quiz._votingCountRef) quiz._votingCountRef.off('value', quiz._votingCountListener);
-    quiz._votingCountRef = null;
+    quiz._votingCountRef = quiz.sessionRef.child('votes/' + qIdx);
+    quiz._votingCountListener = quiz._votingCountRef.on('value', function(vSnap) {
+      var votes   = vSnap.val() || {};
+      var players = quiz.hostPlayers || {};
+      var active  = Object.keys(players).filter(function(c) {
+        return players[c] && !players[c].kicked;
+      });
+
+      if (!countEl) return;
+      if (!active.length) {
+        countEl.innerHTML = '<p style="color:#94a3b8;font-size:0.8rem">No students in lobby.</p>';
+        return;
+      }
+
+      var rows = active.map(function(uid) {
+        var name   = studentName(uid) || (players[uid] && players[uid].name) || uid;
+        var myVotes = votes[uid] ? Object.keys(votes[uid]).length : 0;
+        var total   = totalItems - (submitterSet[uid] ? 1 : 0);
+        var done    = total > 0 && myVotes >= total;
+        return { name: name, myVotes: myVotes, total: total, done: done };
+      }).sort(function(a, b) {
+        // Finished students sink to bottom; within each group sort by progress desc
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        return (b.total > 0 ? b.myVotes / b.total : 0) - (a.total > 0 ? a.myVotes / a.total : 0);
+      });
+
+      var finishedCount = rows.filter(function(r) { return r.done; }).length;
+
+      countEl.innerHTML =
+        '<p style="color:#94a3b8;font-size:0.78rem;margin-bottom:0.5rem;text-align:center">' +
+          finishedCount + ' / ' + rows.length + ' finished' +
+        '</p>' +
+        '<div style="display:flex;flex-direction:column;gap:0.3rem;max-height:260px;overflow-y:auto;width:100%">' +
+          rows.map(function(r) {
+            var pct = r.total > 0 ? Math.round((r.myVotes / r.total) * 100) : 100;
+            var barColour = r.done ? '#4ade80' : (pct > 50 ? '#fbbf24' : '#60a5fa');
+            return '<div style="background:#0f172a;border-radius:6px;padding:0.3rem 0.6rem">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.2rem">' +
+                '<span style="font-size:0.8rem;color:' + (r.done ? '#4ade80' : '#e2e8f0') + ';' +
+                  'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">' +
+                  escapeHtml(r.name) + (r.done ? ' ✓' : '') + '</span>' +
+                '<span style="font-size:0.75rem;color:' + barColour + ';font-variant-numeric:tabular-nums;flex-shrink:0;margin-left:0.5rem">' +
+                  r.myVotes + ' / ' + r.total + '</span>' +
+              '</div>' +
+              '<div style="height:3px;background:#1e293b;border-radius:2px;overflow:hidden">' +
+                '<div style="height:100%;width:' + pct + '%;background:' + barColour + ';transition:width .4s"></div>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+    });
+
+    quiz.unsubscribers.push(function() {
+      if (quiz._votingCountRef) quiz._votingCountRef.off('value', quiz._votingCountListener);
+      quiz._votingCountRef = null;
+    });
+  }).catch(function() {
+    if (countEl) countEl.innerHTML = '<p style="color:#f87171;font-size:0.8rem">Could not load voting items.</p>';
   });
 
   var skipBtn = document.getElementById('btn-qh-skip-to-results');
@@ -1364,7 +1481,7 @@ function pyBotMedalLabel(medal) {
 function quizQuestionMaxPoints(q) {
   if (!q) return 0;
   if (q.type === 'pybot_level') return 5;
-  if (q.type === 'canvas') return 5; // scored 0–5 by peer vote average
+  if (q.type === 'canvas' || q.type === 'pyscratch_share') return 5; // scored 0–5 by peer vote average
   return 1;
 }
 
@@ -1383,8 +1500,8 @@ function quizAnswerPoints(q, answerSnap) {
     if (typeof stored === 'number' && isFinite(stored)) return stored;
     return pyBotMedalPoints(answerSnap.child('medal').val(), answerSnap.child('completed').val() === true || answerSnap.exists());
   }
-  // Canvas: scored 0–5 by peer vote average (written back by startShowcasePhase)
-  if (q.type === 'canvas') {
+  // Canvas / pyscratch_share: scored 0–5 by peer vote average (written back by startShowcasePhase)
+  if (q.type === 'canvas' || q.type === 'pyscratch_share') {
     var score = answerSnap.child('score').val();
     return (typeof score === 'number' && isFinite(score)) ? score : 0;
   }

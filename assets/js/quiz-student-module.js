@@ -698,6 +698,98 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
   }
 }
 
+async function submitStudentPyScratchShare(qIdx, submitBtn, feedbackEl) {
+  if (quiz.myAnswered) return;
+  submitBtn.disabled = true;
+  if (feedbackEl) { feedbackEl.textContent = 'Connecting to Google Drive…'; feedbackEl.style.color = '#94a3b8'; }
+
+  // 1. Drive auth
+  var token;
+  try {
+    token = await window.driveEnsureStudentToken(feedbackEl);
+  } catch (e) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ ' + e.message; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false; return;
+  }
+
+  // 2. Student email / folder
+  var studentEmail = window.driveStudentEmail && window.driveStudentEmail();
+  if (!studentEmail) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ Could not get your Google email.'; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false; return;
+  }
+  if (feedbackEl) { feedbackEl.textContent = 'Finding your folder…'; feedbackEl.style.color = '#94a3b8'; }
+  var folderId;
+  try { folderId = await window.driveLookupStudentFolder(quiz.sessionRef, studentEmail); }
+  catch (e) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ ' + e.message; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false; return;
+  }
+  if (!folderId) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ No folder found for your account (' + studentEmail + ').'; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false; return;
+  }
+
+  // 3. Export SB3 from PyScratch iframe
+  if (feedbackEl) { feedbackEl.textContent = 'Saving your game…'; feedbackEl.style.color = '#94a3b8'; }
+  var frame = document.getElementById('qs-pyscratch-frame');
+  var blob;
+  try {
+    blob = await new Promise(function(resolve, reject) {
+      var t = setTimeout(function() {
+        window.removeEventListener('message', handler);
+        reject(new Error('Export timed out — try again.'));
+      }, 12000);
+      function handler(ev) {
+        if (!ev.data) return;
+        if (ev.data.type === 'PS_EXPORT_SB3_RESULT') {
+          clearTimeout(t); window.removeEventListener('message', handler);
+          resolve(new Blob([ev.data.buffer], { type: 'application/zip' }));
+        }
+        if (ev.data.type === 'PS_EXPORT_SB3_ERROR') {
+          clearTimeout(t); window.removeEventListener('message', handler);
+          reject(new Error(ev.data.error || 'Export failed'));
+        }
+      }
+      window.addEventListener('message', handler);
+      try { frame.contentWindow.postMessage({ type: 'PS_EXPORT_SB3' }, '*'); }
+      catch (e) { clearTimeout(t); window.removeEventListener('message', handler); reject(e); }
+    });
+  } catch (e) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ ' + e.message; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false; return;
+  }
+
+  // 4. Upload to Drive
+  if (feedbackEl) { feedbackEl.textContent = 'Uploading…'; feedbackEl.style.color = '#94a3b8'; }
+  var emailKey = studentEmail.replace(/\./g, ',');
+  var folderSnap;
+  try { folderSnap = await quiz.sessionRef.child('studentFolders/' + emailKey).get(); } catch (_) { folderSnap = null; }
+  var displayName = (folderSnap && folderSnap.exists()) ? (folderSnap.child('name').val() || studentEmail) : studentEmail;
+  var filename = displayName + '.sb3';
+  var fileResult;
+  try { fileResult = await window.driveUploadFile(folderId, filename, blob, 'application/zip', token); }
+  catch (e) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ Upload failed: ' + e.message; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false; return;
+  }
+
+  // 5. Store in Firebase
+  try {
+    await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
+      fileId: fileResult.id, fileName: fileResult.name,
+      emailKey: emailKey, name: displayName, submittedAt: Date.now()
+    });
+    quiz.myAnswered = true;
+    if (feedbackEl) { feedbackEl.textContent = '✓ Game submitted!'; feedbackEl.style.color = '#4ade80'; }
+    lockStudentAnswers();
+    submitBtn.textContent = '✓ Submitted';
+  } catch (e) {
+    if (feedbackEl) { feedbackEl.textContent = '❌ Could not save answer: ' + e.message; feedbackEl.style.color = '#f87171'; }
+    submitBtn.disabled = false;
+  }
+}
+
 function renderStudentQuestion(qIdx, questionStart, duration) {
   setStudentView('question');
   var q = quiz.questions[qIdx];
@@ -726,9 +818,10 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   var isBlockbench = q.type === 'blockbench_build';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
+  var isPyScratchShare = q.type === 'pyscratch_share';
   var isCanvas = q.type === 'canvas';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isCanvas;
-  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isCanvas);
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPyScratchShare && !isCanvas;
+  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPyScratchShare || isCanvas);
   document.getElementById('qs-code-answer').classList.toggle('hidden', !isCodeQuestion);
   document.getElementById('qs-text-answer').classList.toggle('hidden', !isTextInput);
   document.getElementById('qs-widget-answer').classList.toggle('hidden', !isWidget);
@@ -736,11 +829,11 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   document.getElementById('qs-pybot-answer').classList.toggle('hidden', !isPyBot);
   document.getElementById('qs-blockbench-answer').classList.toggle('hidden', !isBlockbench);
   document.getElementById('qs-spreadsheet-answer').classList.toggle('hidden', !isSpreadsheet);
-  document.getElementById('qs-pyscratch-answer').classList.toggle('hidden', !isPyScratch);
+  document.getElementById('qs-pyscratch-answer').classList.toggle('hidden', !isPyScratch && !isPyScratchShare);
   document.getElementById('qs-canvas-answer').classList.toggle('hidden', !isCanvas);
   if (!isScratch) resetScratchQuizFrame();
   if (!isBlockbench) resetBlockbenchQuizFrame();
-  if (!isPyScratch) resetPyScratchQuizFrame();
+  if (!isPyScratch && !isPyScratchShare) resetPyScratchQuizFrame();
   if (isWidget) {
     quiz.currentWidget = null;
     var widgetContainer = document.getElementById('qs-widget-container');
@@ -888,7 +981,7 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
       }
     };
     document.addEventListener('keydown', window._qsBlockbenchEsc);
-  } else if (isPyScratch) {
+  } else if (isPyScratch || isPyScratchShare) {
     var pyScratchFrame = document.getElementById('qs-pyscratch-frame');
     if (pyScratchFrame) pyScratchFrame.style.pointerEvents = '';
     var psLoadKey = qIdx + ':' + questionStart;
@@ -915,6 +1008,16 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
       }
     };
     document.addEventListener('keydown', window._qsPyScratchEsc);
+    if (isPyScratchShare) {
+      // Drive-upload submit
+      var psShareFb  = document.getElementById('qs-pyscratch-feedback');
+      var psShareBtn = document.getElementById('btn-quiz-submit-pyscratch');
+      if (psShareBtn) {
+        psShareBtn.disabled = false;
+        psShareBtn.textContent = '📤 Submit My Game';
+        psShareBtn.onclick = function() { submitStudentPyScratchShare(qIdx, psShareBtn, psShareFb); };
+      }
+    }
   } else if (isCanvas) {
     initCanvasQuestion(qIdx, q);
   } else if (isSpreadsheet) {
@@ -1113,8 +1216,42 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
     }
   }, 200);
 
-  // Load image
+  // Load image (or game for pyscratch_share)
   var imgWrap = document.getElementById('qs-vcard-img-wrap');
+  var votingQType = quiz.questions && quiz.questions[qIdx] && quiz.questions[qIdx].type;
+  if (votingQType === 'pyscratch_share') {
+    // Show game iframe instead of image — download SB3 and load into PyScratch player
+    if (imgWrap) {
+      imgWrap.innerHTML = '<p style="color:#94a3b8;font-size:0.8rem;text-align:center;padding:1rem">Loading game…</p>';
+    }
+    window.driveFetchFileAsDataUrl(item.fileId, token).then(function(dataUrl) {
+      if (voted || !imgWrap) return;
+      // dataUrl is base64 of the SB3 zip — convert back to blob URL
+      fetch(dataUrl).then(function(r) { return r.blob(); }).then(function(sb3Blob) {
+        if (voted || !imgWrap) return;
+        var blobUrl = URL.createObjectURL(sb3Blob);
+        var gameFrame = document.createElement('iframe');
+        gameFrame.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;border:none;background:#000';
+        gameFrame.sandbox = 'allow-scripts allow-same-origin';
+        gameFrame.allow = 'microphone; camera';
+        imgWrap.innerHTML = '';
+        imgWrap.appendChild(gameFrame);
+        // Load PyScratch in player mode with the SB3 blob URL
+        gameFrame.src = 'scratch/editor.html?pyscratch=1&project_url=' + encodeURIComponent(blobUrl);
+        gameFrame.onload = function() {
+          setTimeout(function() {
+            try { gameFrame.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(_) {}
+            // Revoke blob URL after iframe has loaded it
+            setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 3000);
+          }, 2500);
+        };
+      });
+    }).catch(function(e) {
+      if (imgWrap) imgWrap.innerHTML = '<p style="color:#f87171;font-size:0.8rem;text-align:center;padding:1rem">Could not load game</p>';
+      console.warn('[Voting] Game load failed:', e.message);
+    });
+    return; // skip the normal image fetch below
+  }
   window.driveFetchFileAsDataUrl(item.fileId, token).then(function(dataUrl) {
     if (voted || !imgWrap) return;
     imgWrap.innerHTML = '';

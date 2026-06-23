@@ -6558,6 +6558,9 @@
     // PyScratch thread management controls
     'thread-add-btn':    '#ps-add-thread',
     'thread-delete-btn': '#ps-thread-list button[title="Delete"]',
+    // Quiz player-mode: hide the entire code panel and help buttons
+    'ps-overlay':  '#ps-overlay',
+    'ps-help-btn': '#ps-help-btn,#ps-tut-btn',
   };
 
   var _uiHideStyle = null;
@@ -6771,6 +6774,25 @@
               window.parent.postMessage({ type: 'PS_CODE_RESPONSE', code: _allCode }, '*');
             }
           } catch(_e2) {}
+        }
+        if (e.data.type === 'PS_EXPORT_SB3') {
+          try {
+            S.vm.saveProjectSb3().then(function(blob) {
+              blob.arrayBuffer().then(function(buf) {
+                try { window.parent.postMessage({ type: 'PS_EXPORT_SB3_RESULT', buffer: buf }, '*', [buf]); }
+                catch(_) {}
+              });
+            });
+          } catch(_e) {
+            try { window.parent.postMessage({ type: 'PS_EXPORT_SB3_ERROR', error: String(_e) }, '*'); } catch(_) {}
+          }
+        }
+        if (e.data.type === 'PS_PLAYER_MODE') {
+          // Hide the entire PyScratch code overlay and extra UI; show only the stage
+          hideUiElements(['ps-overlay', 'ps-help-btn', 'sprite-panel', 'backdrop-panel',
+                          'stage-controls', 'tab-bar', 'add-sprite',
+                          'thread-add-btn', 'thread-delete-btn']);
+          if (!S.running) startAll();
         }
       });
       // URL param: ?ps_highlight=green-flag&ps_highlight_label=Click+this!
