@@ -662,7 +662,7 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
   feedback.textContent = 'Finding your folder…';
   var folderId;
   try {
-    folderId = await window.driveLookupStudentFolder(quiz.sessionRef, studentEmail);
+    folderId = await window.driveLookupStudentFolder(quiz.sessionRef);
   } catch (e) {
     feedback.textContent = '❌ Could not load session data: ' + e.message;
     feedback.style.color = '#f87171';
@@ -680,9 +680,7 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
   // Convert canvas to PNG blob
   feedback.textContent = 'Uploading…';
   var blob = await new Promise(function(resolve) { canvasEl.toBlob(resolve, 'image/png'); });
-  var displayName = (state.auth && state.auth.currentUser && state.auth.currentUser.displayName)
-    || studentEmail || 'Student';
-  var filename = displayName + '.png';
+  var filename = String(state.uid || 'student') + '.png';
 
   var fileResult;
   try {
@@ -699,18 +697,11 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
     return;
   }
 
-  // Look up the student's display name from Firebase studentFolders
-  var emailKeyStr = studentEmail.replace(/\./g, ',');
-  var folderSnap = await quiz.sessionRef.child('studentFolders/' + emailKeyStr).get();
-  var studentDisplayName = folderSnap.exists() ? (folderSnap.child('name').val() || studentEmail) : studentEmail;
-
   // Store file ID as the answer in Firebase
   try {
     await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
       fileId:   fileResult.id,
       fileName: fileResult.name,
-      emailKey: emailKeyStr,
-      name:     studentDisplayName,
       submittedAt: Date.now()
     });
     quiz.myAnswered = true;
@@ -748,7 +739,7 @@ async function submitStudentPyScratchShare(qIdx, submitBtn, feedbackEl) {
   }
   if (feedbackEl) { feedbackEl.textContent = 'Finding your folder…'; feedbackEl.style.color = '#94a3b8'; }
   var folderId;
-  try { folderId = await window.driveLookupStudentFolder(quiz.sessionRef, studentEmail); }
+  try { folderId = await window.driveLookupStudentFolder(quiz.sessionRef); }
   catch (e) {
     if (feedbackEl) { feedbackEl.textContent = '❌ ' + e.message; feedbackEl.style.color = '#f87171'; }
     submitBtn.disabled = false; return;
@@ -790,11 +781,7 @@ async function submitStudentPyScratchShare(qIdx, submitBtn, feedbackEl) {
 
   // 4. Upload to Drive
   if (feedbackEl) { feedbackEl.textContent = 'Uploading…'; feedbackEl.style.color = '#94a3b8'; }
-  var emailKey = studentEmail.replace(/\./g, ',');
-  var folderSnap;
-  try { folderSnap = await quiz.sessionRef.child('studentFolders/' + emailKey).get(); } catch (_) { folderSnap = null; }
-  var displayName = (folderSnap && folderSnap.exists()) ? (folderSnap.child('name').val() || studentEmail) : studentEmail;
-  var filename = displayName + '.sb3';
+  var filename = String(state.uid || 'student') + '.sb3';
   var fileResult;
   try { fileResult = await window.driveUploadFile(folderId, filename, blob, 'application/zip', token); }
   catch (e) {
@@ -806,7 +793,7 @@ async function submitStudentPyScratchShare(qIdx, submitBtn, feedbackEl) {
   try {
     await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
       fileId: fileResult.id, fileName: fileResult.name,
-      emailKey: emailKey, name: displayName, submittedAt: Date.now()
+      submittedAt: Date.now()
     });
     quiz.myAnswered = true;
     if (feedbackEl) { feedbackEl.textContent = '✓ Game submitted!'; feedbackEl.style.color = '#4ade80'; }
@@ -1141,7 +1128,9 @@ function renderStudentVoting(qIdx) {
     }
 
     // Filter out own submission
-    items = items.filter(function(item) { return item.uid !== state.uid; });
+    items = items.filter(function(item) {
+      return (item.code || item.uid) !== state.uid;
+    });
 
     if (!items.length) {
       cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">&#x2713; No other submissions to rate. Waiting for results…</p>';
@@ -1152,7 +1141,9 @@ function renderStudentVoting(qIdx) {
     var votedRef = quiz.sessionRef.child('votes/' + qIdx + '/' + state.uid);
     votedRef.get().then(function(votedSnap) {
       var alreadyVoted = votedSnap.exists() ? votedSnap.val() : {};
-      var toRate = items.filter(function(item) { return !alreadyVoted[item.uid]; });
+      var toRate = items.filter(function(item) {
+        return !alreadyVoted[item.code || item.uid];
+      });
       if (!toRate.length) {
         cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">&#x2713; All voted! Waiting for results…</p>';
         return;
@@ -1180,6 +1171,7 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
   }
 
   var item = items[index];
+  var itemCode = item.code || item.uid;
   var TIMER_SECS = 20;
 
   // Render a loading card
@@ -1203,7 +1195,7 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
     voted = true;
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     // Write vote to Firebase
-    quiz.sessionRef.child('votes/' + qIdx + '/' + state.uid + '/' + item.uid).set(rating).catch(function(e) {
+    quiz.sessionRef.child('votes/' + qIdx + '/' + state.uid + '/' + itemCode).set(rating).catch(function(e) {
       console.warn('[Voting] vote write failed:', e.message);
     });
     processVotingItems(qIdx, items, index + 1, token, cardEl);
@@ -1322,9 +1314,11 @@ async function renderStudentShowcase(qIdx) {
     card.className = 'bg-gray-800 rounded-xl overflow-hidden border border-gray-700';
     var header = document.createElement('div');
     header.className = 'flex items-center justify-between px-4 py-2';
+    var code = item.code || item.uid || '';
+    var displayName = studentName(code) || item.name || code;
     header.innerHTML =
       '<span class="text-2xl">' + (medals[i] || (i+1)+'.') + '</span>' +
-      '<span class="font-semibold text-gray-100 flex-1 mx-3 truncate">' + escapeHtml(item.name) + '</span>' +
+      '<span class="font-semibold text-gray-100 flex-1 mx-3 truncate">' + escapeHtml(displayName) + '</span>' +
       '<span class="text-yellow-400 font-bold text-sm shrink-0">' + avg + ' &#x2B50;</span>';
     card.appendChild(header);
     if (item.fileId && token) {

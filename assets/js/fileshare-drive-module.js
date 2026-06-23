@@ -29,9 +29,7 @@
  *   quizSessions/{code}/
  *     driveFolderId:   session subfolder ID
  *     studentFolders/
- *       {emailKey}/    (email with dots→commas to satisfy Firebase key rules)
- *         folderId:    Drive folder ID for this student
- *         name:        display name
+ *       {studentCode}: Drive folder ID for this student
  */
 
 (function () {
@@ -54,9 +52,20 @@
     });
   }
 
-  // Normalise an email to a safe Firebase key (dots → commas).
-  function emailKey(email) {
-    return String(email || '').toLowerCase().trim().replace(/\./g, ',');
+  // Keep Firebase keys valid without storing personal identifiers.
+  function safeFirebaseKey(value) {
+    return String(value || '').trim().replace(/[.#$/[\]]/g, '_');
+  }
+
+  async function loadCodeRecordsByEmail() {
+    if (typeof classroomFindCodeSpreadsheetOnly !== 'function' ||
+        typeof classroomReadConsolidatedRecords !== 'function') {
+      return {};
+    }
+    var spreadsheet = await classroomFindCodeSpreadsheetOnly();
+    if (!spreadsheet || !spreadsheet.id) return {};
+    var records = await classroomReadConsolidatedRecords(spreadsheet.id);
+    return (records && records.byEmail) || {};
   }
 
   // ── Folder helpers (teacher token) ────────────────────────────
@@ -113,7 +122,7 @@
    *   Student subfolder: that student → writer
    *
    * Returns { rootFolderId, sessionFolderId, studentFolders }
-   * where studentFolders is { emailKey: { folderId, name, email } }
+   * where studentFolders is { studentCode: folderId }
    */
   window.driveSetupSession = async function (courseId, lobbyCode, onProgress) {
     var token = window.classroomState && window.classroomState.token;
@@ -131,20 +140,30 @@
     // classroomListStudents returns objects with .name and .email (see admin-module)
     students = students.filter(function (s) { return s.email; });
 
-    var studentFolders = {}; // emailKey → { folderId, name, email }
+    var studentFolders = {}; // studentCode -> Drive folderId
     var total = students.length;
     var done  = 0;
+    onProgress('Matching Drive roster to platform codes...');
+    var codeRecordsByEmail = await loadCodeRecordsByEmail();
+    var skipped = 0;
 
     // Pass 1: create a subfolder per student and give them writer on it
     onProgress('Creating student folders (0/' + total + ')…');
     for (var i = 0; i < students.length; i++) {
       var s = students[i];
+      var rec = codeRecordsByEmail[String(s.email || '').toLowerCase()];
+      var code = rec && rec.code ? String(rec.code).trim() : '';
+      if (!code) {
+        skipped++;
+        onProgress('Creating student folders (' + (++done) + '/' + total + ')...');
+        continue;
+      }
       var displayName = s.fullName || ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || s.email;
       var fid = await findOrCreateFolder(displayName, sessionId, token);
       try { await grantPermission(fid, s.email, 'writer', token); } catch (e) {
         console.warn('[Drive] writer grant failed for', s.email, e.message);
       }
-      studentFolders[emailKey(s.email)] = { folderId: fid, name: displayName, email: s.email };
+      studentFolders[safeFirebaseKey(code)] = fid;
       onProgress('Creating student folders (' + (++done) + '/' + total + ')…');
     }
 
@@ -325,12 +344,14 @@
   // ── Student: find their folder from Firebase ───────────────────
 
   /**
-   * driveLookupStudentFolder(sessionRef, email)
+   * driveLookupStudentFolder(sessionRef)
    * Returns the Drive folder ID for the student, or null if not found.
    */
-  window.driveLookupStudentFolder = async function (sessionRef, email) {
-    var snap = await sessionRef.child('studentFolders/' + emailKey(email)).get();
-    return snap.exists() ? snap.child('folderId').val() : null;
+  window.driveLookupStudentFolder = async function (sessionRef) {
+    var code = window.state && window.state.uid;
+    if (!code) return null;
+    var snap = await sessionRef.child('studentFolders/' + safeFirebaseKey(code)).get();
+    return snap.exists() ? snap.val() : null;
   };
 
   // ── Student: upload file ───────────────────────────────────────

@@ -1196,13 +1196,13 @@ async function startVotingPhase(qIdx) {
   var answersSnap = await quiz.sessionRef.child('answers/' + qIdx).get();
   var answers = answersSnap.exists() ? answersSnap.val() : {};
 
-  // Build votingItems array from answers; get name from answer record (saved during submit)
+  // Build votingItems array from answers. Store only platform codes and file IDs
+  // in Firebase; display names are resolved locally in the browser.
   var votingItems = [];
-  Object.keys(answers).forEach(function(uid) {
-    var ans = answers[uid];
+  Object.keys(answers).forEach(function(code) {
+    var ans = answers[code];
     if (!ans || !ans.fileId) return;
-    var name = ans.name || ans.emailKey || uid;
-    votingItems.push({ uid: uid, fileId: ans.fileId, name: name });
+    votingItems.push({ code: code, fileId: ans.fileId });
   });
 
   // Write votingItems as Firebase object with numeric keys
@@ -1228,7 +1228,10 @@ function renderHostVotingView(qIdx) {
 
     // Track which UIDs submitted (they skip their own, so their total = totalItems - 1)
     var submitterSet = {};
-    items.forEach(function(item) { if (item && item.uid) submitterSet[item.uid] = true; });
+    items.forEach(function(item) {
+      var code = item && (item.code || item.uid);
+      if (code) submitterSet[code] = true;
+    });
 
     // Live votes listener
     if (quiz._votingCountRef) quiz._votingCountRef.off('value', quiz._votingCountListener);
@@ -1246,10 +1249,10 @@ function renderHostVotingView(qIdx) {
         return;
       }
 
-      var rows = active.map(function(uid) {
-        var name   = studentName(uid) || (players[uid] && players[uid].name) || uid;
-        var myVotes = votes[uid] ? Object.keys(votes[uid]).length : 0;
-        var total   = totalItems - (submitterSet[uid] ? 1 : 0);
+      var rows = active.map(function(code) {
+        var name   = studentName(code) || code;
+        var myVotes = votes[code] ? Object.keys(votes[code]).length : 0;
+        var total   = totalItems - (submitterSet[code] ? 1 : 0);
         var done    = total > 0 && myVotes >= total;
         return { name: name, myVotes: myVotes, total: total, done: done };
       }).sort(function(a, b) {
@@ -1321,7 +1324,10 @@ async function startShowcasePhase(qIdx) {
   var itemsObj = itemsSnap.exists() ? itemsSnap.val() : {};
   var itemsArr = Object.values(itemsObj);
   var itemMap = {};
-  itemsArr.forEach(function(item) { if (item && item.uid) itemMap[item.uid] = item; });
+  itemsArr.forEach(function(item) {
+    var code = item && (item.code || item.uid);
+    if (code) itemMap[code] = item;
+  });
 
   // Build ranked list
   var ranked = Object.keys(totals).map(function(uid) {
@@ -1329,9 +1335,8 @@ async function startShowcasePhase(qIdx) {
     var item = itemMap[uid] || {};
     var avg = t.count > 0 ? Math.round((t.sum / t.count) * 10) / 10 : 0;
     return {
-      uid: uid,
+      code: uid,
       fileId: item.fileId || null,
-      name: item.name || uid,
       avg: avg,
       voteCount: t.count
     };
@@ -1342,11 +1347,12 @@ async function startShowcasePhase(qIdx) {
   // Also include students who submitted but received no votes (score 0).
   var scoreWrites = [];
   itemsArr.forEach(function(item) {
-    if (!item || !item.uid) return;
-    var t = totals[item.uid];
+    var code = item && (item.code || item.uid);
+    if (!code) return;
+    var t = totals[code];
     var avg = t ? (t.count > 0 ? Math.round((t.sum / t.count) * 10) / 10 : 0) : 0;
     scoreWrites.push(
-      quiz.sessionRef.child('answers/' + qIdx + '/' + item.uid + '/score').set(avg)
+      quiz.sessionRef.child('answers/' + qIdx + '/' + code + '/score').set(avg)
     );
   });
   await Promise.all(scoreWrites);
@@ -1374,9 +1380,11 @@ async function renderHostShowcaseView(qIdx) {
       var row = document.createElement('div');
       row.className = 'flex items-center justify-between gap-4 bg-gray-800 rounded-lg px-5 py-3';
       var avg = typeof item.avg === 'number' ? item.avg.toFixed(1) : '–';
+      var code = item.code || item.uid || '';
+      var displayName = studentName(code) || item.name || code;
       row.innerHTML =
         '<span class="text-2xl shrink-0">' + (medals[i] || (i+1)+'.') + '</span>' +
-        '<span class="font-semibold text-gray-100 flex-1 truncate">' + escapeHtml(item.name) + '</span>' +
+        '<span class="font-semibold text-gray-100 flex-1 truncate">' + escapeHtml(displayName) + '</span>' +
         '<span class="text-yellow-400 font-bold shrink-0">' + avg + ' &#x2B50; (' + (item.voteCount || 0) + ' vote' + (item.voteCount === 1 ? '' : 's') + ')</span>';
       listEl.appendChild(row);
     });
