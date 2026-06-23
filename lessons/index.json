@@ -125,6 +125,18 @@
           ]
         },
         {
+          "id": "test",
+          "label": "⚙ Test",
+          "lessons": [
+            {
+              "id": "test-canvas-quiz",
+              "title": "TEST: Canvas Drawing Quiz",
+              "file": "lessons/test-canvas-quiz.json",
+              "order": 1
+            }
+          ]
+        },
+        {
           "id": "data-representation",
           "label": "Data Representation",
           "lessons": [
