@@ -17,14 +17,79 @@
       "duration": 180
     },
     {
+      "type": "canvas",
+      "q": "Draw a self-portrait! 🧑‍🎨",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw your dream house! 🏠",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a monster of your own invention! 👾",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw your favourite food! 🍕",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a scene from your favourite film or TV show! 🎬",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a superhero (original or existing)! 🦸",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw what you can see out of your nearest window! 🪟",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a robot! 🤖",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a map of a made-up place! 🗺️",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a weather scene — sunshine, storm, snow, or something stranger! ⛈️",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw an alien and their planet! 👽",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw your favourite sport or hobby! ⚽",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a logo for an imaginary company! 🏷️",
+      "duration": 180
+    },
+    {
+      "type": "canvas",
+      "q": "Draw a vehicle of the future! 🚀",
+      "duration": 180
+    },
+    {
       "type": "mcq",
       "q": "Which of these is a mammal?",
-      "options": [
-        "Dog",
-        "Salmon",
-        "Eagle",
-        "Frog"
-      ],
+      "options": ["Dog", "Salmon", "Eagle", "Frog"],
       "answer": 0,
       "duration": 30
     }
