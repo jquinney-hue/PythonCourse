@@ -480,6 +480,14 @@ function renderQuizHostFromSession(snap) {
     renderHostRevealView(qIdx, answerRevealStart);
     return;
   }
+  if (stateVal === 'voting') {
+    renderHostVotingView(qIdx);
+    return;
+  }
+  if (stateVal === 'showcase') {
+    renderHostShowcaseView(qIdx);
+    return;
+  }
   if (stateVal === 'finished') {
     clearAllQuizTimers();
     var leaderboard = snap.child('leaderboard').val() || [];
@@ -489,7 +497,7 @@ function renderQuizHostFromSession(snap) {
 }
 
 function setQuizHostView(view) {
-  ['lobby','question','reveal','finished'].forEach(function(v) {
+  ['lobby','question','reveal','voting','showcase','finished'].forEach(function(v) {
     document.getElementById('qh-' + v).classList.toggle('hidden', v !== view);
   });
   quiz.currentState = view;
@@ -922,14 +930,11 @@ async function showAnswerReveal(expectedQIdx, expectedQuestionStart) {
   if (sessionSnap.child('state').val() !== 'question') return;
   var q = quiz.questions[qIdx];
   var now = Date.now();
-  var isTextInput = q.type === 'text_input';
-  var isWidget = q.type === 'bit_input' || q.type === 'addition_input';
-  var isScratch = q.type === 'scratch_build';
-  var isPyBot = q.type === 'pybot_level';
-  var isBlockbench = q.type === 'blockbench_build';
-  var isSpreadsheet = q.type === 'spreadsheet_task';
-  var isPyScratch = q.type === 'pyscratch_build';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch;
+
+  if (q.type === 'canvas') {
+    await startVotingPhase(qIdx);
+    return;
+  }
 
   await quiz.sessionRef.update({ state: 'answer', answerRevealStart: now });
   await renderHostRevealView(qIdx, now);
@@ -1077,6 +1082,129 @@ async function renderHostRevealView(qIdx, revealStart) {
       await startNextQuestion();
     }, remaining);
   }
+}
+
+// ── Voting phase (canvas questions) ───────────────────────────
+
+async function startVotingPhase(qIdx) {
+  var answersSnap = await quiz.sessionRef.child('answers/' + qIdx).get();
+  var answers = answersSnap.exists() ? answersSnap.val() : {};
+
+  // Build votingItems array from answers; get name from answer record (saved during submit)
+  var votingItems = [];
+  Object.keys(answers).forEach(function(uid) {
+    var ans = answers[uid];
+    if (!ans || !ans.fileId) return;
+    var name = ans.name || ans.emailKey || uid;
+    votingItems.push({ uid: uid, fileId: ans.fileId, name: name });
+  });
+
+  // Write votingItems as Firebase object with numeric keys
+  var votingItemsObj = {};
+  votingItems.forEach(function(item, i) { votingItemsObj[i] = item; });
+  await quiz.sessionRef.child('votingItems/' + qIdx).set(votingItemsObj);
+  await quiz.sessionRef.update({ state: 'voting', votingQIdx: qIdx });
+}
+
+function renderHostVotingView(qIdx) {
+  clearHostQuestionTimer();
+  clearRevealTimer();
+  setQuizHostView('voting');
+
+  var countEl = document.getElementById('qh-voting-count');
+  // Live vote count listener
+  if (quiz._votingCountRef) quiz._votingCountRef.off('value', quiz._votingCountListener);
+  quiz._votingCountRef = quiz.sessionRef.child('votes/' + qIdx);
+  quiz._votingCountListener = quiz._votingCountRef.on('value', function(snap) {
+    var votes = snap.val() || {};
+    var voterCount = Object.keys(votes).length;
+    var totalStudents = Object.keys(quiz.hostPlayers || {}).filter(function(c) {
+      return quiz.hostPlayers[c] && !quiz.hostPlayers[c].kicked;
+    }).length;
+    if (countEl) countEl.textContent = voterCount + ' / ' + totalStudents + ' voted';
+  });
+  quiz.unsubscribers.push(function() {
+    if (quiz._votingCountRef) quiz._votingCountRef.off('value', quiz._votingCountListener);
+    quiz._votingCountRef = null;
+  });
+
+  var skipBtn = document.getElementById('btn-qh-skip-to-results');
+  skipBtn.onclick = async function() { await startShowcasePhase(qIdx); };
+}
+
+async function startShowcasePhase(qIdx) {
+  // Read all votes for this question
+  var votesSnap = await quiz.sessionRef.child('votes/' + qIdx).get();
+  var votes = votesSnap.exists() ? votesSnap.val() : {};
+  // votes structure: { voterUid: { submitterUid: starRating } }
+
+  // Aggregate per submitter (ignore self-votes)
+  var totals = {};   // submitterUid → { sum, count }
+  Object.keys(votes).forEach(function(voterUid) {
+    var voterVotes = votes[voterUid] || {};
+    Object.keys(voterVotes).forEach(function(submitterUid) {
+      if (voterUid === submitterUid) return; // ignore self-votes
+      var rating = Number(voterVotes[submitterUid]);
+      if (!isFinite(rating)) return;
+      if (!totals[submitterUid]) totals[submitterUid] = { sum: 0, count: 0 };
+      totals[submitterUid].sum += rating;
+      totals[submitterUid].count++;
+    });
+  });
+
+  // Read votingItems to get fileId and name
+  var itemsSnap = await quiz.sessionRef.child('votingItems/' + qIdx).get();
+  var itemsObj = itemsSnap.exists() ? itemsSnap.val() : {};
+  var itemsArr = Object.values(itemsObj);
+  var itemMap = {};
+  itemsArr.forEach(function(item) { if (item && item.uid) itemMap[item.uid] = item; });
+
+  // Build ranked list
+  var ranked = Object.keys(totals).map(function(uid) {
+    var t = totals[uid];
+    var item = itemMap[uid] || {};
+    return {
+      uid: uid,
+      fileId: item.fileId || null,
+      name: item.name || uid,
+      avg: t.count > 0 ? t.sum / t.count : 0,
+      voteCount: t.count
+    };
+  }).sort(function(a, b) { return b.avg - a.avg; }).slice(0, 3);
+
+  // Write showcase items
+  var showcaseObj = {};
+  ranked.forEach(function(item, i) { showcaseObj[i] = item; });
+  await quiz.sessionRef.child('showcaseItems/' + qIdx).set(showcaseObj);
+  await quiz.sessionRef.update({ state: 'showcase' });
+}
+
+async function renderHostShowcaseView(qIdx) {
+  setQuizHostView('showcase');
+  var listEl = document.getElementById('qh-showcase-list');
+  listEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading results…</p>';
+
+  var snap = await quiz.sessionRef.child('showcaseItems/' + qIdx).get();
+  var items = snap.exists() ? Object.values(snap.val()).filter(Boolean) : [];
+  var medals = ['🥇', '🥈', '🥉'];
+  listEl.innerHTML = '';
+  if (!items.length) {
+    listEl.innerHTML = '<p class="text-gray-400 text-sm text-center">No votes were cast.</p>';
+  } else {
+    items.forEach(function(item, i) {
+      var row = document.createElement('div');
+      row.className = 'flex items-center justify-between gap-4 bg-gray-800 rounded-lg px-5 py-3';
+      var avg = typeof item.avg === 'number' ? item.avg.toFixed(1) : '–';
+      row.innerHTML =
+        '<span class="text-2xl shrink-0">' + (medals[i] || (i+1)+'.') + '</span>' +
+        '<span class="font-semibold text-gray-100 flex-1 truncate">' + escapeHtml(item.name) + '</span>' +
+        '<span class="text-yellow-400 font-bold shrink-0">' + avg + ' &#x2B50; (' + (item.voteCount || 0) + ' vote' + (item.voteCount === 1 ? '' : 's') + ')</span>';
+      listEl.appendChild(row);
+    });
+  }
+
+  var continueBtn = document.getElementById('btn-qh-showcase-continue');
+  continueBtn.onclick = async function() { await startNextQuestion(); };
 }
 
 async function endQuiz() {

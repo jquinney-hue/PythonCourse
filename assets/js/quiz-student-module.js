@@ -110,6 +110,8 @@ async function joinQuizByCode(lobbyCode, opts) {
   quiz.displaced  = false;
   quiz.currentStudentQuestionKey = null;
   quiz.currentStudentRevealKey = null;
+  quiz.currentStudentVotingKey = null;
+  quiz.currentStudentShowcaseKey = null;
   var joinedQuestions = snap.val().questions || [];
   showStudentScreen(lobbyCode, Array.isArray(joinedQuestions) ? joinedQuestions : Object.values(joinedQuestions), { forced: quiz.forced });
 }
@@ -120,7 +122,7 @@ document.getElementById('btn-join-quiz-cancel').onclick = function() {
 
 // ── STUDENT: Screen ────────────────────────────────────────────
 function setStudentView(view) {
-  ['lobby','kicked','question','reveal','finished'].forEach(function(v) {
+  ['lobby','kicked','question','reveal','voting','showcase','finished'].forEach(function(v) {
     document.getElementById('qs-' + v).classList.toggle('hidden', v !== view);
   });
 }
@@ -134,7 +136,7 @@ function updateForcedQuizChrome() {
 
 function showQuizDisplacedMessage() {
   document.getElementById('quiz-student-screen').classList.remove('hidden');
-  ['lobby','kicked','question','reveal','finished'].forEach(function(v) {
+  ['lobby','kicked','question','reveal','voting','showcase','finished'].forEach(function(v) {
     document.getElementById('qs-' + v).classList.add('hidden');
   });
   var lobby = document.getElementById('qs-lobby');
@@ -254,6 +256,22 @@ function showStudentScreen(lobbyCode, questions, opts) {
             renderStudentReveal(quiz.questions[qIdx], qIdx);
           });
         }
+      }
+    } else if (qzState === 'voting') {
+      quiz.currentStudentQuestionKey = null;
+      quiz.currentStudentRevealKey = null;
+      if (quiz.currentStudentVotingKey !== String(qIdx)) {
+        quiz.currentStudentVotingKey = String(qIdx);
+        quiz.currentStudentShowcaseKey = null;
+        renderStudentVoting(qIdx);
+      }
+    } else if (qzState === 'showcase') {
+      quiz.currentStudentQuestionKey = null;
+      quiz.currentStudentRevealKey = null;
+      quiz.currentStudentVotingKey = null;
+      if (quiz.currentStudentShowcaseKey !== String(qIdx)) {
+        quiz.currentStudentShowcaseKey = String(qIdx);
+        renderStudentShowcase(qIdx);
       }
     } else if (qzState === 'finished') {
       quiz.currentStudentQuestionKey = null;
@@ -655,11 +673,18 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
     return;
   }
 
+  // Look up the student's display name from Firebase studentFolders
+  var emailKeyStr = studentEmail.replace(/\./g, ',');
+  var folderSnap = await quiz.sessionRef.child('studentFolders/' + emailKeyStr).get();
+  var studentDisplayName = folderSnap.exists() ? (folderSnap.child('name').val() || studentEmail) : studentEmail;
+
   // Store file ID as the answer in Firebase
   try {
     await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
       fileId:   fileResult.id,
       fileName: fileResult.name,
+      emailKey: emailKeyStr,
+      name:     studentDisplayName,
       submittedAt: Date.now()
     });
     quiz.myAnswered = true;
@@ -960,6 +985,201 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   }
   tick();
   quiz.studentTimerInterval = setInterval(tick, 500);
+}
+
+// ── Voting phase (canvas questions) ─────────────────────────────
+
+function renderStudentVoting(qIdx) {
+  setStudentView('voting');
+  clearStudentTimer();
+  var cardEl = document.getElementById('qs-voting-card');
+  cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading submissions…</p>';
+
+  quiz.sessionRef.child('votingItems/' + qIdx).get().then(function(snap) {
+    if (!snap.exists()) {
+      cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">No submissions to vote on.</p>';
+      return;
+    }
+    var itemsObj = snap.val() || {};
+    var items = Object.values(itemsObj).filter(Boolean);
+
+    // Shuffle client-side
+    for (var i = items.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = items[i]; items[i] = items[j]; items[j] = tmp;
+    }
+
+    // Filter out own submission
+    items = items.filter(function(item) { return item.uid !== state.uid; });
+
+    if (!items.length) {
+      cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">&#x2713; No other submissions to rate. Waiting for results…</p>';
+      return;
+    }
+
+    // Check which items the student has already voted on, then process remaining
+    var votedRef = quiz.sessionRef.child('votes/' + qIdx + '/' + state.uid);
+    votedRef.get().then(function(votedSnap) {
+      var alreadyVoted = votedSnap.exists() ? votedSnap.val() : {};
+      var toRate = items.filter(function(item) { return !alreadyVoted[item.uid]; });
+      if (!toRate.length) {
+        cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">&#x2713; All voted! Waiting for results…</p>';
+        return;
+      }
+      driveEnsureStudentTokenCached(function(token) {
+        processVotingItems(qIdx, toRate, 0, token, cardEl);
+      }, cardEl);
+    });
+  }).catch(function(e) {
+    cardEl.innerHTML = '<p class="text-red-400 text-sm text-center">Error loading submissions: ' + escapeHtml(e.message) + '</p>';
+  });
+}
+
+function driveEnsureStudentTokenCached(cb, statusEl) {
+  window.driveEnsureStudentToken(statusEl).then(cb).catch(function(e) {
+    var cardEl = document.getElementById('qs-voting-card');
+    if (cardEl) cardEl.innerHTML = '<p class="text-red-400 text-sm text-center">&#x274C; Google Drive access required to vote. ' + escapeHtml(e.message) + '</p>';
+  });
+}
+
+function processVotingItems(qIdx, items, index, token, cardEl) {
+  if (index >= items.length) {
+    cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center text-lg mt-8">&#x2713; All voted! Waiting for results…</p>';
+    return;
+  }
+
+  var item = items[index];
+  var TIMER_SECS = 20;
+
+  // Render a loading card
+  cardEl.innerHTML =
+    '<div class="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 w-full">' +
+      '<div id="qs-vcard-img-wrap" class="w-full" style="aspect-ratio:17/10;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.85rem">Loading image…</div>' +
+      '<div class="px-4 pt-3 pb-1">' +
+        '<div class="h-2 bg-gray-700 rounded overflow-hidden mb-3"><div id="qs-vote-timer-bar" class="h-2 bg-yellow-400 transition-all" style="width:100%"></div></div>' +
+        '<div class="flex justify-center gap-3 mb-3" id="qs-star-btns"></div>' +
+        '<p class="text-xs text-gray-500 text-center mb-2">' + (index + 1) + ' of ' + items.length + '</p>' +
+      '</div>' +
+    '</div>';
+
+  // Star buttons
+  var starContainer = document.getElementById('qs-star-btns');
+  var voted = false;
+  var timerInterval = null;
+
+  function advanceNext(rating) {
+    if (voted) return;
+    voted = true;
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    // Write vote to Firebase
+    quiz.sessionRef.child('votes/' + qIdx + '/' + state.uid + '/' + item.uid).set(rating).catch(function(e) {
+      console.warn('[Voting] vote write failed:', e.message);
+    });
+    processVotingItems(qIdx, items, index + 1, token, cardEl);
+  }
+
+  for (var s = 1; s <= 5; s++) {
+    (function(star) {
+      var btn = document.createElement('button');
+      btn.textContent = '★';
+      btn.title = star + ' star' + (star === 1 ? '' : 's');
+      btn.style.cssText = 'font-size:2rem;background:none;border:none;cursor:pointer;color:#6b7280;transition:color .1s;padding:0.25rem';
+      btn.onmouseover = function() {
+        starContainer.querySelectorAll('button').forEach(function(b, bi) {
+          b.style.color = bi < star ? '#fbbf24' : '#6b7280';
+        });
+      };
+      btn.onmouseout = function() {
+        starContainer.querySelectorAll('button').forEach(function(b) { b.style.color = '#6b7280'; });
+      };
+      btn.onclick = function() { advanceNext(star); };
+      starContainer.appendChild(btn);
+    })(s);
+  }
+
+  // Timer countdown
+  var timerEnd = Date.now() + TIMER_SECS * 1000;
+  timerInterval = setInterval(function() {
+    if (voted) { clearInterval(timerInterval); return; }
+    var remaining = Math.max(0, (timerEnd - Date.now()) / (TIMER_SECS * 1000));
+    var barEl = document.getElementById('qs-vote-timer-bar');
+    if (barEl) {
+      barEl.style.width = (remaining * 100) + '%';
+      barEl.className = 'h-2 transition-all ' + (remaining > 0.5 ? 'bg-yellow-400' : remaining > 0.2 ? 'bg-orange-400' : 'bg-red-500');
+    }
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      advanceNext(3); // auto-rate 3 stars on timeout
+    }
+  }, 200);
+
+  // Load image
+  var imgWrap = document.getElementById('qs-vcard-img-wrap');
+  window.driveFetchFileAsDataUrl(item.fileId, token).then(function(dataUrl) {
+    if (voted || !imgWrap) return;
+    imgWrap.innerHTML = '';
+    var img = document.createElement('img');
+    img.src = dataUrl;
+    img.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;object-fit:cover';
+    imgWrap.appendChild(img);
+  }).catch(function() {
+    if (imgWrap) imgWrap.textContent = 'Could not load image';
+  });
+}
+
+async function renderStudentShowcase(qIdx) {
+  setStudentView('showcase');
+  var gridEl = document.getElementById('qs-showcase-grid');
+  gridEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading top submissions…</p>';
+
+  var snap = await quiz.sessionRef.child('showcaseItems/' + qIdx).get();
+  var items = snap.exists() ? Object.values(snap.val()).filter(Boolean) : [];
+  var medals = ['🥇', '🥈', '🥉'];
+
+  if (!items.length) {
+    gridEl.innerHTML = '<p class="text-gray-400 text-sm text-center">No results yet.</p>';
+    return;
+  }
+
+  // Get Drive token (use cached, prompt if needed)
+  var token = null;
+  try {
+    token = await window.driveEnsureStudentToken(null);
+  } catch(e) {
+    // No token — show without images
+  }
+
+  gridEl.innerHTML = '';
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var avg = typeof item.avg === 'number' ? item.avg.toFixed(1) : '–';
+    var card = document.createElement('div');
+    card.className = 'bg-gray-800 rounded-xl overflow-hidden border border-gray-700';
+    var header = document.createElement('div');
+    header.className = 'flex items-center justify-between px-4 py-2';
+    header.innerHTML =
+      '<span class="text-2xl">' + (medals[i] || (i+1)+'.') + '</span>' +
+      '<span class="font-semibold text-gray-100 flex-1 mx-3 truncate">' + escapeHtml(item.name) + '</span>' +
+      '<span class="text-yellow-400 font-bold text-sm shrink-0">' + avg + ' &#x2B50;</span>';
+    card.appendChild(header);
+    if (item.fileId && token) {
+      var imgPlaceholder = document.createElement('div');
+      imgPlaceholder.style.cssText = 'width:100%;aspect-ratio:17/10;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.8rem';
+      imgPlaceholder.textContent = 'Loading…';
+      card.appendChild(imgPlaceholder);
+      (function(ph, fileId, tkn) {
+        window.driveFetchFileAsDataUrl(fileId, tkn).then(function(dataUrl) {
+          ph.innerHTML = '';
+          ph.style.cssText = '';
+          var img = document.createElement('img');
+          img.src = dataUrl;
+          img.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;object-fit:cover';
+          ph.appendChild(img);
+        }).catch(function() { ph.textContent = 'Could not load image'; });
+      })(imgPlaceholder, item.fileId, token);
+    }
+    gridEl.appendChild(card);
+  }
 }
 
 function renderStudentLeaderboard(lb) {

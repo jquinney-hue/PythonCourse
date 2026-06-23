@@ -176,49 +176,113 @@
   /**
    * driveEnsureStudentToken(statusEl)
    *
-   * Requests a student Drive token. If any scope is denied, shows an inline
-   * error with a "Try Again" button and waits — never resolves until all
-   * scopes are granted. statusEl is a DOM element for status messages.
+   * Shows a full-screen modal prompting the student to sign in with Google.
+   * If any scope is denied the modal stays open with an error and a "Try Again"
+   * button — never resolves until all scopes are granted.
+   * statusEl (optional) receives a small status line once connected.
    * Returns the access token string.
+   *
+   * Every call to requestAccessToken() comes from a direct button click inside
+   * the modal, which satisfies the browser's user-gesture requirement and avoids
+   * the Cross-Origin-Opener-Policy "window.closed blocked" error.
    */
   window.driveEnsureStudentToken = function (statusEl) {
     return new Promise(function (resolve, reject) {
-      function setMsg(html, err) {
+
+      function setStatus(html, err) {
         if (!statusEl) return;
         statusEl.innerHTML = html;
         statusEl.style.color = err ? '#f87171' : '#94a3b8';
       }
 
+      // ── Build or reuse the auth modal ─────────────────────────────────────
+      var overlay = document.getElementById('fs-drive-auth-modal');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'fs-drive-auth-modal';
+        overlay.style.cssText =
+          'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;' +
+          'justify-content:center;background:rgba(0,0,0,0.8)';
+        overlay.innerHTML =
+          '<div style="background:#1e293b;border-radius:14px;padding:2rem 1.75rem;' +
+          'max-width:400px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.6)">' +
+            '<div style="font-size:2.75rem;margin-bottom:0.75rem">🔐</div>' +
+            '<h2 id="fs-auth-title" style="color:#f1f5f9;font-size:1.15rem;font-weight:700;margin-bottom:0.6rem">' +
+              'Google Drive sign-in needed' +
+            '</h2>' +
+            '<p id="fs-auth-msg" style="color:#94a3b8;font-size:0.88rem;line-height:1.6;margin-bottom:1.1rem"></p>' +
+            '<div style="background:#0f172a;border:1px solid #fbbf24;border-radius:8px;' +
+            'padding:0.7rem 0.9rem;margin-bottom:1.25rem;text-align:left">' +
+              '<p style="color:#fbbf24;font-size:0.8rem;font-weight:700;margin-bottom:0.3rem">⚠ Important</p>' +
+              '<p style="color:#cbd5e1;font-size:0.82rem;line-height:1.55">' +
+                'When the Google window opens, tick <strong style="color:#f1f5f9">every checkbox</strong> ' +
+                'or click <strong style="color:#f1f5f9">"Select all"</strong> — then click Continue.<br>' +
+                'The activity will not work if any permission is left unticked.' +
+              '</p>' +
+            '</div>' +
+            '<button id="fs-auth-btn" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;' +
+            'padding:0.65rem 0;font-size:0.97rem;font-weight:600;cursor:pointer;width:100%;' +
+            'transition:opacity .15s">Sign in with Google</button>' +
+            '<p id="fs-auth-err" style="color:#f87171;font-size:0.8rem;margin-top:0.75rem;min-height:1.1em"></p>' +
+          '</div>';
+        document.body.appendChild(overlay);
+      }
+
+      var modalMsg = overlay.querySelector('#fs-auth-msg');
+      var modalBtn = overlay.querySelector('#fs-auth-btn');
+      var modalErr = overlay.querySelector('#fs-auth-err');
+
+      function showModal(infoMsg, errMsg) {
+        if (modalMsg) modalMsg.textContent = infoMsg || '';
+        if (modalErr) modalErr.textContent = errMsg  || '';
+        if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = 'Sign in with Google'; }
+        overlay.style.display = 'flex';
+      }
+
+      function hideModal() {
+        overlay.style.display = 'none';
+      }
+
+      // ── OAuth attempt — must always be called from a button click ─────────
       function attempt() {
         var clientId = window.state && window.state.config && window.state.config.googleClientId;
-        if (!clientId) { reject(new Error('Google client ID not configured.')); return; }
+        if (!clientId) { hideModal(); reject(new Error('Google client ID not configured.')); return; }
         if (!window.google || !google.accounts || !google.accounts.oauth2) {
-          reject(new Error('Google Identity Services not loaded.')); return;
+          hideModal(); reject(new Error('Google Identity Services not loaded.')); return;
         }
-        setMsg('Waiting for Google sign-in…', false);
+
+        if (modalBtn) { modalBtn.disabled = true; modalBtn.textContent = 'Opening Google…'; }
+        if (modalErr) modalErr.textContent = '';
+        setStatus('Waiting for Google sign-in…', false);
 
         google.accounts.oauth2.initTokenClient({
           client_id: clientId,
           scope: STUDENT_SCOPES,
           callback: function (resp) {
             if (!resp || resp.error) {
-              return showRetry((resp && resp.error_description) || 'Sign-in cancelled or failed.');
+              var msg = resp && resp.error === 'access_denied'
+                ? 'You did not grant access. Please try again and accept all permissions.'
+                : ((resp && resp.error_description) || 'Sign-in failed — please try again.');
+              showModal(null, msg);
+              return;
             }
-            var granted = String(resp.scope || '').split(' ');
+            var granted  = String(resp.scope || '').split(' ');
             var required = STUDENT_SCOPES.split(' ');
             var missing  = required.filter(function (s) {
               return !granted.some(function (g) { return g === s; });
             });
             if (missing.length) {
-              return showRetry(
-                'Some permissions were not granted. ' +
-                'Google Drive access is required to upload and view submissions. ' +
-                'Please allow all permissions when prompted.'
+              showModal(
+                null,
+                'Some permissions were not ticked. Please try again and make sure ' +
+                'you click "Select all" before pressing Continue.'
               );
+              return;
             }
+            // All scopes granted ✓
+            hideModal();
             _studentToken = resp.access_token;
-            setMsg('✓ Google Drive connected', false);
-            // Fetch email so we can look up the student's folder
+            setStatus('✓ Google Drive connected', false);
             fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
               headers: { Authorization: 'Bearer ' + _studentToken }
             }).then(function (r) { return r.json(); }).then(function (profile) {
@@ -227,24 +291,28 @@
             }).catch(function () { resolve(_studentToken); });
           },
           error_callback: function (err) {
-            showRetry(err.type || 'OAuth error');
+            var msg = err.type === 'popup_closed'
+              ? 'You closed the sign-in window. Please try again.'
+              : (err.type || 'A sign-in error occurred. Please try again.');
+            showModal(null, msg);
           }
         }).requestAccessToken({ prompt: 'consent' });
       }
 
-      function showRetry(msg) {
-        setMsg(
-          '<span>' + escHtml(msg) + '</span>' +
-          ' <button id="fs-retry-btn" style="margin-left:8px;padding:2px 10px;' +
-          'background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem">' +
-          'Try Again</button>', true
-        );
-        var btn = statusEl && statusEl.querySelector('#fs-retry-btn');
-        if (btn) btn.onclick = function () { _studentToken = null; attempt(); };
+      // Wire up the button (replace previous handler if modal was reused)
+      if (modalBtn) modalBtn.onclick = attempt;
+
+      // Already authenticated — skip the modal entirely
+      if (_studentToken) {
+        setStatus('✓ Google Drive connected', false);
+        resolve(_studentToken);
+        return;
       }
 
-      if (_studentToken) { setMsg('✓ Google Drive connected', false); resolve(_studentToken); return; }
-      attempt();
+      // Show modal with info message; student clicks the button to start OAuth
+      showModal(
+        'This activity saves your work to Google Drive so the class can see everyone\'s submissions.'
+      );
     });
   };
 
