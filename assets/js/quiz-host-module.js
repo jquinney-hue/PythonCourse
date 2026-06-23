@@ -519,62 +519,110 @@ function renderHostPlayerList(players) {
 async function populateDriveClassPicker() {
   var sel = document.getElementById('quiz-drive-class-select');
   if (!sel || sel.dataset.populated) return;
-  sel.innerHTML = '<option value="">Loading classes…</option>';
-  try {
-    // getClassroomToken is defined in admin-module; reuse if already have a token
-    if (!window.classroomState || !window.classroomState.token) {
-      await getClassroomToken();
+  // Don't auto-authenticate here — that requires a user gesture or the COOP
+  // popup-communication block will fire. If we already have a token (e.g. from
+  // the admin Classroom panel) we can populate immediately; otherwise wait for
+  // the Connect button click which carries a real user gesture.
+  if (window.classroomState && window.classroomState.token) {
+    sel.innerHTML = '<option value="">Loading classes…</option>';
+    try {
+      var courses = await classroomListCourses();
+      sel.innerHTML = '<option value="">— select a class —</option>' +
+        courses.map(function(c) {
+          return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
+        }).join('');
+      sel.dataset.populated = '1';
+    } catch (e) {
+      sel.innerHTML = '<option value="">Could not load classes — ' + escapeHtml(e.message) + '</option>';
     }
-    var courses = await classroomListCourses();
-    sel.innerHTML = '<option value="">— select a class —</option>' +
-      courses.map(function(c) {
-        return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
-      }).join('');
-    sel.dataset.populated = '1';
-  } catch (e) {
-    sel.innerHTML = '<option value="">Could not load classes — ' + escapeHtml(e.message) + '</option>';
+  } else {
+    sel.innerHTML = '<option value="">— click Connect to load classes —</option>';
   }
 }
 
-document.getElementById('btn-quiz-drive-connect').onclick = async function() {
-  var btn      = this;
+(function () {
+  // The connect button is a two-step flow:
+  //   Step 1 (no token / not populated): authenticate → populate dropdown → prompt user to select + click Confirm
+  //   Step 2 (authenticated, class selected): store _driveClassId and show ✓ Ready
+  //
+  // All OAuth popup calls happen directly inside the button onclick, which carries
+  // a real user gesture and avoids the COOP "window.closed blocked" error.
+
+  var btn      = document.getElementById('btn-quiz-drive-connect');
   var statusEl = document.getElementById('quiz-drive-status');
-  var courseId = document.getElementById('quiz-drive-class-select').value;
-  if (!courseId) { statusEl.textContent = '⚠️ Please select a class first.'; return; }
+  var sel      = document.getElementById('quiz-drive-class-select');
 
-  btn.disabled = true;
-  statusEl.style.color = '#1d4ed8';
-
-  // Authenticate and verify token — re-prompt until accepted.
-  // Folder creation is deferred to lobby creation so the real lobby code is used.
-  var authenticated = false;
-  while (!authenticated) {
-    try {
-      if (!window.classroomState || !window.classroomState.token) {
-        await getClassroomToken();
-      }
-      authenticated = true;
-    } catch (e) {
-      statusEl.textContent = '⚠️ ' + e.message;
-      statusEl.style.color = '#dc2626';
-      await new Promise(function(resolve) {
+  // When the class selection changes after auth, reset confirmation so the
+  // teacher must click Confirm again with the new selection.
+  if (sel) {
+    sel.onchange = function() {
+      if (quiz._driveClassId) {
+        quiz._driveClassId = null;
         btn.disabled    = false;
-        btn.textContent = 'Try Again';
-        btn.onclick     = function() { btn.onclick = null; btn.textContent = 'Connect Google Drive'; window.classroomState && (window.classroomState.token = null); resolve(); };
-      });
-      btn.disabled = true;
-      statusEl.style.color = '#1d4ed8';
-    }
+        btn.textContent = 'Confirm Class';
+        if (statusEl) { statusEl.textContent = 'Select a class and click Confirm.'; statusEl.style.color = '#f59e0b'; }
+      }
+    };
   }
 
-  // Store the selected class — actual folder creation happens in createHostedQuizLobby
-  // once the real lobby code is known.
-  quiz._driveClassId = courseId;
-  statusEl.textContent = '✓ Authenticated — folders will be created when the lobby opens.';
-  statusEl.style.color = '#15803d';
-  btn.textContent      = '✓ Ready';
-  btn.disabled         = true;
-};
+  btn.onclick = async function() {
+    btn.disabled = true;
+    statusEl.style.color = '#1d4ed8';
+
+    // ── Step 1: authenticate if needed ────────────────────────
+    if (!window.classroomState || !window.classroomState.token) {
+      btn.textContent = 'Connecting…';
+      statusEl.textContent = 'Waiting for Google sign-in…';
+      try {
+        await getClassroomToken();
+      } catch (e) {
+        statusEl.textContent = '⚠️ ' + (e.message || 'Sign-in failed.');
+        statusEl.style.color = '#dc2626';
+        btn.disabled    = false;
+        btn.textContent = 'Try Again';
+        return;
+      }
+    }
+
+    // ── Step 2: populate dropdown if not yet done ─────────────
+    if (sel && !sel.dataset.populated) {
+      btn.textContent = 'Loading classes…';
+      statusEl.textContent = 'Fetching Google Classroom courses…';
+      try {
+        var courses = await classroomListCourses();
+        sel.innerHTML = '<option value="">— select a class —</option>' +
+          courses.map(function(c) {
+            return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>';
+          }).join('');
+        sel.dataset.populated = '1';
+      } catch (e) {
+        sel.innerHTML = '<option value="">Could not load classes</option>';
+        statusEl.textContent = '⚠️ Could not load classes: ' + (e.message || 'unknown error');
+        statusEl.style.color = '#dc2626';
+        btn.disabled    = false;
+        btn.textContent = 'Try Again';
+        return;
+      }
+    }
+
+    // ── Step 3: confirm class selection ───────────────────────
+    var courseId = sel ? sel.value : '';
+    if (!courseId) {
+      statusEl.textContent = 'Select a class from the dropdown, then click Confirm.';
+      statusEl.style.color = '#f59e0b';
+      btn.disabled    = false;
+      btn.textContent = 'Confirm Class';
+      return;
+    }
+
+    // All done — store class; folder creation happens in createHostedQuizLobby.
+    quiz._driveClassId = courseId;
+    statusEl.textContent = '✓ Ready — folders will be created when the lobby opens.';
+    statusEl.style.color = '#15803d';
+    btn.textContent      = '✓ Connected';
+    btn.disabled         = true;
+  };
+})();
 
 function openQuizManageStudents() {
   document.getElementById('modal-quiz-manage-students').classList.remove('hidden');
