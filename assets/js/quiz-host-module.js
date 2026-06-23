@@ -1541,13 +1541,146 @@ function renderHostLeaderboard(leaderboard) {
   el.innerHTML = '';
   var maxScore = quizMaxScore(quiz.questions);
   var medals = ['🥇','🥈','🥉'];
+
+  // If any question has peer-submitted media, make rows clickable to preview work
+  var hasMedia = (quiz.questions || []).some(function(q) {
+    return q.type === 'canvas' || q.type === 'pyscratch_share';
+  });
+
   leaderboard.forEach(function(entry, i) {
     var row = document.createElement('div');
-    row.className = 'flex items-center justify-between gap-6 bg-gray-800 rounded-lg px-6 py-3 min-w-64';
+    row.className = 'flex items-center justify-between gap-6 bg-gray-800 rounded-lg px-6 py-3 min-w-64' +
+      (hasMedia ? ' cursor-pointer hover:bg-gray-700 transition-colors select-none' : '');
     row.innerHTML =
       '<span class="text-lg">' + (medals[i] || (i+1)+'.') + '</span>' +
-      '<span class="font-mono text-gray-300 flex-1 text-left ml-2">' + (studentName(entry.code) || entry.code) + '</span>' +
-      '<span class="font-bold text-yellow-400 text-lg">' + entry.score + ' / ' + maxScore + '</span>';
+      '<span class="font-mono text-gray-300 flex-1 text-left ml-2">' + escapeHtml(studentName(entry.code) || entry.code) + '</span>' +
+      (hasMedia ? '<span class="text-gray-500 text-xs shrink-0 mr-2">👁 view</span>' : '') +
+      '<span class="font-bold text-yellow-400 text-lg shrink-0">' + entry.score + ' / ' + maxScore + '</span>';
+    if (hasMedia) {
+      row.title = 'Click to view this student\'s submission';
+      row.onclick = function() { showStudentWorkModal(entry.code); };
+    }
     el.appendChild(row);
+  });
+}
+
+async function showStudentWorkModal(code) {
+  var name = studentName(code) || code;
+
+  // Find questions with peer-submitted media
+  var mediaQs = (quiz.questions || []).map(function(q, i) {
+    return { q: q, idx: i };
+  }).filter(function(item) {
+    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share';
+  });
+  if (!mediaQs.length) return;
+
+  // Ensure we have a Drive/Classroom token (teacher context)
+  var token = window.classroomState && window.classroomState.token;
+  if (!token) {
+    try { await getClassroomToken(); token = window.classroomState && window.classroomState.token; } catch(e) {}
+  }
+
+  // ── Build overlay ────────────────────────────────────────────
+  var overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.9);' +
+    'display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:2rem 1rem';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'width:100%;max-width:680px';
+
+  // Header row
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem';
+  var title = document.createElement('h2');
+  title.style.cssText = 'color:#f1f5f9;font-size:1.25rem;font-weight:700;margin:0';
+  title.textContent = name + '’s Work';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Close';
+  closeBtn.style.cssText =
+    'background:#334155;color:#f1f5f9;border:none;border-radius:6px;' +
+    'padding:0.4rem 1rem;cursor:pointer;font-size:0.9rem;font-weight:600';
+  closeBtn.onclick = function() {
+    // Revoke any blob URLs attached to iframes
+    overlay.querySelectorAll('iframe[data-bloburl]').forEach(function(iframe) {
+      try { URL.revokeObjectURL(iframe.dataset.bloburl); } catch(e) {}
+    });
+    document.body.removeChild(overlay);
+  };
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  inner.appendChild(header);
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+
+  // ── Load each media question ─────────────────────────────────
+  mediaQs.forEach(function(mq) {
+    var section = document.createElement('div');
+    section.style.cssText =
+      'background:#1e293b;border-radius:12px;padding:1.25rem;margin-bottom:1.25rem';
+
+    var qLabel = document.createElement('p');
+    qLabel.style.cssText = 'color:#64748b;font-size:0.78rem;margin:0 0 0.75rem';
+    qLabel.textContent = 'Q' + (mq.idx + 1) + ': ' + (mq.q.q || '');
+    section.appendChild(qLabel);
+
+    var contentEl = document.createElement('div');
+    contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem">Loading…</p>';
+    section.appendChild(contentEl);
+    inner.appendChild(section);
+
+    // Async load
+    (function(mq, contentEl) {
+      quiz.sessionRef.child('answers/' + mq.idx + '/' + code).get().then(async function(ansSnap) {
+        var fileId = ansSnap.exists() ? ansSnap.child('fileId').val() : null;
+        if (!fileId) {
+          contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission from this student.</p>';
+          return;
+        }
+        if (!token) {
+          contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Drive not connected — cannot load file.</p>';
+          return;
+        }
+        try {
+          var resp = await fetch(
+            'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media',
+            { headers: { Authorization: 'Bearer ' + token } }
+          );
+          if (!resp.ok) throw new Error('Drive error ' + resp.status);
+          var blob = await resp.blob();
+
+          if (mq.q.type === 'canvas') {
+            // Display image
+            var imgUrl = URL.createObjectURL(blob);
+            var img = document.createElement('img');
+            img.src = imgUrl;
+            img.style.cssText = 'width:100%;border-radius:8px;display:block';
+            img.onload = function() { URL.revokeObjectURL(imgUrl); };
+            img.onerror = function() { contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not display image.</p>'; };
+            contentEl.innerHTML = '';
+            contentEl.appendChild(img);
+          } else if (mq.q.type === 'pyscratch_share') {
+            // Load game in PyScratch player mode
+            var blobUrl = URL.createObjectURL(blob);
+            var iframe = document.createElement('iframe');
+            iframe.src = 'scratch/editor.html?pyscratch=1&project_url=' + encodeURIComponent(blobUrl);
+            iframe.style.cssText = 'width:100%;height:480px;border:none;border-radius:8px;display:block;background:#000';
+            iframe.dataset.bloburl = blobUrl;
+            iframe.allow = 'microphone; camera';
+            contentEl.innerHTML = '';
+            contentEl.appendChild(iframe);
+            // Activate player mode once editor has loaded
+            setTimeout(function() {
+              try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
+            }, 2500);
+          }
+        } catch(e) {
+          contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';
+        }
+      }).catch(function(e) {
+        contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Firebase error: ' + escapeHtml(e.message) + '</p>';
+      });
+    })(mq, contentEl);
   });
 }
