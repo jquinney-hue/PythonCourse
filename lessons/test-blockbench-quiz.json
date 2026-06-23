@@ -1,0 +1,55 @@
+{
+  "id": "test-blockbench-quiz",
+  "title": "TEST: Blockbench Model Quiz",
+  "description": "Peer-voted Blockbench modelling quiz. Students build 3D models and vote on each other's submissions.",
+  "steps": [
+    {
+      "id": "intro",
+      "title": "Blockbench Model Quiz",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Blockbench Model Quiz</h2><p class='text-gray-700 mb-4'>This quiz uses the Blockbench 3D modelling editor. Build the model described in each question, then submit it for your classmates to vote on.</p><p class='text-gray-500 text-sm'>Requires Google Drive to be connected by the teacher before starting.</p>"
+    }
+  ],
+  "quizQuestions": [
+    {
+      "type": "blockbench_share",
+      "q": "Create your dream house or bedroom in Blockbench. Make it yours — add whatever rooms, furniture or features you like!",
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Model your favourite food or drink in Blockbench. Think about the shape and colours that make it recognisable.",
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Design a vehicle or gadget from the future. What does it look like? What does it do?",
+      "duration": 720
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Create a trophy, badge or power-up that could appear as a reward in a video game.",
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Build a scene object for a game level — it could be anything: a doorway, a market stall, a fountain, a statue…",
+      "duration": 720
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Model your favourite animal or creature in Blockbench using cuboids. How close can you get to the real thing?",
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Design a weapon, tool or item that could appear in a video game. Make it look like something a player would want to pick up!",
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Build a robot of your own design. Give it a personality — is it friendly, dangerous, useful, silly?",
+      "duration": 720
+    }
+  ]
+}

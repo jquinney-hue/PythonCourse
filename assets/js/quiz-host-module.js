@@ -78,7 +78,23 @@ function refreshQuizSetupQuestions() {
   var drivePanel = document.getElementById('quiz-drive-setup');
   if (drivePanel) {
     drivePanel.classList.toggle('hidden', !hasCanvas);
-    if (hasCanvas) populateDriveClassPicker();
+    if (hasCanvas) {
+      populateDriveClassPicker();
+      // Reset button and status every time the drive panel is shown so it's
+      // clickable again after a previous quiz session confirmed a class.
+      var _connectBtn    = document.getElementById('btn-quiz-drive-connect');
+      var _connectStatus = document.getElementById('quiz-drive-status');
+      if (_connectBtn) {
+        _connectBtn.disabled    = false;
+        _connectBtn.textContent = window.classroomState && window.classroomState.token
+          ? 'Confirm Class'
+          : 'Connect Google Drive & Set Up Folder';
+      }
+      if (_connectStatus) {
+        _connectStatus.textContent = 'Select a class and click Confirm.';
+        _connectStatus.style.color = '#1d4ed8';
+      }
+    }
   }
   quiz._driveFolderId       = null; // reset on lesson change
   quiz._driveClassId        = null;

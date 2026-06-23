@@ -456,9 +456,10 @@ async function submitStudentBlockbenchShare(qIdx) {
     if (frame) frame.style.pointerEvents = 'none';
     if (fb) fb.textContent = 'Checking your model...';
 
-    var result = validateBlockbenchQuizModel({ blockbenchCheck: q.blockbenchCheck || { minCubes: 1 } }, cw);
+    // Share questions are open-ended creative tasks — only check that at least one cube exists.
+    var result = validateBlockbenchQuizModel({ blockbenchCheck: { minCubes: 1 } }, cw);
     if (!result.correct) {
-      if (fb) fb.textContent = result.message || 'Add at least one cube before submitting.';
+      if (fb) fb.textContent = 'Add at least one cube to your model before submitting.';
       unlockBlockbenchTesting(frame, submitBtn, originalText);
       return;
     }

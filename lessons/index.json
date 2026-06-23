@@ -139,6 +139,12 @@
               "title": "TEST: Canvas Drawing Quiz",
               "file": "lessons/test-canvas-quiz.json",
               "order": 1
+            },
+            {
+              "id": "test-blockbench-quiz",
+              "title": "TEST: Blockbench Model Quiz",
+              "file": "lessons/test-blockbench-quiz.json",
+              "order": 2
             }
           ]
         },
