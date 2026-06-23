@@ -323,19 +323,65 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   // Now that we have the real lobby code, create Drive folders if needed
   var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas'; });
   if (hasCanvas && quiz._driveClassId) {
-    var driveStatusEl = document.getElementById('quiz-drive-status');
+
+    // ── Drive setup loading overlay ──────────────────────────────
+    var driveOverlay = document.createElement('div');
+    driveOverlay.style.cssText =
+      'position:fixed;inset:0;z-index:99998;display:flex;align-items:center;' +
+      'justify-content:center;background:rgba(0,0,0,0.75)';
+    driveOverlay.innerHTML =
+      '<div style="background:#1e293b;border-radius:14px;padding:2rem 2.25rem;' +
+      'max-width:420px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.6)">' +
+        '<div style="font-size:2.25rem;margin-bottom:0.75rem">📁</div>' +
+        '<h2 style="color:#f1f5f9;font-size:1.1rem;font-weight:700;margin-bottom:0.5rem">' +
+          'Setting up Google Drive…' +
+        '</h2>' +
+        '<p style="color:#94a3b8;font-size:0.82rem;margin-bottom:1.25rem">' +
+          'Creating a folder for each student. This may take up to a minute for large classes.' +
+        '</p>' +
+        // Spinner
+        '<div style="display:flex;justify-content:center;margin-bottom:1.1rem">' +
+          '<div id="drive-setup-spinner" style="width:36px;height:36px;border-radius:50%;' +
+          'border:4px solid #334155;border-top-color:#3b82f6;' +
+          'animation:drive-spin 0.8s linear infinite"></div>' +
+        '</div>' +
+        // Progress message
+        '<p id="drive-setup-msg" style="color:#cbd5e1;font-size:0.88rem;min-height:1.4em;' +
+        'transition:color .2s">Initialising…</p>' +
+      '</div>';
+
+    // Inject the keyframe once
+    if (!document.getElementById('drive-spin-style')) {
+      var spinStyle = document.createElement('style');
+      spinStyle.id = 'drive-spin-style';
+      spinStyle.textContent = '@keyframes drive-spin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(spinStyle);
+    }
+    document.body.appendChild(driveOverlay);
+
+    var msgEl = driveOverlay.querySelector('#drive-setup-msg');
+
+    function setDriveMsg(text, colour) {
+      if (msgEl) { msgEl.textContent = text; msgEl.style.color = colour || '#cbd5e1'; }
+    }
+
     try {
       var driveResult = await window.driveSetupSession(quiz._driveClassId, lobbyCode, function(msg) {
-        if (driveStatusEl) { driveStatusEl.textContent = msg; driveStatusEl.style.color = '#1d4ed8'; }
+        setDriveMsg(msg);
       });
       quiz._driveFolderId       = driveResult.sessionFolderId;
       quiz._driveStudentFolders = driveResult.studentFolders;
       var count = Object.keys(driveResult.studentFolders || {}).length;
-      if (driveStatusEl) { driveStatusEl.textContent = '✓ ' + count + ' folder(s) created.'; driveStatusEl.style.color = '#15803d'; }
+      setDriveMsg('✓ ' + count + ' folder' + (count === 1 ? '' : 's') + ' created.', '#4ade80');
+      // Brief pause so the teacher sees the success state
+      await new Promise(function(r) { setTimeout(r, 800); });
     } catch (e) {
-      // Non-fatal — quiz continues but canvas submissions won't have a folder
       console.error('[Drive] Setup failed:', e.message);
-      if (driveStatusEl) { driveStatusEl.textContent = '⚠️ Drive setup failed: ' + e.message; driveStatusEl.style.color = '#dc2626'; }
+      setDriveMsg('⚠ Drive setup failed: ' + (e.message || 'unknown error'), '#f87171');
+      // Give teacher a moment to read the error; quiz still continues
+      await new Promise(function(r) { setTimeout(r, 2500); });
+    } finally {
+      document.body.removeChild(driveOverlay);
     }
   }
 
