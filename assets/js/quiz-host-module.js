@@ -1395,6 +1395,22 @@ async function endQuiz() {
   if (quiz.sessionRef) {
     quiz.sessionRef.onDisconnect().cancel();
   }
+  // Ensure canvas/pyscratch_share questions have had their scores computed.
+  // startShowcasePhase writes per-student averages back to answers/{qIdx}/{uid}/score.
+  // If the teacher exited the quiz early (skipping showcase), scores won't exist yet.
+  for (var _qi = 0; _qi < quiz.questions.length; _qi++) {
+    var _qq = quiz.questions[_qi];
+    if (_qq.type === 'canvas' || _qq.type === 'pyscratch_share') {
+      try {
+        var _scSnap = await quiz.sessionRef.child('showcaseItems/' + _qi).get();
+        if (!_scSnap.exists()) {
+          await startShowcasePhase(_qi);
+        }
+      } catch(_e) {
+        console.warn('[endQuiz] Could not compute canvas scores for Q' + _qi + ':', _e);
+      }
+    }
+  }
   // Compute leaderboard before marking finished
   var leaderboard = await buildLeaderboard();
   await quiz.sessionRef.update({ state: 'finished', leaderboard: leaderboard });

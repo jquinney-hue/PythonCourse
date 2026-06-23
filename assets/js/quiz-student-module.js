@@ -578,7 +578,16 @@ function initCanvasQuestion(qIdx, q) {
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
   }
-  function stopDraw(e) { drawing = false; }
+  var _canvasSaveTimer = null;
+  var _canvasStorageKey = 'qlc_' + (quiz.lobbyCode || '') + '_' + qIdx;
+  function stopDraw(e) {
+    drawing = false;
+    // Debounce-save canvas to localStorage — restores after a page refresh
+    clearTimeout(_canvasSaveTimer);
+    _canvasSaveTimer = setTimeout(function() {
+      try { localStorage.setItem(_canvasStorageKey, canvasEl.toDataURL('image/png')); } catch(_e) {}
+    }, 500);
+  }
 
   // Remove old listeners by replacing the element clone
   var fresh = canvasEl.cloneNode(true);
@@ -589,6 +598,15 @@ function initCanvasQuestion(qIdx, q) {
   ctx2.fillStyle = '#111827';
   ctx2.fillRect(0, 0, canvasEl.width, canvasEl.height);
   ctx = ctx2;
+
+  // Restore saved drawing if student refreshed mid-question
+  (function() {
+    var saved = !quiz.myAnswered && localStorage.getItem(_canvasStorageKey);
+    if (!saved) return;
+    var img = new Image();
+    img.onload = function() { try { ctx.drawImage(img, 0, 0); } catch(e) {} };
+    img.src = saved;
+  })();
 
   canvasEl.addEventListener('mousedown',  startDraw);
   canvasEl.addEventListener('mousemove',  moveDraw);
@@ -606,6 +624,7 @@ function initCanvasQuestion(qIdx, q) {
   clearBtn.onclick = function() {
     ctx.fillStyle = '#111827';
     ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+    try { localStorage.setItem(_canvasStorageKey, canvasEl.toDataURL('image/png')); } catch(_e) {}
   };
 
   feedback.textContent = '';
@@ -665,7 +684,12 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
 
   var fileResult;
   try {
-    fileResult = await window.driveUploadFile(folderId, filename, blob, 'image/png', token);
+    fileResult = await Promise.race([
+      window.driveUploadFile(folderId, filename, blob, 'image/png', token),
+      new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('Upload timed out — tap Submit again.')); }, 45000);
+      })
+    ]);
   } catch (e) {
     feedback.textContent = '❌ Upload failed: ' + e.message;
     feedback.style.color = '#f87171';
@@ -691,6 +715,8 @@ async function submitCanvasAnswer(qIdx, canvasEl, feedback, submitBtn) {
     feedback.textContent = '✓ Drawing submitted!';
     feedback.style.color = '#4ade80';
     lockStudentAnswers();
+    // Clear saved canvas now that the submission succeeded
+    try { localStorage.removeItem('qlc_' + (quiz.lobbyCode || '') + '_' + qIdx); } catch(_e) {}
   } catch (e) {
     feedback.textContent = '❌ Could not save answer: ' + e.message;
     feedback.style.color = '#f87171';
@@ -1323,18 +1349,142 @@ function renderStudentLeaderboard(lb) {
   var el = document.getElementById('qs-final-score');
   var total = quizMaxScore(quiz.questions);
   var medals = ['🥇','🥈','🥉'];
-  var html = '<div class="space-y-2 mt-4 w-full max-w-xl mx-auto">';
   var lbArr = Array.isArray(lb) ? lb : Object.values(lb);
+
+  var hasMedia = (quiz.questions || []).some(function(q) {
+    return q.type === 'canvas' || q.type === 'pyscratch_share';
+  });
+
+  el.innerHTML = '';
+  var container = document.createElement('div');
+  container.className = 'space-y-2 mt-4 w-full max-w-xl mx-auto';
+
   lbArr.forEach(function(entry, i) {
     var isMe = entry.code === state.uid;
-    html += '<div class="flex items-center justify-between gap-6 rounded-lg px-6 py-3 ' +
-      (isMe ? 'bg-yellow-600/40 border border-yellow-400' : 'bg-white/10') + '">' +
+    var row = document.createElement('div');
+    row.className = 'flex items-center justify-between gap-4 rounded-lg px-6 py-3 ' +
+      (isMe ? 'bg-yellow-600/40 border border-yellow-400' : 'bg-white/10') +
+      (hasMedia ? ' cursor-pointer hover:bg-white/20 transition-colors select-none' : '');
+    row.innerHTML =
       '<span class="text-lg shrink-0">' + (medals[i] || (i+1)+'.') + '</span>' +
       '<span class="font-mono flex-1 text-sm text-left ' + (isMe ? 'text-yellow-300 font-bold' : 'text-gray-300') + '">' +
-      (studentName(entry.code) || entry.code) + (isMe ? ' (you)' : '') + '</span>' +
-      '<span class="font-bold text-yellow-400 text-right shrink-0">' + entry.score + '/' + total + '</span>' +
-      '</div>';
+      escapeHtml(studentName(entry.code) || entry.code) + (isMe ? ' (you)' : '') + '</span>' +
+      (hasMedia ? '<span class="text-gray-500 text-xs shrink-0">🖼</span>' : '') +
+      '<span class="font-bold text-yellow-400 text-right shrink-0">' + entry.score + '/' + total + '</span>';
+
+    if (hasMedia) {
+      row.title = 'Click to view their drawing';
+      row.onclick = function() { showStudentWorkForCode(entry.code); };
+    }
+    container.appendChild(row);
   });
-  html += '</div>';
-  el.innerHTML = html;
+
+  el.appendChild(container);
+}
+
+async function showStudentWorkForCode(code) {
+  var name = studentName(code) || code;
+
+  var mediaQs = (quiz.questions || []).map(function(q, i) {
+    return { q: q, idx: i };
+  }).filter(function(item) {
+    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share';
+  });
+  if (!mediaQs.length) return;
+
+  // Ensure Drive token
+  var token = null;
+  try {
+    token = await window.driveEnsureStudentToken(null);
+  } catch(e) {
+    alert('Google Drive access is required to view submissions. Please sign in again.');
+    return;
+  }
+
+  // Build overlay
+  var overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);' +
+    'display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:2rem 1rem';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'width:100%;max-width:680px';
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem';
+  var titleEl = document.createElement('h2');
+  titleEl.style.cssText = 'color:#f1f5f9;font-size:1.25rem;font-weight:700;margin:0';
+  titleEl.textContent = name + '’s Work';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Close';
+  closeBtn.style.cssText =
+    'background:#334155;color:#f1f5f9;border:none;border-radius:6px;' +
+    'padding:0.4rem 1rem;cursor:pointer;font-size:0.9rem;font-weight:600';
+  closeBtn.onclick = function() {
+    overlay.querySelectorAll('iframe[data-bloburl]').forEach(function(iframe) {
+      try { URL.revokeObjectURL(iframe.dataset.bloburl); } catch(e) {}
+    });
+    document.body.removeChild(overlay);
+  };
+  header.appendChild(titleEl);
+  header.appendChild(closeBtn);
+  inner.appendChild(header);
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+
+  mediaQs.forEach(function(mq) {
+    var section = document.createElement('div');
+    section.style.cssText = 'background:#1e293b;border-radius:12px;padding:1.25rem;margin-bottom:1.25rem';
+
+    var qLabel = document.createElement('p');
+    qLabel.style.cssText = 'color:#64748b;font-size:0.78rem;margin:0 0 0.75rem';
+    qLabel.textContent = 'Q' + (mq.idx + 1) + ': ' + (mq.q.q || '');
+    section.appendChild(qLabel);
+
+    var contentEl = document.createElement('div');
+    contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem">Loading…</p>';
+    section.appendChild(contentEl);
+    inner.appendChild(section);
+
+    (function(mq, contentEl) {
+      var sessionRef = quiz.sessionRef;
+      if (!sessionRef) {
+        contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem">Session ended.</p>';
+        return;
+      }
+      sessionRef.child('answers/' + mq.idx + '/' + code).get().then(function(ansSnap) {
+        var fileId = ansSnap.exists() ? ansSnap.child('fileId').val() : null;
+        if (!fileId) {
+          contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission.</p>';
+          return;
+        }
+        window.driveFetchFileAsDataUrl(fileId, token).then(function(dataUrl) {
+          contentEl.innerHTML = '';
+          if (mq.q.type === 'canvas') {
+            var img = document.createElement('img');
+            img.src = dataUrl;
+            img.style.cssText = 'width:100%;border-radius:8px;display:block';
+            contentEl.appendChild(img);
+          } else if (mq.q.type === 'pyscratch_share') {
+            fetch(dataUrl).then(function(r) { return r.blob(); }).then(function(sb3Blob) {
+              var blobUrl = URL.createObjectURL(sb3Blob);
+              var iframe = document.createElement('iframe');
+              iframe.src = 'scratch/editor.html?pyscratch=1&project_url=' + encodeURIComponent(blobUrl);
+              iframe.style.cssText = 'width:100%;height:420px;border:none;border-radius:8px;display:block;background:#000';
+              iframe.dataset.bloburl = blobUrl;
+              iframe.allow = 'microphone; camera';
+              contentEl.appendChild(iframe);
+              setTimeout(function() {
+                try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
+              }, 2500);
+            });
+          }
+        }).catch(function(e) {
+          contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';
+        });
+      }).catch(function(e) {
+        contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Error: ' + escapeHtml(e.message) + '</p>';
+      });
+    })(mq, contentEl);
+  });
 }
