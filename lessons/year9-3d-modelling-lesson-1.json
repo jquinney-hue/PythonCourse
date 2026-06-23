@@ -101,6 +101,41 @@
       "sampleAnswer": "A model containing at least 3 cuboids, including a wide/flat part and a tall/narrow part.",
       "blockbenchCheck": { "minCubes": 3, "requireFlatWide": true, "requireTallNarrow": true },
       "duration": 300
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Create a small dream house or room in Blockbench. Use at least 4 cuboids and make the main parts clear enough for classmates to recognise.",
+      "sampleAnswer": "A creative Blockbench model submitted for peer voting.",
+      "blockbenchCheck": { "minCubes": 4 },
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Create your favourite food or drink as a simple low-poly Blockbench model. Use at least 3 cuboids and think about shape, size and colour.",
+      "sampleAnswer": "A creative Blockbench model submitted for peer voting.",
+      "blockbenchCheck": { "minCubes": 3 },
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Create a vehicle or gadget from the future. Use at least 5 cuboids and include one flat/wide part and one tall/narrow part.",
+      "sampleAnswer": "A creative Blockbench model submitted for peer voting.",
+      "blockbenchCheck": { "minCubes": 5, "requireFlatWide": true, "requireTallNarrow": true },
+      "duration": 720
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Create a trophy, badge or game power-up that could be used as a reward in a game. Use at least 4 cuboids and make the silhouette recognisable.",
+      "sampleAnswer": "A creative Blockbench model submitted for peer voting.",
+      "blockbenchCheck": { "minCubes": 4 },
+      "duration": 600
+    },
+    {
+      "type": "blockbench_share",
+      "q": "Create a small scene object for a game level, such as a doorway, bridge, platform, shop counter or obstacle. Use at least 6 cuboids.",
+      "sampleAnswer": "A creative Blockbench model submitted for peer voting.",
+      "blockbenchCheck": { "minCubes": 6 },
+      "duration": 720
     }
   ]
 }

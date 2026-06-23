@@ -60,6 +60,10 @@ function quizLessonById(lessonId) {
   return state.allLessons.find(function(l) { return l.meta.id === lessonId; }) || null;
 }
 
+function isQuizShareQuestion(q) {
+  return !!q && (q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share');
+}
+
 function refreshQuizSetupQuestions() {
   var lesson = getSelectedQuizLesson();
   var allQs = lesson && lesson.data.quizQuestions ? lesson.data.quizQuestions : [];
@@ -70,7 +74,7 @@ function refreshQuizSetupQuestions() {
   document.getElementById('btn-quiz-start-host').classList.toggle('opacity-60', !allQs.length);
 
   // Show Drive setup panel if any question requires it
-  var hasCanvas = allQs.some(function(q) { return q.type === 'canvas' || q.type === 'pyscratch_share'; });
+  var hasCanvas = allQs.some(isQuizShareQuestion);
   var drivePanel = document.getElementById('quiz-drive-setup');
   if (drivePanel) {
     drivePanel.classList.toggle('hidden', !hasCanvas);
@@ -293,9 +297,9 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
   });
 
   // If any canvas or pyscratch_share questions are included, Drive setup must have completed first
-  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas' || q.type === 'pyscratch_share'; });
+  var hasCanvas = selectedQs.some(isQuizShareQuestion);
   if (hasCanvas && !quiz._driveClassId) {
-    alert('This quiz includes a drawing or game activity. Please click "Connect Google Drive" and select a class before starting.');
+    alert('This quiz includes a shared submission activity. Please click "Connect Google Drive" and select a class before starting.');
     document.getElementById('modal-quiz-setup').classList.remove('hidden');
     return;
   }
@@ -321,7 +325,7 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   quiz.sessionRef = state.db.ref('quizSessions/' + lobbyCode);
 
   // Now that we have the real lobby code, create Drive folders if needed
-  var hasCanvas = selectedQs.some(function(q) { return q.type === 'canvas' || q.type === 'pyscratch_share'; });
+  var hasCanvas = selectedQs.some(isQuizShareQuestion);
   if (hasCanvas && quiz._driveClassId) {
 
     // ── Drive setup loading overlay ──────────────────────────────
@@ -886,7 +890,7 @@ function renderHostQuestionView(qIdx, questionStart, duration) {
   var isWidget = q.type === 'bit_input' || q.type === 'addition_input';
   var isScratch = q.type === 'scratch_build';
   var isPyBot = q.type === 'pybot_level';
-  var isBlockbench = q.type === 'blockbench_build';
+  var isBlockbench = q.type === 'blockbench_build' || q.type === 'blockbench_share';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
   var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch;
@@ -896,7 +900,7 @@ function renderHostQuestionView(qIdx, questionStart, duration) {
       : isTextInput ? 'Typed answer'
       : isScratch ? 'Scratch build'
       : isPyBot ? 'PyBot level'
-      : isBlockbench ? 'Blockbench build'
+      : isBlockbench ? (q.type === 'blockbench_share' ? 'Blockbench model' : 'Blockbench build')
       : isSpreadsheet ? 'Spreadsheet task'
       : isPyScratch ? 'PyScratch build'
       : 'Code answer';
@@ -1037,7 +1041,7 @@ async function showAnswerReveal(expectedQIdx, expectedQuestionStart) {
   var q = quiz.questions[qIdx];
   var now = Date.now();
 
-  if (q.type === 'canvas' || q.type === 'pyscratch_share') {
+  if (isQuizShareQuestion(q)) {
     await startVotingPhase(qIdx);
     return;
   }
@@ -1056,7 +1060,7 @@ async function renderHostRevealView(qIdx, revealStart) {
   var isWidget = q.type === 'bit_input' || q.type === 'addition_input';
   var isScratch = q.type === 'scratch_build';
   var isPyBot = q.type === 'pybot_level';
-  var isBlockbench = q.type === 'blockbench_build';
+  var isBlockbench = q.type === 'blockbench_build' || q.type === 'blockbench_share';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
   var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch;
@@ -1193,16 +1197,21 @@ async function renderHostRevealView(qIdx, revealStart) {
 // ── Voting phase (canvas questions) ───────────────────────────
 
 async function startVotingPhase(qIdx) {
+  var q = quiz.questions[qIdx] || {};
   var answersSnap = await quiz.sessionRef.child('answers/' + qIdx).get();
   var answers = answersSnap.exists() ? answersSnap.val() : {};
 
-  // Build votingItems array from answers. Store only platform codes and file IDs
-  // in Firebase; display names are resolved locally in the browser.
+  // Build votingItems array from answers. Blockbench share questions keep model
+  // file discovery in Google Drive, so Firebase stores only the platform code.
   var votingItems = [];
   Object.keys(answers).forEach(function(code) {
     var ans = answers[code];
-    if (!ans || !ans.fileId) return;
-    votingItems.push({ code: code, fileId: ans.fileId });
+    if (!ans) return;
+    if (q.type === 'blockbench_share') {
+      if (ans.submitted) votingItems.push({ code: code });
+      return;
+    }
+    if (ans.fileId) votingItems.push({ code: code, fileId: ans.fileId });
   });
 
   // Write votingItems as Firebase object with numeric keys
@@ -1409,7 +1418,7 @@ async function endQuiz() {
   // If the teacher exited the quiz early (skipping showcase), scores won't exist yet.
   for (var _qi = 0; _qi < quiz.questions.length; _qi++) {
     var _qq = quiz.questions[_qi];
-    if (_qq.type === 'canvas' || _qq.type === 'pyscratch_share') {
+    if (isQuizShareQuestion(_qq)) {
       try {
         var _scSnap = await quiz.sessionRef.child('showcaseItems/' + _qi).get();
         if (!_scSnap.exists()) {
@@ -1506,7 +1515,7 @@ function pyBotMedalLabel(medal) {
 function quizQuestionMaxPoints(q) {
   if (!q) return 0;
   if (q.type === 'pybot_level') return 5;
-  if (q.type === 'canvas' || q.type === 'pyscratch_share') return 5; // scored 0–5 by peer vote average
+  if (isQuizShareQuestion(q)) return 5; // scored 0-5 by peer vote average
   return 1;
 }
 
@@ -1526,7 +1535,7 @@ function quizAnswerPoints(q, answerSnap) {
     return pyBotMedalPoints(answerSnap.child('medal').val(), answerSnap.child('completed').val() === true || answerSnap.exists());
   }
   // Canvas / pyscratch_share: scored 0–5 by peer vote average (written back by startShowcasePhase)
-  if (q.type === 'canvas' || q.type === 'pyscratch_share') {
+  if (isQuizShareQuestion(q)) {
     var score = answerSnap.child('score').val();
     return (typeof score === 'number' && isFinite(score)) ? score : 0;
   }
@@ -1569,7 +1578,7 @@ function renderHostLeaderboard(leaderboard) {
 
   // If any question has peer-submitted media, make rows clickable to preview work
   var hasMedia = (quiz.questions || []).some(function(q) {
-    return q.type === 'canvas' || q.type === 'pyscratch_share';
+    return isQuizShareQuestion(q);
   });
 
   leaderboard.forEach(function(entry, i) {
@@ -1596,7 +1605,7 @@ async function showStudentWorkModal(code) {
   var mediaQs = (quiz.questions || []).map(function(q, i) {
     return { q: q, idx: i };
   }).filter(function(item) {
-    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share';
+    return isQuizShareQuestion(item.q);
   });
   if (!mediaQs.length) return;
 
@@ -1659,7 +1668,8 @@ async function showStudentWorkModal(code) {
     (function(mq, contentEl) {
       quiz.sessionRef.child('answers/' + mq.idx + '/' + code).get().then(async function(ansSnap) {
         var fileId = ansSnap.exists() ? ansSnap.child('fileId').val() : null;
-        if (!fileId) {
+        var submitted = ansSnap.exists() && ansSnap.child('submitted').val() === true;
+        if (!fileId && !(mq.q.type === 'blockbench_share' && submitted)) {
           contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission from this student.</p>';
           return;
         }
@@ -1668,6 +1678,11 @@ async function showStudentWorkModal(code) {
           return;
         }
         try {
+          if (mq.q.type === 'blockbench_share') {
+            var snapshot = await loadBlockbenchShareSnapshot(mq.idx, code, token);
+            renderBlockbenchSnapshotPreview(contentEl, snapshot);
+            return;
+          }
           var resp = await fetch(
             'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media',
             { headers: { Authorization: 'Bearer ' + token } }

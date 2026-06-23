@@ -404,6 +404,19 @@
   };
 
   /**
+   * driveFetchFileAsText(fileId, token)
+   * Downloads a small text/JSON file via Drive API.
+   */
+  window.driveFetchFileAsText = async function (fileId, token) {
+    var resp = await fetch(
+      'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media',
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!resp.ok) throw new Error('Could not fetch file ' + fileId + ' (' + resp.status + ')');
+    return resp.text();
+  };
+
+  /**
    * driveListFolderFiles(folderId, token)
    * Returns array of { id, name } for files inside a folder.
    */
@@ -411,10 +424,19 @@
     var res = await driveReq(
       'https://www.googleapis.com/drive/v3/files' +
       '?q=' + encodeURIComponent('"' + folderId + '" in parents and trashed=false') +
-      '&fields=files(id,name)&pageSize=10',
+      '&fields=files(id,name,modifiedTime)&pageSize=100',
       { method: 'GET' }, token
     );
     return (res.files || []);
+  };
+
+  window.driveFindLatestFileByName = async function (folderId, filename, token) {
+    var files = await window.driveListFolderFiles(folderId, token);
+    return files.filter(function(file) {
+      return file && file.name === filename;
+    }).sort(function(a, b) {
+      return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || ''));
+    })[0] || null;
   };
 
   // ── Utility ───────────────────────────────────────────────────

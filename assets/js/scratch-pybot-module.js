@@ -246,10 +246,17 @@ function waitForBlockbenchQuizReady(qIdx, loadKey, attempt) {
     }
   }
   function finishReady() {
+    var q = (quiz.questions && quiz.questions[qIdx]) || {};
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Check & Submit';
-    submitBtn.onclick = function() { submitStudentBlockbenchAnswer(qIdx); };
-    if (fb) fb.textContent = 'Create a Generic Model if Blockbench asks, then build the required model.';
+    if (q.type === 'blockbench_share') {
+      submitBtn.textContent = 'Submit Model';
+      submitBtn.onclick = function() { submitStudentBlockbenchShare(qIdx); };
+      if (fb) fb.textContent = 'Build your model in Blockbench, then submit it for voting.';
+    } else {
+      submitBtn.textContent = 'Check & Submit';
+      submitBtn.onclick = function() { submitStudentBlockbenchAnswer(qIdx); };
+      if (fb) fb.textContent = 'Create a Generic Model if Blockbench asks, then build the required model.';
+    }
   }
   function poll() {
     var answerBox = document.getElementById('qs-blockbench-answer');
@@ -279,6 +286,10 @@ function resetBlockbenchQuizFrame() {
   frame.onload = null;
   frame.dataset.quizLoadKey = '';
   if (frame.src !== 'about:blank') frame.src = 'about:blank';
+}
+
+function blockbenchShareFilename(qIdx) {
+  return 'question-' + (Number(qIdx) + 1) + '-blockbench-model.json';
 }
 
 function scalePyBotQuizFrame() {
@@ -423,6 +434,187 @@ async function submitStudentBlockbenchAnswer(qIdx) {
     unlockBlockbenchTesting(frame, submitBtn, originalText);
     if (fb) fb.textContent = 'Could not check: ' + e.message;
   }
+}
+
+async function submitStudentBlockbenchShare(qIdx) {
+  if (quiz.myAnswered) return;
+  var q = quiz.questions[qIdx] || {};
+  var frame = document.getElementById('qs-blockbench-frame');
+  var fb = document.getElementById('qs-blockbench-feedback');
+  var submitBtn = document.getElementById('btn-quiz-submit-blockbench');
+  var originalText = submitBtn ? submitBtn.textContent : 'Submit Model';
+  try {
+    var cw = frame && frame.contentWindow;
+    if (!cw || !cw.Outliner) {
+      if (fb) fb.textContent = 'Editor still loading - wait a moment and try again.';
+      return;
+    }
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Checking...';
+    }
+    if (frame) frame.style.pointerEvents = 'none';
+    if (fb) fb.textContent = 'Checking your model...';
+
+    var result = validateBlockbenchQuizModel({ blockbenchCheck: q.blockbenchCheck || { minCubes: 1 } }, cw);
+    if (!result.correct) {
+      if (fb) fb.textContent = result.message || 'Add at least one cube before submitting.';
+      unlockBlockbenchTesting(frame, submitBtn, originalText);
+      return;
+    }
+
+    var token = await window.driveEnsureStudentToken(fb);
+    var folderId = await window.driveLookupStudentFolder(quiz.sessionRef);
+    if (!folderId) throw new Error('No Drive folder found for your code. Ask your teacher to restart Drive setup for this quiz.');
+
+    if (fb) fb.textContent = 'Preparing model...';
+    var snapshot = exportBlockbenchSnapshot(cw);
+    if (!snapshot.cubes.length) throw new Error('No cubes were found in the model.');
+    var json = JSON.stringify(snapshot);
+    var blob = new Blob([json], { type: 'application/json' });
+    var filename = blockbenchShareFilename(qIdx);
+
+    if (fb) fb.textContent = 'Uploading model...';
+    var fileResult = await window.driveUploadFile(folderId, filename, blob, 'application/json', token);
+
+    await quiz.sessionRef.child('answers/' + qIdx + '/' + state.uid).set({
+      submitted: true,
+      cubeCount: snapshot.cubes.length,
+      submittedAt: Date.now()
+    });
+    quiz.myAnswered = true;
+    lockStudentAnswers();
+    if (fb) {
+      fb.textContent = 'Model submitted for voting.';
+      fb.style.color = '#4ade80';
+    }
+    if (submitBtn) submitBtn.textContent = 'Submitted';
+    document.getElementById('qs-answered-msg').classList.remove('hidden');
+    document.getElementById('qs-blockbench-answer').classList.add('hidden');
+  } catch(e) {
+    unlockBlockbenchTesting(frame, submitBtn, originalText);
+    if (fb) {
+      fb.textContent = 'Could not submit: ' + e.message;
+      fb.style.color = '#f87171';
+    }
+  }
+}
+
+function exportBlockbenchSnapshot(cw) {
+  var cubes = collectBlockbenchCubes(cw).map(function(cube, idx) {
+    var el = cube.element || {};
+    return {
+      name: String(el.name || ('Cube ' + (idx + 1))).slice(0, 80),
+      from: blockbenchArray3(el.from, [0, 0, 0]),
+      to: blockbenchArray3(el.to, [8, 8, 8]),
+      origin: blockbenchArray3(el.origin, [0, 0, 0]),
+      rotation: blockbenchArray3(el.rotation, [0, 0, 0]),
+      color: typeof el.color === 'number' ? el.color : idx
+    };
+  });
+  return {
+    format: 'jhncc-blockbench-snapshot-v1',
+    version: 1,
+    exportedAt: Date.now(),
+    cubes: cubes
+  };
+}
+
+function blockbenchArray3(value, fallback) {
+  var arr = Array.isArray(value) ? value : fallback;
+  return [0, 1, 2].map(function(i) {
+    var n = Number(arr[i]);
+    return isFinite(n) ? n : fallback[i];
+  });
+}
+
+function renderBlockbenchSnapshotPreview(container, snapshot) {
+  if (!container) return;
+  container.innerHTML = '';
+  var canvas = document.createElement('canvas');
+  canvas.width = 680;
+  canvas.height = 400;
+  canvas.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;background:#101827;border-radius:0.5rem';
+  container.appendChild(canvas);
+  var ctx = canvas.getContext('2d');
+  var cubes = snapshot && Array.isArray(snapshot.cubes) ? snapshot.cubes : [];
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!cubes.length) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No cubes found in this model', canvas.width / 2, canvas.height / 2);
+    return;
+  }
+  var palette = ['#60a5fa', '#f87171', '#fbbf24', '#34d399', '#a78bfa', '#fb923c', '#f472b6', '#22d3ee'];
+  var points = [];
+  cubes.forEach(function(cube) {
+    var from = blockbenchArray3(cube.from, [0, 0, 0]);
+    var to = blockbenchArray3(cube.to, [8, 8, 8]);
+    [[from[0], from[1], from[2]], [to[0], to[1], to[2]]].forEach(function(p) { points.push(p); });
+  });
+  var minX = Math.min.apply(null, points.map(function(p) { return p[0]; }));
+  var maxX = Math.max.apply(null, points.map(function(p) { return p[0]; }));
+  var minY = Math.min.apply(null, points.map(function(p) { return p[1]; }));
+  var maxY = Math.max.apply(null, points.map(function(p) { return p[1]; }));
+  var minZ = Math.min.apply(null, points.map(function(p) { return p[2]; }));
+  var maxZ = Math.max.apply(null, points.map(function(p) { return p[2]; }));
+  var span = Math.max(1, maxX - minX + maxY - minY + maxZ - minZ);
+  var scale = Math.min(12, 420 / span);
+  var ox = canvas.width / 2;
+  var oy = canvas.height * 0.68;
+  function iso(p) {
+    var x = (p[0] - (minX + maxX) / 2);
+    var y = (p[1] - minY);
+    var z = (p[2] - (minZ + maxZ) / 2);
+    return {
+      x: ox + (x - z) * scale * 0.9,
+      y: oy - y * scale - (x + z) * scale * 0.45
+    };
+  }
+  function poly(points2, fill, stroke) {
+    ctx.beginPath();
+    points2.forEach(function(p, i) {
+      if (i) ctx.lineTo(p.x, p.y);
+      else ctx.moveTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke || 'rgba(15,23,42,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  cubes.slice().sort(function(a, b) {
+    var af = blockbenchArray3(a.from, [0,0,0]);
+    var bf = blockbenchArray3(b.from, [0,0,0]);
+    return (af[0] + af[1] + af[2]) - (bf[0] + bf[1] + bf[2]);
+  }).forEach(function(cube, idx) {
+    var f = blockbenchArray3(cube.from, [0, 0, 0]);
+    var t = blockbenchArray3(cube.to, [8, 8, 8]);
+    var base = palette[Math.abs(Number(cube.color) || idx) % palette.length];
+    var p000 = iso([f[0], f[1], f[2]]);
+    var p100 = iso([t[0], f[1], f[2]]);
+    var p010 = iso([f[0], t[1], f[2]]);
+    var p110 = iso([t[0], t[1], f[2]]);
+    var p001 = iso([f[0], f[1], t[2]]);
+    var p101 = iso([t[0], f[1], t[2]]);
+    var p011 = iso([f[0], t[1], t[2]]);
+    var p111 = iso([t[0], t[1], t[2]]);
+    poly([p010, p110, p111, p011], base, 'rgba(15,23,42,0.55)');
+    poly([p001, p101, p111, p011], shadeBlockbenchColour(base, -18), 'rgba(15,23,42,0.55)');
+    poly([p100, p101, p111, p110], shadeBlockbenchColour(base, -34), 'rgba(15,23,42,0.55)');
+    poly([p000, p100, p110, p010], shadeBlockbenchColour(base, -48), 'rgba(15,23,42,0.35)');
+  });
+}
+
+function shadeBlockbenchColour(hex, amount) {
+  var n = parseInt(String(hex).replace('#', ''), 16);
+  var r = Math.max(0, Math.min(255, (n >> 16) + amount));
+  var g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amount));
+  var b = Math.max(0, Math.min(255, (n & 255) + amount));
+  return '#' + [r, g, b].map(function(v) { return v.toString(16).padStart(2, '0'); }).join('');
 }
 
 function unlockBlockbenchTesting(frame, submitBtn, originalText) {

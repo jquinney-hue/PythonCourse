@@ -830,7 +830,7 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   var isWidget = q.type === 'bit_input' || q.type === 'addition_input';
   var isScratch = q.type === 'scratch_build';
   var isPyBot = q.type === 'pybot_level';
-  var isBlockbench = q.type === 'blockbench_build';
+  var isBlockbench = q.type === 'blockbench_build' || q.type === 'blockbench_share';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
   var isPyScratchShare = q.type === 'pyscratch_share';
@@ -1164,6 +1164,33 @@ function driveEnsureStudentTokenCached(cb, statusEl) {
   });
 }
 
+function quizSafeFirebaseKey(value) {
+  return String(value || '').replace(/[.#$/[\]]/g, '_');
+}
+
+function blockbenchShareQuestionFilename(qIdx) {
+  if (typeof blockbenchShareFilename === 'function') return blockbenchShareFilename(qIdx);
+  return 'question-' + (Number(qIdx) + 1) + '-blockbench-model.json';
+}
+
+async function getQuizStudentFolderId(code) {
+  if (!quiz.sessionRef || !code) return null;
+  var snap = await quiz.sessionRef.child('studentFolders/' + quizSafeFirebaseKey(code)).get();
+  return snap.exists() ? snap.val() : null;
+}
+
+async function loadBlockbenchShareSnapshot(qIdx, code, token) {
+  var folderId = await getQuizStudentFolderId(code);
+  if (!folderId) throw new Error('No Drive folder found for this student.');
+  var filename = blockbenchShareQuestionFilename(qIdx);
+  var file = await window.driveFindLatestFileByName(folderId, filename, token);
+  if (!file || !file.id) throw new Error('No submitted Blockbench model found.');
+  var text = await window.driveFetchFileAsText(file.id, token);
+  var snapshot = JSON.parse(text);
+  if (!snapshot || snapshot.format !== 'jhncc-blockbench-snapshot-v1') throw new Error('The model file is not in the expected format.');
+  return snapshot;
+}
+
 function processVotingItems(qIdx, items, index, token, cardEl) {
   if (index >= items.length) {
     cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center text-lg mt-8">&#x2713; All voted! Waiting for results…</p>';
@@ -1236,9 +1263,21 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
     }
   }, 200);
 
-  // Load image (or game for pyscratch_share)
+  // Load image, game, or Blockbench model preview.
   var imgWrap = document.getElementById('qs-vcard-img-wrap');
   var votingQType = quiz.questions && quiz.questions[qIdx] && quiz.questions[qIdx].type;
+  if (votingQType === 'blockbench_share') {
+    if (imgWrap) {
+      imgWrap.innerHTML = '<p style="color:#94a3b8;font-size:0.8rem;text-align:center;padding:1rem">Loading model...</p>';
+    }
+    loadBlockbenchShareSnapshot(qIdx, itemCode, token).then(function(snapshot) {
+      if (voted || !imgWrap) return;
+      renderBlockbenchSnapshotPreview(imgWrap, snapshot);
+    }).catch(function(e) {
+      if (imgWrap) imgWrap.innerHTML = '<p style="color:#f87171;font-size:0.8rem;text-align:center;padding:1rem">Could not load model: ' + escapeHtml(e.message) + '</p>';
+    });
+    return;
+  }
   if (votingQType === 'pyscratch_share') {
     // Show game iframe instead of image — download SB3 and load into PyScratch player
     if (imgWrap) {
@@ -1307,6 +1346,7 @@ async function renderStudentShowcase(qIdx) {
   }
 
   gridEl.innerHTML = '';
+  var showcaseQType = quiz.questions && quiz.questions[qIdx] && quiz.questions[qIdx].type;
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
     var avg = typeof item.avg === 'number' ? item.avg.toFixed(1) : '–';
@@ -1321,7 +1361,17 @@ async function renderStudentShowcase(qIdx) {
       '<span class="font-semibold text-gray-100 flex-1 mx-3 truncate">' + escapeHtml(displayName) + '</span>' +
       '<span class="text-yellow-400 font-bold text-sm shrink-0">' + avg + ' &#x2B50;</span>';
     card.appendChild(header);
-    if (item.fileId && token) {
+    if (token && showcaseQType === 'blockbench_share') {
+      var modelPlaceholder = document.createElement('div');
+      modelPlaceholder.style.cssText = 'width:100%;aspect-ratio:17/10;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.8rem';
+      modelPlaceholder.textContent = 'Loading model...';
+      card.appendChild(modelPlaceholder);
+      (function(ph, codeForModel, tkn) {
+        loadBlockbenchShareSnapshot(qIdx, codeForModel, tkn).then(function(snapshot) {
+          renderBlockbenchSnapshotPreview(ph, snapshot);
+        }).catch(function() { ph.textContent = 'Could not load model'; });
+      })(modelPlaceholder, code, token);
+    } else if (item.fileId && token) {
       var imgPlaceholder = document.createElement('div');
       imgPlaceholder.style.cssText = 'width:100%;aspect-ratio:17/10;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.8rem';
       imgPlaceholder.textContent = 'Loading…';
@@ -1350,7 +1400,7 @@ function renderStudentLeaderboard(lb) {
   var lbArr = quiz._lastStudentLeaderboard;
 
   var hasMedia = (quiz.questions || []).some(function(q) {
-    return q.type === 'canvas' || q.type === 'pyscratch_share';
+    return q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share';
   });
 
   el.innerHTML = '';
@@ -1371,7 +1421,7 @@ function renderStudentLeaderboard(lb) {
       '<span class="font-bold text-yellow-400 text-right shrink-0">' + entry.score + '/' + total + '</span>';
 
     if (hasMedia) {
-      row.title = 'Click to view their drawing';
+      row.title = 'Click to view their submission';
       row.onclick = function() { showStudentWorkForCode(entry.code); };
     }
     container.appendChild(row);
@@ -1386,7 +1436,7 @@ async function showStudentWorkForCode(code) {
   var mediaQs = (quiz.questions || []).map(function(q, i) {
     return { q: q, idx: i };
   }).filter(function(item) {
-    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share';
+    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share' || item.q.type === 'blockbench_share';
   });
   if (!mediaQs.length) return;
 
@@ -1452,8 +1502,17 @@ async function showStudentWorkForCode(code) {
       }
       sessionRef.child('answers/' + mq.idx + '/' + code).get().then(function(ansSnap) {
         var fileId = ansSnap.exists() ? ansSnap.child('fileId').val() : null;
-        if (!fileId) {
+        var submitted = ansSnap.exists() && ansSnap.child('submitted').val() === true;
+        if (!fileId && !(mq.q.type === 'blockbench_share' && submitted)) {
           contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission.</p>';
+          return;
+        }
+        if (mq.q.type === 'blockbench_share') {
+          loadBlockbenchShareSnapshot(mq.idx, code, token).then(function(snapshot) {
+            renderBlockbenchSnapshotPreview(contentEl, snapshot);
+          }).catch(function(e) {
+            contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load model: ' + escapeHtml(e.message) + '</p>';
+          });
           return;
         }
         window.driveFetchFileAsDataUrl(fileId, token).then(function(dataUrl) {
