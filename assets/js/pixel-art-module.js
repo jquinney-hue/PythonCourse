@@ -719,4 +719,389 @@
   // Called by quiz-student-module when rendering pixel_art images from Drive.
   window.PA_IS_PIXEL_ART_TYPE = function(type) { return type === 'pixel_art'; };
 
+  // ── Practice canvas (lesson step) ─────────────────────────────────────────
+  // Self-contained pixel art canvas for lesson mode. Uses pra-* IDs so it
+  // never clashes with the quiz panel (qs-pixel-art-answer / pa-* IDs).
+
+  var pra = {
+    pixels: null, mapId: 'classic', colorIdx: -1,
+    timerEnd: 0, timerRaf: null, tool: 'paint',
+    lineStart: null, mouseDown: false, buffer: '', calcExpr: ''
+  };
+
+  function praG(id)      { return document.getElementById(id); }
+  function praColors()   { return (COLOR_MAPS.find(function(m){ return m.id === pra.mapId; }) || COLOR_MAPS[0]).colors; }
+
+  function praRedraw(overlay) {
+    var c = praG('pra-canvas'); if (!c || !pra.pixels) return;
+    var ctx = c.getContext('2d'), colors = praColors();
+    ctx.imageSmoothingEnabled = false;
+    for (var i = 0; i < 256; i++) {
+      var ci = (overlay && overlay[i] !== undefined) ? overlay[i] : pra.pixels[i];
+      ctx.fillStyle = colors[ci];
+      ctx.fillRect((i % 16) * 32, Math.floor(i / 16) * 32, 32, 32);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 0.5;
+    for (var g = 1; g < 16; g++) {
+      ctx.beginPath(); ctx.moveTo(g*32, 0);   ctx.lineTo(g*32, 512); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,   g*32); ctx.lineTo(512,  g*32); ctx.stroke();
+    }
+  }
+
+  function praPaint(x, y) {
+    if (pra.colorIdx < 0) return;
+    pra.pixels[y*16+x] = pra.colorIdx;
+    var c = praG('pra-canvas'); if (!c) return;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = praColors()[pra.colorIdx];
+    ctx.fillRect(x*32, y*32, 32, 32);
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 0.5;
+    if (x > 0) { ctx.beginPath(); ctx.moveTo(x*32, y*32); ctx.lineTo(x*32, (y+1)*32); ctx.stroke(); }
+    if (y > 0) { ctx.beginPath(); ctx.moveTo(x*32, y*32); ctx.lineTo((x+1)*32, y*32); ctx.stroke(); }
+  }
+
+  function praFill(sx, sy) {
+    if (pra.colorIdx < 0) return;
+    var old = pra.pixels[sy*16+sx], nw = pra.colorIdx;
+    if (old === nw) return;
+    var stack = [sy*16+sx], vis = new Uint8Array(256);
+    while (stack.length) {
+      var idx = stack.pop(), x = idx%16, y = Math.floor(idx/16);
+      if (x < 0 || x >= 16 || y < 0 || y >= 16 || vis[idx] || pra.pixels[idx] !== old) continue;
+      vis[idx] = 1; pra.pixels[idx] = nw;
+      stack.push(idx+1, idx-1, idx+16, idx-16);
+    }
+    praRedraw();
+  }
+
+  function praCellAt(c, cx, cy) {
+    var r = c.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(15, Math.floor((cx - r.left) / r.width  * 16))),
+      y: Math.max(0, Math.min(15, Math.floor((cy - r.top)  / r.height * 16)))
+    };
+  }
+
+  function praFlashNeedColour() {
+    var h = praG('pra-binary-hint'); if (!h) return;
+    var old = h.textContent;
+    h.textContent = 'Type binary first!'; h.style.color = '#f87171';
+    setTimeout(function(){ h.textContent = old; h.style.color = '#475569'; }, 2000);
+  }
+
+  function praOnDown(e) {
+    e.preventDefault();
+    var c = praG('pra-canvas'); if (!c) return;
+    var pt = e.touches ? e.touches[0] : e, cell = praCellAt(c, pt.clientX, pt.clientY);
+    if (pra.tool === 'paint') {
+      if (pra.colorIdx < 0) { praFlashNeedColour(); return; }
+      pra.mouseDown = true; praPaint(cell.x, cell.y); praSave();
+    } else if (pra.tool === 'fill') {
+      if (pra.colorIdx < 0) { praFlashNeedColour(); return; }
+      praFill(cell.x, cell.y); praSave();
+    } else if (pra.tool === 'line') {
+      if (pra.colorIdx < 0) { praFlashNeedColour(); return; }
+      if (!pra.lineStart) { pra.lineStart = cell; }
+      else {
+        bresenham(pra.lineStart.x, pra.lineStart.y, cell.x, cell.y)
+          .forEach(function(p){ pra.pixels[p.y*16+p.x] = pra.colorIdx; });
+        pra.lineStart = null; praRedraw(); praSave();
+      }
+    }
+  }
+
+  function praOnMove(e) {
+    e.preventDefault();
+    var c = praG('pra-canvas'); if (!c) return;
+    var pt = e.touches ? e.touches[0] : e, cell = praCellAt(c, pt.clientX, pt.clientY);
+    if (pra.tool === 'paint' && pra.mouseDown && pra.colorIdx >= 0) {
+      praPaint(cell.x, cell.y);
+    } else if (pra.tool === 'line' && pra.lineStart && pra.colorIdx >= 0) {
+      var ov = Array.from(pra.pixels);
+      bresenham(pra.lineStart.x, pra.lineStart.y, cell.x, cell.y)
+        .forEach(function(p){ ov[p.y*16+p.x] = pra.colorIdx; });
+      praRedraw(ov);
+    }
+  }
+
+  function praOnUp() { if (pra.mouseDown) { pra.mouseDown = false; praSave(); } }
+
+  var _praSaveTimer = null;
+  function praSave() {
+    clearTimeout(_praSaveTimer);
+    _praSaveTimer = setTimeout(function(){
+      try { localStorage.setItem('pylearn_pra_practice', JSON.stringify(Array.from(pra.pixels))); } catch(_){}
+    }, 400);
+  }
+
+  function praRestore() {
+    try {
+      var raw = localStorage.getItem('pylearn_pra_practice');
+      if (!raw) return false;
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr) || arr.length !== 256) return false;
+      for (var i = 0; i < 256; i++) pra.pixels[i] = arr[i] & 0xf;
+      praRedraw(); return true;
+    } catch(_){ return false; }
+  }
+
+  function praRenderBinaryDisplay() {
+    var container = praG('pra-binary-cells'); if (!container) return;
+    container.innerHTML = '';
+    for (var i = 0; i < 4; i++) {
+      var bit = pra.buffer[i], div = document.createElement('div');
+      div.style.cssText =
+        'width:36px;height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;' +
+        'font-size:1.5rem;font-weight:700;font-family:monospace;color:#e2e8f0;' +
+        'border:2px solid ' + (i < pra.buffer.length ? '#3b82f6' : (i === pra.buffer.length ? '#6366f1' : '#334155')) + ';' +
+        'background:' + (i < pra.buffer.length ? '#1e3a5f' : '#0f172a') + ';' +
+        (i === pra.buffer.length ? 'box-shadow:0 0 0 3px rgba(99,102,241,0.4);' : '');
+      div.textContent = bit !== undefined ? bit : '';
+      container.appendChild(div);
+    }
+    var hint = praG('pra-binary-hint');
+    if (hint) {
+      if (pra.buffer.length > 0 && pra.buffer.length < 4) {
+        hint.textContent = pra.buffer.length + ' of 4 bits…'; hint.style.color = '#6366f1';
+      } else {
+        hint.textContent = 'Type 0 or 1 on keyboard'; hint.style.color = '#475569';
+      }
+    }
+  }
+
+  function praKeyHandler(e) {
+    if (!praG('pra-canvas')) return;
+    if (e.key === '0' || e.key === '1') {
+      e.preventDefault();
+      pra.buffer = (pra.buffer + e.key).slice(0, 4);
+      praRenderBinaryDisplay();
+      if (pra.buffer.length === 4) {
+        var idx = parseInt(pra.buffer, 2); pra.buffer = '';
+        praRenderBinaryDisplay(); praStartTimer(idx);
+      }
+    } else if (e.key === 'Backspace') {
+      e.preventDefault(); pra.buffer = pra.buffer.slice(0, -1); praRenderBinaryDisplay();
+    }
+  }
+
+  function praStartTimer(idx) {
+    praStopTimer();
+    pra.colorIdx = idx; pra.timerEnd = Date.now() + 20000;
+    var tw = praG('pra-timer-wrap'), te = praG('pra-timer-expired');
+    if (tw) tw.style.display = ''; if (te) te.style.display = 'none';
+    praRenderColour(); praRenderPalette(); praTick();
+  }
+
+  function praStopTimer() {
+    if (pra.timerRaf) { cancelAnimationFrame(pra.timerRaf); pra.timerRaf = null; }
+  }
+
+  function praTick() {
+    var rem = Math.max(0, pra.timerEnd - Date.now());
+    var s = praG('pra-timer-secs'), b = praG('pra-timer-bar');
+    if (s) s.textContent = Math.ceil(rem / 1000) + 's';
+    if (b) b.style.width  = (rem / 20000 * 100) + '%';
+    if (rem <= 0) {
+      pra.colorIdx = -1;
+      var tw = praG('pra-timer-wrap'), te = praG('pra-timer-expired');
+      if (tw) tw.style.display = 'none'; if (te) te.style.display = '';
+      praRenderColour(); praRenderPalette(); return;
+    }
+    pra.timerRaf = requestAnimationFrame(praTick);
+  }
+
+  function praRenderColour() {
+    var sw = praG('pra-sel-swatch'), lb = praG('pra-sel-label'), colors = praColors();
+    if (pra.colorIdx < 0) {
+      if (sw) { sw.style.background = 'transparent'; sw.style.border = '2px dashed #334155'; }
+      if (lb) lb.textContent = 'No colour selected';
+    } else {
+      if (sw) { sw.style.background = colors[pra.colorIdx]; sw.style.border = '2px solid rgba(255,255,255,0.2)'; }
+      if (lb) lb.textContent = d2b(pra.colorIdx) + ' = ' + pra.colorIdx;
+    }
+  }
+
+  function praRenderPalette() {
+    var container = praG('pra-palette'); if (!container) return;
+    var colors = praColors(); container.innerHTML = '';
+    for (var i = 0; i < 16; i++) {
+      var row = document.createElement('div');
+      row.style.cssText =
+        'display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:5px;cursor:default;' +
+        (i === pra.colorIdx ? 'background:rgba(59,130,246,0.25);outline:1px solid #3b82f6;' : '');
+      var sw = document.createElement('div');
+      sw.style.cssText = 'width:20px;height:20px;border-radius:3px;flex-shrink:0;border:1px solid rgba(255,255,255,0.15);background:' + colors[i];
+      var lb = document.createElement('span');
+      lb.style.cssText = 'font-family:monospace;font-size:0.72rem;color:' + (i === pra.colorIdx ? '#93c5fd' : '#64748b');
+      lb.textContent = i + '';
+      row.appendChild(sw); row.appendChild(lb); container.appendChild(row);
+    }
+  }
+
+  function praUpdateTools() {
+    ['paint', 'line', 'fill'].forEach(function(t) {
+      var btn = praG('btn-pra-' + t); if (!btn) return;
+      var active = t === pra.tool;
+      btn.style.borderColor = active ? '#3b82f6' : '#334155';
+      btn.style.background  = active ? '#1e3a5f' : '#1e293b';
+      btn.style.color       = active ? '#93c5fd' : '#94a3b8';
+    });
+  }
+
+  function praInitCalc() {
+    pra.calcExpr = ''; praCalcDisplay('0');
+    var grid = praG('pra-calc-grid'); if (!grid) return;
+    grid.innerHTML = '';
+    [['7','8','9','÷'],['4','5','6','×'],['1','2','3','−'],['C','0','=','+']].forEach(function(row) {
+      row.forEach(function(label) {
+        var btn = document.createElement('button');
+        btn.textContent = label;
+        var isOp = ['÷','×','−','+'].indexOf(label) >= 0, isEq = label === '=', isCl = label === 'C';
+        btn.style.cssText =
+          'padding:10px 0;border-radius:5px;font-size:0.95rem;font-weight:600;cursor:pointer;border:none;' +
+          'background:' + (isCl ? '#7f1d1d' : isEq ? '#1d4ed8' : isOp ? '#334155' : '#1e293b') + ';color:#e2e8f0;';
+        btn.onclick = function() { praCalcPress(label); };
+        grid.appendChild(btn);
+      });
+    });
+  }
+
+  function praCalcPress(key) {
+    if (key === 'C') { pra.calcExpr = ''; praCalcDisplay('0'); return; }
+    if (key === '=') {
+      try {
+        var r = Function('"use strict";return (' + pra.calcExpr.replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-') + ')')();
+        r = Math.round(r * 1e10) / 1e10; pra.calcExpr = String(r); praCalcDisplay(String(r));
+      } catch(_){ praCalcDisplay('Error'); pra.calcExpr = ''; }
+      return;
+    }
+    pra.calcExpr += key; praCalcDisplay(pra.calcExpr);
+  }
+
+  function praCalcDisplay(val) { var e = praG('pra-calc-display'); if (e) e.textContent = val || '0'; }
+
+  function praPopulateMap() {
+    var sel = praG('pra-colormap'); if (!sel) return;
+    sel.innerHTML = '';
+    COLOR_MAPS.forEach(function(m) {
+      var opt = document.createElement('option');
+      opt.value = m.id; opt.textContent = m.name;
+      if (m.id === pra.mapId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = function() { pra.mapId = this.value; praRedraw(); praRenderPalette(); praRenderColour(); };
+  }
+
+  window.initPixelArtPractice = function(containerId) {
+    var wrap = document.getElementById(containerId); if (!wrap) return;
+
+    wrap.innerHTML = [
+      '<div id="qs-pra-answer" style="width:100%">',
+        '<div style="display:flex;gap:10px;height:520px">',
+          '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">',
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">',
+              '<button id="btn-pra-paint" style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #3b82f6;background:#1e3a5f;color:#93c5fd">Paint</button>',
+              '<button id="btn-pra-line"  style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#94a3b8">Line</button>',
+              '<button id="btn-pra-fill"  style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#94a3b8">Fill</button>',
+              '<button id="btn-pra-clear" style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ef4444;background:#1e293b;color:#f87171">Clear</button>',
+            '</div>',
+            '<div style="flex:1;min-height:0;background:#0a0f1a;border-radius:6px;border:1px solid #334155;display:flex;align-items:center;justify-content:center;overflow:hidden">',
+              '<canvas id="pra-canvas" width="512" height="512" style="max-width:100%;max-height:100%;image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair;display:block;touch-action:none"></canvas>',
+            '</div>',
+          '</div>',
+          '<div style="width:210px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;overflow-y:auto">',
+            '<div>',
+              '<div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Colour Map</div>',
+              '<select id="pra-colormap" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:4px 6px;font-size:0.82rem"></select>',
+            '</div>',
+            '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px">',
+              '<div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Selected Colour</div>',
+              '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">',
+                '<div id="pra-sel-swatch" style="width:30px;height:30px;border-radius:5px;border:2px dashed #334155;flex-shrink:0"></div>',
+                '<span id="pra-sel-label" style="font-size:0.82rem;font-weight:600;color:#94a3b8;font-family:monospace">No colour selected</span>',
+              '</div>',
+              '<div id="pra-timer-wrap" style="display:none">',
+                '<div style="display:flex;justify-content:space-between;font-size:0.68rem;color:#64748b;margin-bottom:3px">',
+                  '<span>Expires in</span><span id="pra-timer-secs" style="color:#fbbf24;font-weight:700">20s</span>',
+                '</div>',
+                '<div style="background:#1e293b;border-radius:99px;height:5px;overflow:hidden">',
+                  '<div id="pra-timer-bar" style="height:100%;width:100%;background:#fbbf24;border-radius:99px"></div>',
+                '</div>',
+              '</div>',
+              '<div id="pra-timer-expired" style="display:none;font-size:0.7rem;color:#f87171;font-weight:600;margin-top:4px">Type new binary to continue</div>',
+            '</div>',
+            '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px">',
+              '<div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Type Binary (4 bits)</div>',
+              '<div id="pra-binary-cells" style="display:flex;gap:4px;justify-content:center;margin-bottom:6px"></div>',
+              '<div id="pra-binary-hint" style="font-size:0.68rem;color:#475569;text-align:center;margin-bottom:6px">Type 0 or 1 on keyboard</div>',
+              '<div style="display:flex;gap:4px;justify-content:center">',
+                '<button id="btn-pra-bit-0" style="flex:1;padding:6px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;font-size:1.1rem;font-weight:700;font-family:monospace;cursor:pointer">0</button>',
+                '<button id="btn-pra-bit-1" style="flex:1;padding:6px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;font-size:1.1rem;font-weight:700;font-family:monospace;cursor:pointer">1</button>',
+                '<button id="btn-pra-bit-bs" style="flex:1;padding:6px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:0.85rem;cursor:pointer">&#x232B;</button>',
+              '</div>',
+            '</div>',
+            '<div>',
+              '<div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Colours</div>',
+              '<div id="pra-palette" style="display:flex;flex-direction:column;gap:1px"></div>',
+            '</div>',
+            '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px">',
+              '<div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Calculator</div>',
+              '<div id="pra-calc-display" style="background:#1e293b;color:#e2e8f0;font-family:monospace;font-size:1.1rem;text-align:right;padding:6px 8px;border-radius:4px;margin-bottom:6px;min-height:2rem;word-break:break-all">0</div>',
+              '<div id="pra-calc-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px"></div>',
+            '</div>',
+          '</div>',
+        '</div>',
+      '</div>'
+    ].join('');
+
+    // Reset state
+    pra.pixels    = new Uint8Array(256);
+    pra.colorIdx  = -1; pra.buffer = ''; pra.tool = 'paint';
+    pra.lineStart = null; pra.mouseDown = false; pra.calcExpr = '';
+    praStopTimer();
+
+    // Replace canvas to clear old listeners
+    var oldC = praG('pra-canvas');
+    if (oldC) {
+      var newC = oldC.cloneNode(false);
+      newC.width = 512; newC.height = 512;
+      oldC.parentNode.replaceChild(newC, oldC);
+    }
+    praRestore() || praRedraw();
+
+    var c = praG('pra-canvas');
+    if (c) {
+      c.addEventListener('mousedown',  praOnDown, { passive: false });
+      c.addEventListener('mousemove',  praOnMove, { passive: false });
+      c.addEventListener('mouseup',    praOnUp);
+      c.addEventListener('mouseleave', praOnUp);
+      c.addEventListener('touchstart', praOnDown, { passive: false });
+      c.addEventListener('touchmove',  praOnMove, { passive: false });
+      c.addEventListener('touchend',   praOnUp);
+    }
+
+    ['paint', 'line', 'fill'].forEach(function(t) {
+      var btn = praG('btn-pra-' + t); if (!btn) return;
+      btn.onclick = function() { pra.tool = t; pra.lineStart = null; praUpdateTools(); };
+    });
+    praUpdateTools();
+
+    var clr = praG('btn-pra-clear');
+    if (clr) clr.onclick = function() { pra.pixels.fill(0); pra.lineStart = null; praRedraw(); praSave(); };
+
+    var b0 = praG('btn-pra-bit-0'), b1 = praG('btn-pra-bit-1'), bs = praG('btn-pra-bit-bs');
+    if (b0) b0.onclick = function() { praKeyHandler({ key: '0', preventDefault: function(){} }); };
+    if (b1) b1.onclick = function() { praKeyHandler({ key: '1', preventDefault: function(){} }); };
+    if (bs) bs.onclick = function() { praKeyHandler({ key: 'Backspace', preventDefault: function(){} }); };
+
+    praPopulateMap();
+    praRenderPalette();
+    praRenderBinaryDisplay();
+    praRenderColour();
+    praInitCalc();
+
+    document.removeEventListener('keydown', praKeyHandler);
+    document.addEventListener('keydown', praKeyHandler);
+  };
+
 })();
