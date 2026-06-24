@@ -341,6 +341,12 @@
   /** Clear cached credentials (call on quiz exit). */
   window.driveClearStudentToken = function () { _studentToken = null; _studentEmail = null; };
 
+  /** Pre-fill credentials from the student login flow so Drive activities need no extra prompt. */
+  window.drivePreloadStudentToken = function (token, email) {
+    _studentToken = token;
+    _studentEmail = String(email || '').toLowerCase().trim();
+  };
+
   // ── Student: find their folder from Firebase ───────────────────
 
   /**

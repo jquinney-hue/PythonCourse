@@ -34,7 +34,9 @@ var googleStudentAccessToken = null;
 function getGoogleStudentScopes() {
   return [
     'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/drive.file',     // upload own quiz submissions
+    'https://www.googleapis.com/auth/drive.readonly', // view classmates' submissions (gallery)
     'https://www.googleapis.com/auth/spreadsheets.readonly'
   ].join(' ');
 }
@@ -400,6 +402,12 @@ async function signInGoogleStudent() {
     ]);
     var email     = results[0];
     var sheetData = results[1];
+
+    // Pre-fill Drive module so quiz activities don't need a separate Google prompt.
+    // The login token already carries all Drive scopes from getGoogleStudentScopes().
+    if (window.drivePreloadStudentToken) {
+      window.drivePreloadStudentToken(googleStudentAccessToken, email);
+    }
 
     var lookup = searchStudentSheetData(sheetData, email);
     var match  = lookup && lookup.match;
