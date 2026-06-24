@@ -1,74 +1,75 @@
 {
   "id": "year8-pixel-art-quiz",
-  "title": "Pixel Art Quiz",
-  "description": "16×16 pixel art quiz. Students select colours by typing their binary value and vote on each other's artwork.",
+  "title": "L2: Pixel Art Binary",
+  "description": "Practice converting colour numbers to 4-bit binary, then create pixel art in the class quiz.",
   "steps": [
     {
-      "id": "intro",
-      "title": "Pixel Art Quiz",
-      "autoComplete": true,
-      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Pixel Art Quiz</h2><p class='text-gray-700 mb-3'>In this quiz you will create a 16×16 pixel art drawing. To select a colour you must type its <strong>4-bit binary number</strong> — use the calculator and colour chart on the right to help you work out which binary number to type.</p><p class='text-gray-500 text-sm'>Your teacher must connect Google Drive before this quiz can start.</p>"
+      "id": "colour-chart",
+      "title": "Colour Chart",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Colour chart</h2><p class='text-gray-700 mb-4'>The pixel art canvas has 16 colours, numbered 0 to 15. To paint with a colour you type its <strong>4-bit binary code</strong>. Look up the colour number in the chart, then convert it.</p><div class='ex-box' style='padding:0.75rem 0.5rem'><table style='width:100%;border-collapse:collapse;font-size:0.875rem'><thead><tr style='border-bottom:1px solid #334155;color:#94a3b8'><th style='padding:4px 6px;text-align:right;font-weight:600'>No.</th><th style='padding:4px 6px'></th><th style='padding:4px 6px;text-align:left;font-weight:600'>Name</th><th style='padding:4px 6px;width:1.5rem'></th><th style='padding:4px 6px;text-align:right;font-weight:600'>No.</th><th style='padding:4px 6px'></th><th style='padding:4px 6px;text-align:left;font-weight:600'>Name</th></tr></thead><tbody><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>0</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#000000;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Black</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>8</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#888888;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Grey</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>1</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#ffffff;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>White</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>9</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#cccccc;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Light Grey</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>2</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#ff2200;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Red</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>10</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#ff8800;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Orange</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>3</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#00bb00;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Green</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>11</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#9900cc;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Purple</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>4</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#0000ff;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Blue</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>12</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#00aa88;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Teal</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>5</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#ffff00;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Yellow</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>13</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#aa0000;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Dark Red</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>6</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#ff00ff;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Pink</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>14</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#0055cc;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Dark Blue</td></tr><tr><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>7</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#00ffff;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Cyan</td><td></td><td style='padding:5px 6px;text-align:right;color:#e2e8f0'>15</td><td style='padding:5px 6px'><span style='display:inline-block;width:22px;height:22px;background:#ffaa66;border:1px solid #475569;border-radius:3px;vertical-align:middle'></span></td><td style='padding:5px 6px;color:#cbd5e1'>Peach</td></tr></tbody></table></div><p class='text-gray-500 text-sm mt-3'>Your teacher may use a different palette — the colour numbers still work the same way.</p><div id='y8pa-check' style='margin-top:1.25rem'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8pa-check',questions:[{prompt:'What binary code selects Red (colour 2)?',answer:'0010',right:'Correct. 2 in binary is 0010.'},{prompt:'What binary code selects Green (colour 3)?',answer:'0011',right:'Correct. 3 in binary is 0011.'},{prompt:'What binary code selects Yellow (colour 5)?',answer:'0101',right:'Correct. 5 in binary is 0101.'},{prompt:'What binary code selects Orange (colour 10)?',answer:'1010',right:'Correct. 10 in binary is 1010. (8 + 2)'},{prompt:'What binary code selects Purple (colour 11)?',answer:'1011',right:'Correct. 11 in binary is 1011. (8 + 2 + 1)'},{prompt:'What binary code selects Peach (colour 15)?',answer:'1111',right:'Correct. 15 in binary is 1111. All four columns are on.'}]});"
     }
   ],
   "quizQuestions": [
     {
       "type": "pixel_art",
-      "q": "Create a pixel art drawing of your favourite animal! 🐾",
+      "q": "Create a pixel art drawing of your favourite animal!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Draw a pixel art portrait of yourself! 🧑‍🎨",
+      "q": "Draw a pixel art portrait of yourself!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Draw your favourite food or drink in pixel art! 🍕",
+      "q": "Draw your favourite food or drink in pixel art!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Create a pixel art scene of your dream house! 🏠",
+      "q": "Create a pixel art scene of your dream house!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Draw a pixel art landscape — could be a beach, mountain, city or anything you like! 🌄",
+      "q": "Draw a pixel art landscape — beach, mountain, city, or anything you like!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Create a pixel art character for a video game — hero, villain or anything in between! 🎮",
+      "q": "Create a pixel art character for a video game — hero, villain, or anything in between!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Draw a pixel art spaceship or alien planet! 🚀",
+      "q": "Draw a pixel art spaceship or alien planet!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Create pixel art of your favourite sport or hobby! ⚽",
+      "q": "Create pixel art of your favourite sport or hobby!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Free draw — create anything you like in pixel art! 🎨",
+      "q": "Free draw — create anything you like in pixel art!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Draw a pixel art map of an imaginary place — give it features, landmarks and a name! 🗺️",
+      "q": "Draw a pixel art map of an imaginary place — give it features, landmarks and a name!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Create a pixel art logo for an imaginary company or game! 🏷️",
+      "q": "Create a pixel art logo for an imaginary company or game!",
       "duration": 300
     },
     {
       "type": "pixel_art",
-      "q": "Draw a pixel art monster or mythical creature of your own invention! 👾",
+      "q": "Draw a pixel art monster or mythical creature of your own invention!",
       "duration": 300
     }
   ]

@@ -139,54 +139,24 @@
               "title": "TEST: Canvas Drawing Quiz",
               "file": "lessons/test-canvas-quiz.json",
               "order": 1
-            },
-            {
-              "id": "year8-pixel-art-quiz",
-              "title": "Pixel Art Quiz",
-              "file": "lessons/year8-pixel-art-quiz.json",
-              "order": 2
             }
           ]
         },
         {
-          "id": "data-representation",
-          "label": "Data Representation",
+          "id": "binary",
+          "label": "Binary",
           "lessons": [
             {
-              "id": "year8-representation-time-space",
-              "title": "L1: Across Time and Space",
-              "file": "lessons/year8-representation-time-space.json",
+              "id": "year8-numbers-in-binary",
+              "title": "L1: Numbers in Binary",
+              "file": "lessons/year8-numbers-in-binary.json",
               "order": 1
             },
             {
-              "id": "year8-lights-drums",
-              "title": "L2: Lights and Drums",
-              "file": "lessons/year8-lights-drums.json",
+              "id": "year8-pixel-art-quiz",
+              "title": "L2: Pixel Art Binary",
+              "file": "lessons/year8-pixel-art-quiz.json",
               "order": 2
-            },
-            {
-              "id": "year8-binary-digits",
-              "title": "L3: Binary Digits",
-              "file": "lessons/year8-binary-digits.json",
-              "order": 3
-            },
-            {
-              "id": "year8-numbers-in-binary",
-              "title": "L4: Numbers in Binary",
-              "file": "lessons/year8-numbers-in-binary.json",
-              "order": 4
-            },
-            {
-              "id": "year8-large-quantities",
-              "title": "L5: Large Quantities",
-              "file": "lessons/year8-large-quantities.json",
-              "order": 5
-            },
-            {
-              "id": "year8-turings-mug",
-              "title": "L6: Turing's Mug",
-              "file": "lessons/year8-turings-mug.json",
-              "order": 6
             }
           ]
         }
