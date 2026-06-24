@@ -2840,9 +2840,8 @@
     S.running    = true;
     S.timerStart = Date.now();   // timer() counts from green-flag press
     clearConsole();
-    // Snapshot on every run so the Snapshots panel accumulates history naturally.
-    // The "skip if unchanged" check inside takeSnapshot prevents duplicates.
-    if (S.activeSprite && !S.activeTut) takeSnapshot(S.activeSprite, 'Run', 'auto');
+    // Snapshot the full project on every run so the Snapshots panel has history.
+    if (!S.activeTut) takeProjectSnapshot('Run', 'auto');
 
     // Configure Skulpt ONCE per run, before any threads start.
     // IMPORTANT: Sk.configure resets Sk.sysmodules (the module cache).
@@ -2922,6 +2921,71 @@
     });
   }
 
+  // ── IndexedDB helpers for full-project blob storage ──────────
+  var _resumeDb = null;
+  function _openResumeDb() {
+    if (_resumeDb) return Promise.resolve(_resumeDb);
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open('pyscratch_projects', 1);
+      req.onupgradeneeded = function (e) { e.target.result.createObjectStore('blobs'); };
+      req.onsuccess  = function (e) { _resumeDb = e.target.result; resolve(_resumeDb); };
+      req.onerror    = function (e) { reject(e.target.error); };
+    });
+  }
+  function idbPut(key, value) {
+    return _openResumeDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('blobs', 'readwrite');
+        tx.objectStore('blobs').put(value, key);
+        tx.oncomplete = resolve;
+        tx.onerror    = function (e) { reject(e.target.error); };
+      });
+    });
+  }
+  function idbGet(key) {
+    return _openResumeDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx  = db.transaction('blobs', 'readonly');
+        var req = tx.objectStore('blobs').get(key);
+        req.onsuccess = function (e) { resolve(e.target.result !== undefined ? e.target.result : null); };
+        req.onerror   = function (e) { reject(e.target.error); };
+      });
+    });
+  }
+  function idbDelete(key) {
+    return _openResumeDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('blobs', 'readwrite');
+        tx.objectStore('blobs').delete(key);
+        tx.oncomplete = resolve;
+        tx.onerror    = function (e) { reject(e.target.error); };
+      });
+    });
+  }
+
+  // Build a full .sb3 blob with pyscratch code embedded in project.json.
+  // Uses the already-patched vm.toJSON() so code is always up to date.
+  function exportFullSb3() {
+    return ensureJSZip().then(function (JSZip) {
+      saveCurrentCode();
+      var zip = new JSZip();
+      zip.file('project.json', S.vm.toJSON());
+      var seen = {};
+      ((S.vm.runtime && S.vm.runtime.targets) || []).forEach(function (target) {
+        var assets = ((target.sprite ? target.sprite.costumes : []) || [])
+          .concat((target.sprite ? target.sprite.sounds   : []) || []);
+        assets.forEach(function (a) {
+          var name = a && a.md5ext;
+          if (!name || !a.asset || !a.asset.data || seen[name]) return;
+          seen[name] = true;
+          zip.file(name, a.asset.data);
+        });
+      });
+      return zip.generateAsync({ type: 'blob', compression: 'DEFLATE',
+                                  compressionOptions: { level: 6 } });
+    });
+  }
+
   // Extract Python code from a project file, returning { buffer, pyCode }.
   //
   // Supports two formats (in priority order):
@@ -2962,29 +3026,24 @@
             if (!proj || !Array.isArray(proj.targets)) return { buffer: buf, pyCode: null };
 
             var extracted = {};
-            var extractedSnaps = {};
             var found = false;
             proj.targets.forEach(function (t) {
               if (t.pyscratch) {
                 extracted[t.name] = t.pyscratch;
-                delete t.pyscratch;   // strip before TurboWarp's parser sees it
+                delete t.pyscratch;       // strip before TurboWarp's parser sees it
                 found = true;
               }
-              if (t.pyscratchSnaps) {
-                extractedSnaps[t.name] = t.pyscratchSnaps;
-                delete t.pyscratchSnaps; // strip before TurboWarp's parser sees it
-              }
+              // Strip legacy per-sprite snapshot fields from old .psb3 files.
+              if (t.pyscratchSnaps) delete t.pyscratchSnaps;
             });
 
-            // Re-pack project.json to strip pyscratch fields.
-            // Always re-pack if we extracted anything (code or snapshots), so
-            // TurboWarp's parser never sees the unknown fields.
-            var hasSnaps = Object.keys(extractedSnaps).length > 0;
-            if (!found && !hasSnaps) return { buffer: buf, pyCode: null, snapshots: {} };
+            // Re-pack project.json to strip pyscratch fields so TurboWarp
+            // never sees the unknown fields.
+            if (!found) return { buffer: buf, pyCode: null };
 
             zip.file('project.json', JSON.stringify(proj));
             return zip.generateAsync({ type: 'arraybuffer' }).then(function (clean) {
-              return { buffer: clean, pyCode: found ? extracted : null, snapshots: extractedSnaps };
+              return { buffer: clean, pyCode: extracted };
             });
           });
 
@@ -4008,42 +4067,42 @@
     try { localStorage.removeItem(_tutProgressKey(tutIdx)); } catch(e) {}
   }
 
-  // Save ALL sprites' current threads so we can restore them if the student wants
+  function _tutSnapshotExistsKey(tutIdx) { return 'pyscratch:tut:' + tutIdx + ':snap-exists'; }
+
+  // Sync check via localStorage flag — avoids an async IDB round-trip every time
+  // a tutorial dialog opens.  Flag is written/cleared alongside the IDB blob.
+  function hasTutSnapshot(tutIdx) {
+    return localStorage.getItem(_tutSnapshotExistsKey(tutIdx)) === '1';
+  }
+
+  // Async: export the full project as an SB3 and persist it in IDB.
   function saveTutSnapshot(tutIdx) {
-    try {
-      saveCurrentCode(); // flush editor → S.spriteCode
-      var snap = {};
-      Object.keys(S.spriteCode).forEach(function (name) {
-        snap[name] = JSON.parse(JSON.stringify(S.spriteCode[name]));
-      });
-      localStorage.setItem(_tutSnapshotKey(tutIdx), JSON.stringify(snap));
-    } catch(e) {}
-  }
-
-  function loadTutSnapshot(tutIdx) {
-    try {
-      var raw = localStorage.getItem(_tutSnapshotKey(tutIdx));
-      return raw ? JSON.parse(raw) : null;
-    } catch(e) { return null; }
-  }
-
-  function clearTutSnapshot(tutIdx) {
-    try { localStorage.removeItem(_tutSnapshotKey(tutIdx)); } catch(e) {}
-  }
-
-  // Restore all sprites' code from a snapshot
-  function restoreTutSnapshot(tutIdx) {
-    var snap = loadTutSnapshot(tutIdx);
-    if (!snap) return;
-    Object.keys(snap).forEach(function (name) {
-      S.spriteCode[name] = snap[name];
-      saveThreads(name);
+    return exportFullSb3().then(function (blob) {
+      return idbPut(_tutSnapshotKey(tutIdx), blob);
+    }).then(function () {
+      try { localStorage.setItem(_tutSnapshotExistsKey(tutIdx), '1'); } catch(e) {}
+    }).catch(function (e) {
+      console.warn('[PyScratch] saveTutSnapshot failed:', e);
     });
-    // Reload editor if the active sprite is in the snapshot
-    if (S.activeSprite && snap[S.activeSprite]) {
-      S.activeThreadIdx = 0;
-      loadCodeToEditor();
-    }
+  }
+
+  // Async: remove the blob from IDB and clear the flag.
+  function clearTutSnapshot(tutIdx) {
+    try { localStorage.removeItem(_tutSnapshotExistsKey(tutIdx)); } catch(e) {}
+    try { localStorage.removeItem(_tutSnapshotKey(tutIdx)); } catch(e) {} // remove any legacy entry
+    return idbDelete(_tutSnapshotKey(tutIdx)).catch(function () {});
+  }
+
+  // Async: load the saved SB3 blob and reload the full project.
+  // vm.loadProject is already patched to extract pyscratch fields, so code,
+  // sprite names and costumes are all restored in one call.
+  function restoreTutSnapshot(tutIdx) {
+    return idbGet(_tutSnapshotKey(tutIdx)).then(function (blob) {
+      if (!blob) return;
+      return S.vm.loadProject(blob);
+    }).catch(function (e) {
+      console.warn('[PyScratch] restoreTutSnapshot failed:', e);
+    });
   }
 
   // ── Tutorial dialog (resume / keep-or-restore) ────────────────
@@ -4090,7 +4149,7 @@
   function startTutorial(tutIdx) {
     var tut      = TUTORIALS[tutIdx];
     var saved    = loadTutProgress(tutIdx);
-    var hasSnap  = !!loadTutSnapshot(tutIdx);
+    var hasSnap  = hasTutSnapshot(tutIdx);
 
     if (saved && hasSnap) {
       // Student has unfinished progress — offer to resume
@@ -4100,18 +4159,20 @@
         'You left off at <strong>Step ' + (saved.stepIdx + 1) + ' of ' + tut.steps.length + '</strong>. Want to pick up where you left off?',
         [
           { label: 'Resume →', cls: 'td-primary', cb: function () {
-              _doStartTutorial(tutIdx, saved.stepIdx);
+              restoreTutSnapshot(tutIdx).then(function () {
+                _doStartTutorial(tutIdx, saved.stepIdx);
+              });
           }},
           { label: 'Start Fresh', cls: 'td-secondary', cb: function () {
               clearTutProgress(tutIdx);
-              saveTutSnapshot(tutIdx); // overwrite snapshot with current code
+              saveTutSnapshot(tutIdx); // overwrite snapshot with full current project
               _doStartTutorial(tutIdx, 0);
           }}
         ]
       );
     } else {
-      // Fresh start — save a named "before tutorial" snapshot then begin
-      if (S.activeSprite) takeSnapshot(S.activeSprite, 'Before ' + tut.title, 'before-tutorial');
+      // Fresh start — snapshot full project then begin
+      takeProjectSnapshot('Before ' + tut.title, 'before-tutorial');
       saveTutSnapshot(tutIdx);
       _doStartTutorial(tutIdx, 0);
     }
@@ -5125,7 +5186,7 @@
     if (!at) { _doExitTutorial(); return; }
     var tutIdx  = at.tutIdx;
     var tut     = TUTORIALS[tutIdx];
-    var hasSnap = !!loadTutSnapshot(tutIdx);
+    var hasSnap = hasTutSnapshot(tutIdx);
 
     if (!hasSnap) {
       // No snapshot means nothing to restore — just exit
@@ -5134,10 +5195,9 @@
       return;
     }
 
-    // Save "after tutorial" snapshot so the code written during the tutorial
-    // is always recoverable from the Snapshots panel, regardless of keep/restore choice.
-    if (isFinished && S.activeSprite) {
-      takeSnapshot(S.activeSprite, tut.title + ' — finished', 'after-tutorial');
+    // Snapshot the finished project so it is recoverable from the Snapshots panel.
+    if (isFinished) {
+      takeProjectSnapshot(tut.title + ' — finished', 'after-tutorial');
     }
 
     var icon  = isFinished ? '🎉' : '📚';
@@ -5153,10 +5213,11 @@
           _doExitTutorial();
       }},
       { label: 'Restore Original Code', cls: 'td-danger', cb: function () {
-          restoreTutSnapshot(tutIdx);
-          clearTutSnapshot(tutIdx);
-          clearTutProgress(tutIdx);
-          _doExitTutorial();
+          restoreTutSnapshot(tutIdx).then(function () {
+            clearTutSnapshot(tutIdx);
+            clearTutProgress(tutIdx);
+            _doExitTutorial();
+          });
       }}
     ]);
   }
@@ -5755,62 +5816,51 @@
     }
   }
 
-  // ── Per-sprite code snapshots ─────────────────────────────────
-  var SNAP_MAX = 20;
+  // ── Per-project snapshots ─────────────────────────────────────
+  // Each snapshot is a full SB3 blob (pyscratch code embedded) stored in IDB.
+  // Metadata array (ts, label, kind, blobKey) lives in localStorage for fast listing.
+  var SNAP_MAX = 10;
+  var _PROJ_SNAPS_KEY = 'pyscratch:project-snaps';
 
-  // Snapshots are keyed by sprite NAME (not UUID) so they survive page reloads and
-  // sessions where no .sb3 is saved.  UUIDs are regenerated by TurboWarp every time
-  // a fresh project loads, which caused the panel to always appear empty.
-  function snapStoreKey(spriteName) {
-    return 'pyscratch:snaps:' + spriteName;
-  }
-
-  function loadSnaps(spriteName) {
+  function loadProjectSnapsMeta() {
     try {
-      var raw = localStorage.getItem(snapStoreKey(spriteName));
-      if (raw) return JSON.parse(raw);
-    } catch(e) {}
-    return [];
+      var raw = localStorage.getItem(_PROJ_SNAPS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
   }
 
-  function saveSnaps(spriteName, snaps) {
-    try { localStorage.setItem(snapStoreKey(spriteName), JSON.stringify(snaps)); } catch(e) {}
+  function saveProjectSnapsMeta(arr) {
+    try { localStorage.setItem(_PROJ_SNAPS_KEY, JSON.stringify(arr)); } catch(e) {}
   }
 
-  // kind: 'auto' | 'before-tutorial' | 'after-tutorial'
-  function takeSnapshot(spriteName, label, kind) {
-    if (!spriteName) return;
-    saveCurrentCode(); // flush editor → S.spriteCode
-    var threads = loadThreads(spriteName);
-    var snaps   = loadSnaps(spriteName);
-    // Skip auto-snapshots when code is unchanged from the most recent snap
-    if (kind === 'auto' && snaps.length > 0) {
-      var lastCode = JSON.stringify(snaps[snaps.length - 1].threads);
-      var curCode  = JSON.stringify(threads);
-      if (lastCode === curCode) return;
-    }
-    var snap = {
-      ts:      Date.now(),
-      label:   label || 'Auto',
-      kind:    kind  || 'auto',
-      threads: JSON.parse(JSON.stringify(threads))
-    };
-    snaps.push(snap);
-    if (snaps.length > SNAP_MAX) snaps = snaps.slice(snaps.length - SNAP_MAX);
-    saveSnaps(spriteName, snaps);
-    // Refresh snap list panel if it's currently visible
-    var snapEl = document.getElementById('ps-snap-list');
-    if (snapEl && snapEl.style.display !== 'none') renderSnapList();
+  // Async: export a full SB3 blob and append its metadata to the list.
+  // Evicts the oldest entries (and their IDB blobs) when the list exceeds SNAP_MAX.
+  function takeProjectSnapshot(label, kind) {
+    return exportFullSb3().then(function (blob) {
+      var ts      = Date.now();
+      var blobKey = 'project-snap-' + ts;
+      return idbPut(blobKey, blob).then(function () {
+        var meta = loadProjectSnapsMeta();
+        meta.push({ ts: ts, label: label || 'Auto', kind: kind || 'auto', blobKey: blobKey });
+        if (meta.length > SNAP_MAX) {
+          var removed = meta.splice(0, meta.length - SNAP_MAX);
+          removed.forEach(function (m) { idbDelete(m.blobKey).catch(function () {}); });
+        }
+        saveProjectSnapsMeta(meta);
+        var snapEl = document.getElementById('ps-snap-list');
+        if (snapEl && snapEl.style.display !== 'none') renderSnapList();
+      });
+    }).catch(function (e) {
+      console.warn('[PyScratch] takeProjectSnapshot failed:', e);
+    });
   }
 
   var _snapTimerId = null;
   function startSnapshotTimer() {
     if (_snapTimerId) return;
     _snapTimerId = setInterval(function () {
-      if (S.activeSprite && !S.activeTut) {
-        takeSnapshot(S.activeSprite, 'Auto', 'auto');
-      }
-    }, 3 * 60 * 1000); // every 3 minutes
+      if (!S.activeTut) takeProjectSnapshot('Auto', 'auto');
+    }, 3 * 60 * 1000);
   }
 
   function snapRelativeTime(ts) {
@@ -5828,19 +5878,14 @@
   function renderSnapList() {
     var el = document.getElementById('ps-snap-list');
     if (!el) return;
-    var spriteName = S.activeSprite;
-    if (!spriteName) {
-      el.innerHTML = '<div class="ps-snap-empty">No sprite selected.</div>';
-      return;
-    }
-    var snaps = loadSnaps(spriteName);
-    if (!snaps.length) {
-      el.innerHTML = '<div class="ps-snap-empty">No snapshots yet.<br>Auto-saves every 3 min when code changes.</div>';
+    var meta = loadProjectSnapsMeta();
+    if (!meta.length) {
+      el.innerHTML = '<div class="ps-snap-empty">No snapshots yet.<br>Auto-saves every 3 min &amp; on every Run.</div>';
       return;
     }
     el.innerHTML = '';
     // Newest first
-    snaps.slice().reverse().forEach(function (snap) {
+    meta.slice().reverse().forEach(function (snap) {
       var div = document.createElement('div');
       div.className = 'ps-snap-item';
 
@@ -5858,17 +5903,21 @@
       var btn = document.createElement('button');
       btn.className   = 'ps-snap-restore';
       btn.textContent = 'Restore this snapshot';
-      btn.onclick = (function (s) {
+      btn.onclick = (function (m) {
         return function () {
-          if (!confirm('Restore "' + s.label + '"?\nCurrent code will be replaced.')) return;
-          var scrollY = el.scrollTop; // save position before re-render
-          S.spriteCode[spriteName] = JSON.parse(JSON.stringify(s.threads));
-          saveThreads(spriteName);
-          S.activeThreadIdx = 0;
-          renderThreadList();
-          loadCodeToEditor();
-          renderSnapList();          // refresh labels/times in place
-          el.scrollTop = scrollY;   // restore scroll position
+          if (!confirm('Restore "' + m.label + '"?\nThe full project (all sprites & code) will be replaced.')) return;
+          btn.disabled = true;
+          btn.textContent = 'Restoring…';
+          idbGet(m.blobKey).then(function (blob) {
+            if (!blob) { alert('Snapshot data not found.'); return; }
+            return S.vm.loadProject(blob);
+          }).then(function () {
+            renderSnapList();
+          }).catch(function (e) {
+            alert('Could not restore snapshot: ' + e.message);
+            btn.disabled    = false;
+            btn.textContent = 'Restore this snapshot';
+          });
         };
       })(snap);
 
@@ -6884,9 +6933,8 @@
                   if (S.spriteCode[t.name] && S.spriteCode[t.name].length) {
                     t.pyscratch = S.spriteCode[t.name];
                   }
-                  // Embed snapshots so they travel with the .sb3
-                  var snaps = loadSnaps(t.name);
-                  if (snaps && snaps.length) t.pyscratchSnaps = snaps;
+                  // Snapshots are now stored as separate full SB3 blobs in IndexedDB
+                  // and no longer embedded in project.json.
                 }
               });
               return JSON.stringify(proj);
@@ -6908,13 +6956,6 @@
           return extractPyScratchData(input).then(function (result) {
             if (result.pyCode) S.spriteCode = result.pyCode;
             return _origLoadProject(result.buffer).then(function (r) {
-              // Re-key snapshots by UUID now that targets exist in the VM
-              if (result.snapshots) {
-                Object.keys(result.snapshots).forEach(function (name) {
-                  var snaps = result.snapshots[name];
-                  if (snaps && snaps.length) saveSnaps(name, snaps);
-                });
-              }
               return r;
             });
           });

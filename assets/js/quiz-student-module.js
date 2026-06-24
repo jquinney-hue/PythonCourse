@@ -155,15 +155,31 @@ function showStudentScreen(lobbyCode, questions, opts) {
   quiz.questions = questions;
   quiz.forced = !!opts.forced;
   quiz.displaced = false;
+  // Does this quiz need Google Drive? (submission or voting with file-based types)
+  var DRIVE_Q_TYPES = { canvas: 1, pixel_art: 1, blockbench_share: 1, pyscratch_share: 1 };
+  var needsDrive = Array.isArray(questions) && questions.some(function(q) {
+    return q && DRIVE_Q_TYPES[q.type];
+  });
+
   document.getElementById('qs-lobby').innerHTML =
     '<div class="text-5xl mb-4">&#x23F3;</div>' +
     '<h2 class="text-xl font-bold mb-2">You are in the lobby!</h2>' +
     '<p class="text-gray-400 text-sm">Wait for your teacher to start the quiz&#x2026;</p>' +
+    (needsDrive ? '<p id="qs-lobby-drive-status" class="text-gray-500 text-xs mt-3"></p>' : '') +
     '<p id="qs-my-code" class="text-gray-500 text-xs mt-4"></p>';
   document.getElementById('quiz-student-screen').classList.remove('hidden');
   document.getElementById('qs-my-code').textContent = 'Your code: ' + state.uid;
   updateForcedQuizChrome();
   setStudentView('lobby');
+
+  // Prompt for Google sign-in now so students are ready before the first Drive question.
+  // driveEnsureStudentToken resolves immediately if already signed in (no modal shown).
+  if (needsDrive && window.driveEnsureStudentToken) {
+    var driveStatusEl = document.getElementById('qs-lobby-drive-status');
+    window.driveEnsureStudentToken(driveStatusEl).catch(function() {
+      // Non-fatal — the submission/voting flows will re-prompt if needed.
+    });
+  }
 
   var sessionRef = state.db.ref('quizSessions/' + lobbyCode);
 
