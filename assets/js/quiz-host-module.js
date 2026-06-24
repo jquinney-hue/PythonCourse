@@ -1733,6 +1733,15 @@ async function showStudentWorkModal(code) {
             setTimeout(function() {
               try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
             }, 2500);
+          } else if (mq.q.type === 'pixel_art') {
+            var paUrl = URL.createObjectURL(blob);
+            var paImg = document.createElement('img');
+            paImg.src = paUrl;
+            paImg.style.cssText = 'display:block;width:100%;max-width:512px;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;border-radius:8px';
+            paImg.onload = function() { URL.revokeObjectURL(paUrl); };
+            paImg.onerror = function() { contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not display pixel art.</p>'; };
+            contentEl.innerHTML = '';
+            contentEl.appendChild(paImg);
           }
         } catch(e) {
           contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';

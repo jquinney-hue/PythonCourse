@@ -1555,6 +1555,11 @@ async function showStudentWorkForCode(code) {
                 try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
               }, 2500);
             });
+          } else if (mq.q.type === 'pixel_art') {
+            var img = document.createElement('img');
+            img.src = dataUrl;
+            img.style.cssText = 'display:block;width:100%;max-width:512px;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;border-radius:8px';
+            contentEl.appendChild(img);
           }
         }).catch(function(e) {
           contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';
