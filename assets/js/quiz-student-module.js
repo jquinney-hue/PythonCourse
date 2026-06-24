@@ -1286,11 +1286,13 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
   var votingQType = quiz.questions && quiz.questions[qIdx] && quiz.questions[qIdx].type;
   if (votingQType === 'blockbench_share') {
     if (imgWrap) {
+      imgWrap.style.aspectRatio = 'auto';
       imgWrap.innerHTML = '<p style="color:#94a3b8;font-size:0.8rem;text-align:center;padding:1rem">Loading model...</p>';
     }
     loadBlockbenchShareModelText(qIdx, itemCode, token).then(function(loaded) {
       if (voted || !imgWrap) return;
-      renderBlockbenchModelViewer(imgWrap, loaded.text, { height: 360, spin: true });
+      var bbH = Math.max(320, window.innerHeight - 220);
+      renderBlockbenchModelViewer(imgWrap, loaded.text, { height: bbH, spin: true });
     }).catch(function(e) {
       if (imgWrap) imgWrap.innerHTML = '<p style="color:#f87171;font-size:0.8rem;text-align:center;padding:1rem">Could not load model: ' + escapeHtml(e.message) + '</p>';
     });

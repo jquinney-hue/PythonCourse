@@ -402,7 +402,7 @@
         'width:20px;height:20px;border-radius:3px;flex-shrink:0;border:1px solid rgba(255,255,255,0.15);background:' + colors[i];
       var lbl = document.createElement('span');
       lbl.style.cssText = 'font-family:monospace;font-size:0.72rem;color:' + (isSelected ? '#93c5fd' : '#64748b');
-      lbl.textContent   = d2b(i) + ' (' + i + ')';
+      lbl.textContent   = i + '';
       row.appendChild(sw);
       row.appendChild(lbl);
       container.appendChild(row);
