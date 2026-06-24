@@ -1,0 +1,75 @@
+{
+  "id": "year8-pixel-art-quiz",
+  "title": "Pixel Art Quiz",
+  "description": "16×16 pixel art quiz. Students select colours by typing their binary value and vote on each other's artwork.",
+  "steps": [
+    {
+      "id": "intro",
+      "title": "Pixel Art Quiz",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Pixel Art Quiz</h2><p class='text-gray-700 mb-3'>In this quiz you will create a 16×16 pixel art drawing. To select a colour you must type its <strong>4-bit binary number</strong> — use the calculator and colour chart on the right to help you work out which binary number to type.</p><p class='text-gray-500 text-sm'>Your teacher must connect Google Drive before this quiz can start.</p>"
+    }
+  ],
+  "quizQuestions": [
+    {
+      "type": "pixel_art",
+      "q": "Create a pixel art drawing of your favourite animal! 🐾",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Draw a pixel art portrait of yourself! 🧑‍🎨",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Draw your favourite food or drink in pixel art! 🍕",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Create a pixel art scene of your dream house! 🏠",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Draw a pixel art landscape — could be a beach, mountain, city or anything you like! 🌄",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Create a pixel art character for a video game — hero, villain or anything in between! 🎮",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Draw a pixel art spaceship or alien planet! 🚀",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Create pixel art of your favourite sport or hobby! ⚽",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Free draw — create anything you like in pixel art! 🎨",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Draw a pixel art map of an imaginary place — give it features, landmarks and a name! 🗺️",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Create a pixel art logo for an imaginary company or game! 🏷️",
+      "duration": 300
+    },
+    {
+      "type": "pixel_art",
+      "q": "Draw a pixel art monster or mythical creature of your own invention! 👾",
+      "duration": 300
+    }
+  ]
+}

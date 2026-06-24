@@ -1107,6 +1107,77 @@
           </div>
         </div>
       </div>
+      <!-- Pixel Art question -->
+      <div id="qs-pixel-art-answer" class="hidden w-full" style="max-width:100%">
+        <div style="display:flex;gap:10px;height:520px">
+          <!-- Left: tools + canvas -->
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <!-- Toolbar -->
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <button id="btn-pa-paint" style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #3b82f6;background:#1e3a5f;color:#93c5fd">✏️ Paint</button>
+              <button id="btn-pa-line"  style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#94a3b8">📏 Line</button>
+              <button id="btn-pa-fill"  style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#94a3b8">🪣 Fill</button>
+              <button id="btn-pa-clear" style="padding:5px 10px;border-radius:5px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid #ef4444;background:#1e293b;color:#f87171">🗑️ Clear</button>
+              <span style="flex:1"></span>
+              <button id="btn-pa-submit" class="jhncc-primary" style="padding:5px 16px;border-radius:5px;font-size:0.85rem;font-weight:600" disabled>Submit Drawing</button>
+              <span id="pa-feedback" style="font-size:0.78rem;color:#94a3b8"></span>
+            </div>
+            <!-- Canvas (512×512 internal, CSS fills space) -->
+            <div style="flex:1;min-height:0;background:#0a0f1a;border-radius:6px;border:1px solid #334155;display:flex;align-items:center;justify-content:center;overflow:hidden">
+              <canvas id="qs-pa-canvas" width="512" height="512" style="max-width:100%;max-height:100%;image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair;display:block;touch-action:none"></canvas>
+            </div>
+          </div>
+          <!-- Right: controls panel -->
+          <div style="width:210px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;overflow-y:auto">
+            <!-- Colour map -->
+            <div>
+              <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Colour Map</div>
+              <select id="qs-pa-colormap" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;padding:4px 6px;font-size:0.82rem"></select>
+            </div>
+            <!-- Selected colour + timer -->
+            <div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px">
+              <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px">Selected Colour</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <div id="pa-sel-swatch" style="width:30px;height:30px;border-radius:5px;border:2px dashed #334155;flex-shrink:0"></div>
+                <span id="pa-sel-label" style="font-size:0.82rem;font-weight:600;color:#94a3b8;font-family:monospace">No colour selected</span>
+              </div>
+              <div id="pa-timer-wrap" style="display:none">
+                <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:#64748b;margin-bottom:3px">
+                  <span>Expires in</span><span id="pa-timer-secs" style="color:#fbbf24;font-weight:700">20s</span>
+                </div>
+                <div style="background:#1e293b;border-radius:99px;height:5px;overflow:hidden">
+                  <div id="pa-timer-bar" style="height:100%;width:100%;background:#fbbf24;border-radius:99px"></div>
+                </div>
+              </div>
+              <div id="pa-timer-expired" style="display:none;font-size:0.7rem;color:#f87171;font-weight:600;margin-top:4px">⚠ Type new binary to continue</div>
+            </div>
+            <!-- Binary input -->
+            <div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px">
+              <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Type Binary (4 bits)</div>
+              <div id="pa-binary-cells" style="display:flex;gap:4px;justify-content:center;margin-bottom:6px"></div>
+              <div id="pa-binary-hint" style="font-size:0.68rem;color:#475569;text-align:center;margin-bottom:6px">Type 0 or 1 on keyboard</div>
+              <!-- On-screen buttons for tablets -->
+              <div style="display:flex;gap:4px;justify-content:center">
+                <button id="btn-pa-bit-0" style="flex:1;padding:6px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;font-size:1.1rem;font-weight:700;font-family:monospace;cursor:pointer">0</button>
+                <button id="btn-pa-bit-1" style="flex:1;padding:6px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:5px;font-size:1.1rem;font-weight:700;font-family:monospace;cursor:pointer">1</button>
+                <button id="btn-pa-bit-bs" style="flex:1;padding:6px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:5px;font-size:0.85rem;cursor:pointer">⌫</button>
+              </div>
+            </div>
+            <!-- Palette -->
+            <div>
+              <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Colours (binary → decimal)</div>
+              <div id="pa-palette" style="display:flex;flex-direction:column;gap:1px"></div>
+            </div>
+            <!-- Calculator -->
+            <div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px">
+              <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Calculator</div>
+              <div id="pa-calc-display" style="background:#1e293b;color:#e2e8f0;font-family:monospace;font-size:1.1rem;text-align:right;padding:6px 8px;border-radius:4px;margin-bottom:6px;min-height:2rem;word-break:break-all">0</div>
+              <div id="pa-calc-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Canvas drawing question -->
       <div id="qs-canvas-answer" class="hidden w-full" style="max-width:700px">
         <div style="background:#1e293b;border:1px solid #334155;border-radius:0.5rem;overflow:hidden">
@@ -1389,9 +1460,10 @@
 <script src="assets/js/assessment-scratch-module.js?v=security-20260609-ap-score-pdf1"></script>
 <script src="assets/js/assessment-results-module.js?v=security-20260605"></script>
 <script src="assets/js/fileshare-drive-module.js?v=voting-2"></script>
-<script src="assets/js/quiz-host-module.js?v=voting-7"></script>
-<script src="assets/js/quiz-student-module.js?v=voting-8"></script>
+<script src="assets/js/quiz-host-module.js?v=voting-8"></script>
+<script src="assets/js/quiz-student-module.js?v=voting-9"></script>
 <script src="assets/js/scratch-pybot-module.js?v=voting-8"></script>
+<script src="assets/js/pixel-art-module.js?v=1"></script>
 <script src="assets/js/quiz-answer-module.js?v=voting-4"></script>
 </body>
 </html>

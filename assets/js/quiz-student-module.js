@@ -835,8 +835,9 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   var isPyScratch = q.type === 'pyscratch_build';
   var isPyScratchShare = q.type === 'pyscratch_share';
   var isCanvas = q.type === 'canvas';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPyScratchShare && !isCanvas;
-  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPyScratchShare || isCanvas);
+  var isPixelArt = q.type === 'pixel_art';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPyScratchShare && !isCanvas && !isPixelArt;
+  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPyScratchShare || isCanvas || isPixelArt);
   document.getElementById('qs-code-answer').classList.toggle('hidden', !isCodeQuestion);
   document.getElementById('qs-text-answer').classList.toggle('hidden', !isTextInput);
   document.getElementById('qs-widget-answer').classList.toggle('hidden', !isWidget);
@@ -846,6 +847,7 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   document.getElementById('qs-spreadsheet-answer').classList.toggle('hidden', !isSpreadsheet);
   document.getElementById('qs-pyscratch-answer').classList.toggle('hidden', !isPyScratch && !isPyScratchShare);
   document.getElementById('qs-canvas-answer').classList.toggle('hidden', !isCanvas);
+  document.getElementById('qs-pixel-art-answer').classList.toggle('hidden', !isPixelArt);
   if (!isScratch) resetScratchQuizFrame();
   if (!isBlockbench) resetBlockbenchQuizFrame();
   if (!isPyScratch && !isPyScratchShare) resetPyScratchQuizFrame();
@@ -1035,6 +1037,8 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
     }
   } else if (isCanvas) {
     initCanvasQuestion(qIdx, q);
+  } else if (isPixelArt) {
+    if (typeof window.initPixelArtQuestion === 'function') window.initPixelArtQuestion(qIdx);
   } else if (isSpreadsheet) {
     renderQuizSpreadsheetTask(qIdx, q);
   } else {
@@ -1330,7 +1334,8 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
     imgWrap.innerHTML = '';
     var img = document.createElement('img');
     img.src = dataUrl;
-    img.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;object-fit:cover';
+    var isPixelArtVote = votingQType === 'pixel_art';
+    img.style.cssText = 'display:block;width:100%;aspect-ratio:' + (isPixelArtVote ? '1' : '17/10') + ';object-fit:' + (isPixelArtVote ? 'contain' : 'cover') + ';' + (isPixelArtVote ? 'image-rendering:pixelated;background:#000;' : '');
     imgWrap.appendChild(img);
   }).catch(function() {
     if (imgWrap) imgWrap.textContent = 'Could not load image';
@@ -1396,7 +1401,8 @@ async function renderStudentShowcase(qIdx) {
           ph.style.cssText = '';
           var img = document.createElement('img');
           img.src = dataUrl;
-          img.style.cssText = 'display:block;width:100%;aspect-ratio:17/10;object-fit:cover';
+          var isPAShowcase = showcaseQType === 'pixel_art';
+          img.style.cssText = 'display:block;width:100%;aspect-ratio:' + (isPAShowcase ? '1' : '17/10') + ';object-fit:' + (isPAShowcase ? 'contain' : 'cover') + ';' + (isPAShowcase ? 'image-rendering:pixelated;background:#000;' : '');
           ph.appendChild(img);
         }).catch(function() { ph.textContent = 'Could not load image'; });
       })(imgPlaceholder, item.fileId, token);
@@ -1414,7 +1420,7 @@ function renderStudentLeaderboard(lb) {
   var lbArr = quiz._lastStudentLeaderboard;
 
   var hasMedia = (quiz.questions || []).some(function(q) {
-    return q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share';
+    return q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share' || q.type === 'pixel_art';
   });
 
   el.innerHTML = '';
@@ -1450,7 +1456,7 @@ async function showStudentWorkForCode(code) {
   var mediaQs = (quiz.questions || []).map(function(q, i) {
     return { q: q, idx: i };
   }).filter(function(item) {
-    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share' || item.q.type === 'blockbench_share';
+    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share' || item.q.type === 'blockbench_share' || item.q.type === 'pixel_art';
   });
   if (!mediaQs.length) return;
 

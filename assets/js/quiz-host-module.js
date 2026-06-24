@@ -61,7 +61,7 @@ function quizLessonById(lessonId) {
 }
 
 function isQuizShareQuestion(q) {
-  return !!q && (q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share');
+  return !!q && (q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share' || q.type === 'pixel_art');
 }
 
 function refreshQuizSetupQuestions() {
@@ -909,9 +909,10 @@ function renderHostQuestionView(qIdx, questionStart, duration) {
   var isBlockbench = q.type === 'blockbench_build' || q.type === 'blockbench_share';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch;
+  var isPixelArt = q.type === 'pixel_art';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPixelArt;
   var hostOptions = ['qh-opt-0','qh-opt-1','qh-opt-2','qh-opt-3'].map(function(id) { return document.getElementById(id); });
-  if (isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch) {
+  if (isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPixelArt) {
     var label = isWidget ? 'Interactive answer'
       : isTextInput ? 'Typed answer'
       : isScratch ? 'Scratch build'
@@ -919,6 +920,7 @@ function renderHostQuestionView(qIdx, questionStart, duration) {
       : isBlockbench ? (q.type === 'blockbench_share' ? 'Blockbench model' : 'Blockbench build')
       : isSpreadsheet ? 'Spreadsheet task'
       : isPyScratch ? 'PyScratch build'
+      : isPixelArt ? 'Pixel Art drawing'
       : 'Code answer';
     hostOptions.forEach(function(el) {
       el.textContent = label;
@@ -1079,7 +1081,8 @@ async function renderHostRevealView(qIdx, revealStart) {
   var isBlockbench = q.type === 'blockbench_build' || q.type === 'blockbench_share';
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch;
+  var isPixelArt = q.type === 'pixel_art';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPixelArt;
   if (isTextInput || isWidget) {
     safeText(revealEl, 'Answer: ' + q.answer);
     revealEl.className = 'text-2xl font-bold rounded-xl px-8 py-4 mb-6 bg-green-600 font-mono';

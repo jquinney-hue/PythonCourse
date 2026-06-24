@@ -139,6 +139,12 @@
               "title": "TEST: Canvas Drawing Quiz",
               "file": "lessons/test-canvas-quiz.json",
               "order": 1
+            },
+            {
+              "id": "year8-pixel-art-quiz",
+              "title": "Pixel Art Quiz",
+              "file": "lessons/year8-pixel-art-quiz.json",
+              "order": 2
             }
           ]
         },
