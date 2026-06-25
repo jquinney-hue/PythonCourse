@@ -1002,18 +1002,9 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
       requestAnimationFrame(scaleBlockbenchQuizFrame);
       waitForBlockbenchQuizReady(qIdx, blockbenchLoadKey, 0);
     }
-    document.getElementById('btn-qs-blockbench-fs').onclick = toggleQsBlockbenchFullscreen;
     if (window._qsBlockbenchResize) window.removeEventListener('resize', window._qsBlockbenchResize);
     window._qsBlockbenchResize = scaleBlockbenchQuizFrame;
     window.addEventListener('resize', window._qsBlockbenchResize);
-    if (window._qsBlockbenchEsc) document.removeEventListener('keydown', window._qsBlockbenchEsc);
-    window._qsBlockbenchEsc = function(e) {
-      if (e.key === 'Escape') {
-        var w = document.getElementById('qs-blockbench-wrap');
-        if (w && w.classList.contains('qs-blockbench-fullscreen')) toggleQsBlockbenchFullscreen();
-      }
-    };
-    document.addEventListener('keydown', window._qsBlockbenchEsc);
   } else if (isPyScratch || isPyScratchShare) {
     var pyScratchFrame = document.getElementById('qs-pyscratch-frame');
     if (pyScratchFrame) pyScratchFrame.style.pointerEvents = '';

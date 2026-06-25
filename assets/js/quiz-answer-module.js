@@ -21,7 +21,6 @@ function lockStudentAnswers() {
   var blockbenchBtn = document.getElementById('btn-quiz-submit-blockbench');
   if (blockbenchBtn) blockbenchBtn.disabled = true;
   var blockbenchWrap = document.getElementById('qs-blockbench-wrap');
-  if (blockbenchWrap && blockbenchWrap.classList.contains('qs-blockbench-fullscreen')) toggleQsBlockbenchFullscreen();
   var pyBotWrap = document.getElementById('qs-pybot-wrap');
   if (pyBotWrap && pyBotWrap.classList.contains('qs-pybot-fullscreen')) toggleQsPyBotFullscreen();
   if (window._qsPyBotMsg) { window.removeEventListener('message', window._qsPyBotMsg); window._qsPyBotMsg = null; }

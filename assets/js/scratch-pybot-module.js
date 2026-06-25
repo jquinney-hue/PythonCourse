@@ -172,38 +172,24 @@ function scaleBlockbenchQuizFrame() {
   var NW = 1280, NH = 720;
   var checkBarEl = wrap.querySelector('.qs-blockbench-checkbar');
   var checkBarH  = checkBarEl ? checkBarEl.offsetHeight : 44;
-  var isFs = wrap.classList.contains('qs-blockbench-fullscreen');
-  var scale, availW;
+  var headerEl   = document.querySelector('#quiz-student-screen > div:first-child');
+  var qTextEl    = document.getElementById('qs-q-text');
+  var headerH    = headerEl ? headerEl.offsetHeight : 44;
+  var qTextH     = qTextEl  ? qTextEl.offsetHeight + 16 : 80;
+  var availH     = Math.max(200, window.innerHeight - headerH - 42 - qTextH - checkBarH - 16);
+  var availW     = Math.max(320, window.innerWidth - 48);
+  var scale      = Math.min(1, availW / NW, availH / NH);
 
-  if (isFs) {
-    availW = window.innerWidth;
-    scale  = Math.min(1, availW / NW, (window.innerHeight - checkBarH) / NH);
-  } else {
-    var headerEl = document.querySelector('#quiz-student-screen > div:first-child');
-    var qTextEl  = document.getElementById('qs-q-text');
-    var headerH  = headerEl ? headerEl.offsetHeight     : 44;
-    var qTextH   = qTextEl  ? qTextEl.offsetHeight + 40 : 80;
-    var maxH     = Math.max(300, window.innerHeight - headerH - 42 - qTextH - checkBarH - 16);
-    availW       = Math.max(320, window.innerWidth - 48);
-    scale        = Math.min(1, availW / NW);
-    scroll.style.maxHeight = Math.min(Math.ceil(NH * scale), maxH) + 'px';
-    scroll.scrollLeft      = 0;
-  }
-
-  frame.style.width        = NW + 'px';
-  frame.style.height       = NH + 'px';
-  frame.style.transform    = 'scale(' + scale + ')';
+  frame.style.width           = NW + 'px';
+  frame.style.height          = NH + 'px';
+  frame.style.transform       = 'scale(' + scale + ')';
   frame.style.transformOrigin = 'top left';
-  frame.style.marginBottom = Math.round(NH * (scale - 1)) + 'px';
-  frame.style.marginLeft   = Math.max(0, Math.round((availW - NW * scale) / 2)) + 'px';
+  frame.style.marginBottom    = Math.round(NH * (scale - 1)) + 'px';
+  frame.style.marginLeft      = Math.max(0, Math.round((availW - NW * scale) / 2)) + 'px';
+  scroll.style.overflow       = 'hidden';
 }
 
 function toggleQsBlockbenchFullscreen() {
-  var wrap = document.getElementById('qs-blockbench-wrap');
-  var btn  = document.getElementById('btn-qs-blockbench-fs');
-  var isFs = wrap.classList.toggle('qs-blockbench-fullscreen');
-  btn.textContent = isFs ? '\u00d7' : '\u26f6';
-  btn.title = isFs ? 'Exit full screen (Esc)' : 'Full screen';
   scaleBlockbenchQuizFrame();
 }
 
@@ -280,8 +266,6 @@ function waitForBlockbenchQuizReady(qIdx, loadKey, attempt) {
 function resetBlockbenchQuizFrame() {
   var frame = document.getElementById('qs-blockbench-frame');
   if (!frame) return;
-  var wrap = document.getElementById('qs-blockbench-wrap');
-  if (wrap && wrap.classList.contains('qs-blockbench-fullscreen')) toggleQsBlockbenchFullscreen();
   frame.style.pointerEvents = '';
   frame.onload = null;
   frame.dataset.quizLoadKey = '';
