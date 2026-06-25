@@ -1554,19 +1554,15 @@ async function showStudentWorkForCode(code) {
     inner.appendChild(section);
 
     (function(mq, contentEl) {
-      var sessionRef = quiz.sessionRef;
-      if (!sessionRef) {
-        contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem">Session ended.</p>';
-        return;
-      }
-      sessionRef.child('answers/' + mq.idx + '/' + code).get().then(function(ansSnap) {
-        var fileId = ansSnap.exists() ? ansSnap.child('fileId').val() : null;
-        var submitted = ansSnap.exists() && ansSnap.child('submitted').val() === true;
-        if (!fileId && !(mq.q.type === 'blockbench_share' && submitted)) {
-          contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission.</p>';
+      var qType = mq.q.type;
+      // Gallery is Drive-only — look up folder ID with localStorage fallback so
+      // it still works after the Firebase session is cleaned up (30 s after end).
+      getQuizStudentFolderId(code).then(function(folderId) {
+        if (!folderId) {
+          contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No Drive folder found for this student.</p>';
           return;
         }
-        if (mq.q.type === 'blockbench_share') {
+        if (qType === 'blockbench_share') {
           loadBlockbenchShareModelText(mq.idx, code, token).then(function(loaded) {
             renderBlockbenchModelViewer(contentEl, loaded.text, { height: 480, spin: true });
           }).catch(function(e) {
@@ -1574,32 +1570,44 @@ async function showStudentWorkForCode(code) {
           });
           return;
         }
-        window.driveFetchFileAsDataUrl(fileId, token).then(function(dataUrl) {
-          contentEl.innerHTML = '';
-          if (mq.q.type === 'canvas') {
-            var img = document.createElement('img');
-            img.src = dataUrl;
-            img.style.cssText = 'width:100%;border-radius:8px;display:block';
-            contentEl.appendChild(img);
-          } else if (mq.q.type === 'pyscratch_share') {
-            fetch(dataUrl).then(function(r) { return r.blob(); }).then(function(sb3Blob) {
-              var blobUrl = URL.createObjectURL(sb3Blob);
-              var iframe = document.createElement('iframe');
-              iframe.src = 'scratch/editor.html?pyscratch=1&project_url=' + encodeURIComponent(blobUrl);
-              iframe.style.cssText = 'width:100%;height:420px;border:none;border-radius:8px;display:block;background:#000';
-              iframe.dataset.bloburl = blobUrl;
-              iframe.allow = 'microphone; camera';
-              contentEl.appendChild(iframe);
-              setTimeout(function() {
-                try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
-              }, 2500);
-            });
-          } else if (mq.q.type === 'pixel_art') {
-            var img = document.createElement('img');
-            img.src = dataUrl;
-            img.style.cssText = 'display:block;width:100%;max-width:512px;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;border-radius:8px';
-            contentEl.appendChild(img);
+        // For canvas / pixel_art / pyscratch_share: find the file by its known
+        // filename rather than reading the fileId from Firebase (which may be gone).
+        var filename =
+          qType === 'pixel_art'    ? code + '-pixel-art.png' :
+          qType === 'pyscratch_share' ? code + '.sb3' :
+          code + '.png'; // canvas
+        window.driveFindLatestFileByName(folderId, filename, token).then(function(file) {
+          if (!file) {
+            contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission.</p>';
+            return;
           }
+          return window.driveFetchFileAsDataUrl(file.id, token).then(function(dataUrl) {
+            contentEl.innerHTML = '';
+            if (qType === 'canvas') {
+              var img = document.createElement('img');
+              img.src = dataUrl;
+              img.style.cssText = 'width:100%;border-radius:8px;display:block';
+              contentEl.appendChild(img);
+            } else if (qType === 'pyscratch_share') {
+              fetch(dataUrl).then(function(r) { return r.blob(); }).then(function(sb3Blob) {
+                var blobUrl = URL.createObjectURL(sb3Blob);
+                var iframe = document.createElement('iframe');
+                iframe.src = 'scratch/editor.html?pyscratch=1&project_url=' + encodeURIComponent(blobUrl);
+                iframe.style.cssText = 'width:100%;height:420px;border:none;border-radius:8px;display:block;background:#000';
+                iframe.dataset.bloburl = blobUrl;
+                iframe.allow = 'microphone; camera';
+                contentEl.appendChild(iframe);
+                setTimeout(function() {
+                  try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
+                }, 2500);
+              });
+            } else if (qType === 'pixel_art') {
+              var img = document.createElement('img');
+              img.src = dataUrl;
+              img.style.cssText = 'display:block;width:100%;max-width:512px;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;border-radius:8px';
+              contentEl.appendChild(img);
+            }
+          });
         }).catch(function(e) {
           contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';
         });
