@@ -352,12 +352,23 @@
   /**
    * driveLookupStudentFolder(sessionRef)
    * Returns the Drive folder ID for the student, or null if not found.
+   * Caches to localStorage on a successful Firebase read; falls back to
+   * the cache when Firebase returns nothing (e.g. session already cleaned up).
    */
   window.driveLookupStudentFolder = async function (sessionRef) {
     var code = window.state && window.state.uid;
     if (!code) return null;
-    var snap = await sessionRef.child('studentFolders/' + safeFirebaseKey(code)).get();
-    return snap.exists() ? snap.val() : null;
+    var lobbyCode = sessionRef.key;
+    var safeCode  = safeFirebaseKey(code);
+    var snap = await sessionRef.child('studentFolders/' + safeCode).get();
+    if (snap.exists()) {
+      var folderId = snap.val();
+      var sf = {}; sf[safeCode] = folderId;
+      window.driveSaveQuizFolders(lobbyCode, { studentFolders: sf });
+      return folderId;
+    }
+    var cached = window.driveLoadQuizFolders(lobbyCode);
+    return (cached && cached.studentFolders && cached.studentFolders[safeCode]) || null;
   };
 
   // ── Student: upload file ───────────────────────────────────────
@@ -443,6 +454,53 @@
     }).sort(function(a, b) {
       return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || ''));
     })[0] || null;
+  };
+
+  // ── Quiz folder cache (localStorage) ─────────────────────────
+
+  var LS_PREFIX = 'pylearn_quiz_drive_';
+
+  /**
+   * driveSaveQuizFolders(lobbyCode, { sessionFolderId?, studentFolders? })
+   * Merges into any existing cached data for this quiz session.
+   */
+  window.driveSaveQuizFolders = function(lobbyCode, data) {
+    if (!lobbyCode || !data) return;
+    try {
+      var existing = JSON.parse(localStorage.getItem(LS_PREFIX + lobbyCode) || '{}');
+      var merged = {
+        sessionFolderId: data.sessionFolderId || existing.sessionFolderId || null,
+        studentFolders:  Object.assign({}, existing.studentFolders || {}, data.studentFolders || {})
+      };
+      localStorage.setItem(LS_PREFIX + lobbyCode, JSON.stringify(merged));
+    } catch(e) {}
+  };
+
+  /**
+   * driveLoadQuizFolders(lobbyCode)
+   * Returns { sessionFolderId, studentFolders } or null.
+   */
+  window.driveLoadQuizFolders = function(lobbyCode) {
+    if (!lobbyCode) return null;
+    try { return JSON.parse(localStorage.getItem(LS_PREFIX + lobbyCode) || 'null'); } catch(e) { return null; }
+  };
+
+  /**
+   * drivePruneQuizFolderCache(currentLobbyCode)
+   * Removes all pylearn_quiz_drive_* entries except the current session.
+   * Call when a new quiz starts so the cache doesn't grow indefinitely.
+   */
+  window.drivePruneQuizFolderCache = function(currentLobbyCode) {
+    try {
+      var toRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(LS_PREFIX) === 0 && k !== LS_PREFIX + currentLobbyCode) {
+          toRemove.push(k);
+        }
+      }
+      toRemove.forEach(function(k) { localStorage.removeItem(k); });
+    } catch(e) {}
   };
 
   // ── Utility ───────────────────────────────────────────────────

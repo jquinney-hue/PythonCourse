@@ -103,6 +103,19 @@ async function joinQuizByCode(lobbyCode, opts) {
 
   if (!result.committed) throw new Error('You cannot rejoin this quiz right now.');
 
+  // Prune stale Drive folder caches from previous quizzes, then cache this
+  // session's folders while Firebase is live (before the 30s cleanup timer fires).
+  if (window.drivePruneQuizFolderCache) window.drivePruneQuizFolderCache(lobbyCode);
+  if (window.driveSaveQuizFolders) {
+    var snapFolders = snap.child('studentFolders').val();
+    if (snapFolders) {
+      window.driveSaveQuizFolders(lobbyCode, {
+        sessionFolderId: snap.child('driveFolderId').val() || null,
+        studentFolders:  snapFolders
+      });
+    }
+  }
+
   quiz.lobbyCode  = lobbyCode;
   quiz.sessionRef = sessionRef;
   quiz.myScore    = 0;
@@ -1185,9 +1198,26 @@ function blockbenchShareQuestionFilename(qIdx) {
 }
 
 async function getQuizStudentFolderId(code) {
-  if (!quiz.sessionRef || !code) return null;
-  var snap = await quiz.sessionRef.child('studentFolders/' + quizSafeFirebaseKey(code)).get();
-  return snap.exists() ? snap.val() : null;
+  if (!code) return null;
+  var safeCode = quizSafeFirebaseKey(code);
+  if (quiz.sessionRef) {
+    try {
+      var snap = await quiz.sessionRef.child('studentFolders/' + safeCode).get();
+      if (snap.exists()) {
+        var folderId = snap.val();
+        if (window.driveSaveQuizFolders && quiz.lobbyCode) {
+          var sf = {}; sf[safeCode] = folderId;
+          window.driveSaveQuizFolders(quiz.lobbyCode, { studentFolders: sf });
+        }
+        return folderId;
+      }
+    } catch(e) {}
+  }
+  if (window.driveLoadQuizFolders && quiz.lobbyCode) {
+    var cached = window.driveLoadQuizFolders(quiz.lobbyCode);
+    return (cached && cached.studentFolders && cached.studentFolders[safeCode]) || null;
+  }
+  return null;
 }
 
 async function loadBlockbenchShareModelText(qIdx, code, token) {

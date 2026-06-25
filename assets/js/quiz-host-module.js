@@ -333,6 +333,7 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   var oldSessionRef = quiz.sessionRef;
   var lobbyCode = await genLobbyCode();
   quiz.lobbyCode  = lobbyCode;
+  if (window.drivePruneQuizFolderCache) window.drivePruneQuizFolderCache(lobbyCode);
   quiz.questions  = selectedQs;
   quiz.lessonId   = lesson.meta.id;
   quiz.lessonTitle = lesson.data.title || lesson.meta.title || lesson.meta.id;
@@ -455,6 +456,12 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
       if (driveResult) {
         quiz._driveFolderId       = driveResult.sessionFolderId;
         quiz._driveStudentFolders = driveResult.studentFolders;
+        if (window.driveSaveQuizFolders) {
+          window.driveSaveQuizFolders(quiz.lobbyCode, {
+            sessionFolderId: driveResult.sessionFolderId,
+            studentFolders:  driveResult.studentFolders
+          });
+        }
         var count = Object.keys(driveResult.studentFolders || {}).length;
         setDriveMsg('✓ ' + count + ' folder' + (count === 1 ? '' : 's') + ' created.', '#4ade80');
         await new Promise(function(r) { setTimeout(r, 800); });
