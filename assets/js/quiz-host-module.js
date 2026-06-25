@@ -1690,13 +1690,13 @@ async function showStudentWorkModal(code) {
     section.appendChild(contentEl);
     inner.appendChild(section);
 
-    // Async load
+    // Async load — uses Drive folder lookup with localStorage fallback so it
+    // still works after the Firebase session is cleaned up (30 s after end).
     (function(mq, contentEl) {
-      quiz.sessionRef.child('answers/' + mq.idx + '/' + code).get().then(async function(ansSnap) {
-        var fileId = ansSnap.exists() ? ansSnap.child('fileId').val() : null;
-        var submitted = ansSnap.exists() && ansSnap.child('submitted').val() === true;
-        if (!fileId && !(mq.q.type === 'blockbench_share' && submitted)) {
-          contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission from this student.</p>';
+      var qType = mq.q.type;
+      getQuizStudentFolderId(code).then(async function(folderId) {
+        if (!folderId) {
+          contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No Drive folder found for this student.</p>';
           return;
         }
         if (!token) {
@@ -1704,20 +1704,28 @@ async function showStudentWorkModal(code) {
           return;
         }
         try {
-          if (mq.q.type === 'blockbench_share') {
+          if (qType === 'blockbench_share') {
             var loaded = await loadBlockbenchShareModelText(mq.idx, code, token);
             renderBlockbenchModelViewer(contentEl, loaded.text, { height: 480, spin: true });
             return;
           }
+          var filename =
+            qType === 'pixel_art'       ? code + '-pixel-art.png' :
+            qType === 'pyscratch_share' ? code + '.sb3' :
+            code + '.png'; // canvas
+          var file = await window.driveFindLatestFileByName(folderId, filename, token);
+          if (!file) {
+            contentEl.innerHTML = '<p style="color:#64748b;font-size:0.85rem;text-align:center;padding:1rem 0">No submission from this student.</p>';
+            return;
+          }
           var resp = await fetch(
-            'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media',
+            'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(file.id) + '?alt=media',
             { headers: { Authorization: 'Bearer ' + token } }
           );
           if (!resp.ok) throw new Error('Drive error ' + resp.status);
           var blob = await resp.blob();
 
-          if (mq.q.type === 'canvas') {
-            // Display image
+          if (qType === 'canvas') {
             var imgUrl = URL.createObjectURL(blob);
             var img = document.createElement('img');
             img.src = imgUrl;
@@ -1726,8 +1734,7 @@ async function showStudentWorkModal(code) {
             img.onerror = function() { contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not display image.</p>'; };
             contentEl.innerHTML = '';
             contentEl.appendChild(img);
-          } else if (mq.q.type === 'pyscratch_share') {
-            // Load game in PyScratch player mode
+          } else if (qType === 'pyscratch_share') {
             var blobUrl = URL.createObjectURL(blob);
             var iframe = document.createElement('iframe');
             iframe.src = 'scratch/editor.html?pyscratch=1&project_url=' + encodeURIComponent(blobUrl);
@@ -1736,11 +1743,10 @@ async function showStudentWorkModal(code) {
             iframe.allow = 'microphone; camera';
             contentEl.innerHTML = '';
             contentEl.appendChild(iframe);
-            // Activate player mode once editor has loaded
             setTimeout(function() {
               try { iframe.contentWindow.postMessage({ type: 'PS_PLAYER_MODE' }, '*'); } catch(e) {}
             }, 2500);
-          } else if (mq.q.type === 'pixel_art') {
+          } else if (qType === 'pixel_art') {
             var paUrl = URL.createObjectURL(blob);
             var paImg = document.createElement('img');
             paImg.src = paUrl;
@@ -1754,7 +1760,7 @@ async function showStudentWorkModal(code) {
           contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';
         }
       }).catch(function(e) {
-        contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Firebase error: ' + escapeHtml(e.message) + '</p>';
+        contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Error: ' + escapeHtml(e.message) + '</p>';
       });
     })(mq, contentEl);
   });
