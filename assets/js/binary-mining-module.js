@@ -126,10 +126,12 @@
       placed: {},     // "x,y" -> value (built on the surface)
       shop: {},       // value -> count  (sold elements, buyable back at 2x)
       _lastLb: [],    // last leaderboard rows (for re-render after Load names)
+      _lbClass: '',
       selected: 1,
       slotA: null,
       slotB: null,
       craftGuess: null,
+      craftCarry: null,
       dragVal: null,
       saveTimer: null,
       syncTimer: null
@@ -167,9 +169,16 @@
 
   // ── Firebase leaderboard (privacy-safe: class/code/money/best only) ──
   var LB_CLASS_KEY = 'pylearn_mining_lb_class';
+  var lbClassLoadRetries = 0;
 
+  function hasSavedStaffLogin() {
+    try {
+      return localStorage.getItem('pylearn_is_teacher') === '1' ||
+        localStorage.getItem('pylearn_auth_mode') === 'google-admin';
+    } catch (e) { return false; }
+  }
   function isStaffUser() {
-    return !!(window.state && (state.isAdmin || state.isTeacher));
+    return !!(window.state && (state.isAdmin || state.isTeacher || hasSavedStaffLogin()));
   }
   function savedLeaderboardClass() {
     try { return localStorage.getItem(LB_CLASS_KEY) || ''; } catch (e) { return ''; }
@@ -232,6 +241,7 @@
         });
 
     loader.then(function (names) {
+      lbClassLoadRetries = 0;
       names = (names || []).slice().sort();
       var saved = savedLeaderboardClass();
       var selected = (saved && names.indexOf(saved) !== -1) ? saved : (names[0] || '');
@@ -243,12 +253,19 @@
       if (selected) saveLeaderboardClass(selected);
       sel.onchange = function () {
         saveLeaderboardClass(sel.value);
+        g._lbClass = '';
+        renderLeaderboard([], sel.value ? 'Loading ' + sel.value + ' leaderboard...' : 'No class leaderboard selected.');
+        setLeaderboardStatus('');
         fetchLeaderboard();
       };
       fetchLeaderboard();
     }).catch(function () {
       sel.innerHTML = '<option value="">Could not load</option>';
       setLeaderboardStatus('Could not load class list.', '#7a2a2a');
+      if (isStaffUser() && lbClassLoadRetries < 5) {
+        lbClassLoadRetries++;
+        setTimeout(renderLeaderboardClassPicker, 1000);
+      }
     });
   }
 
@@ -268,6 +285,7 @@
   }
   function fetchLeaderboard() {
     if (!(window.state && state.db)) { renderLeaderboard([]); return; }
+    if (isStaffUser() && !G('bmg-class-select')) renderLeaderboardClassPicker();
     getLeaderboardClassName().then(function (className) {
       if (!className) {
         setLeaderboardStatus(isStaffUser() ? 'Choose a class to view.' : 'Your class is still loading.');
@@ -275,6 +293,10 @@
         return null;
       }
       setLeaderboardStatus('');
+      if (g._lbClass !== className) {
+        g._lbClass = className;
+        renderLeaderboard([], 'Loading ' + className + ' leaderboard...');
+      }
       return leaderboardClassRef(className).get();
     }).then(function (snap) {
       if (!snap) return;
@@ -387,12 +409,12 @@
     var cur = (which === 'A') ? g.slotA : g.slotB;
     if (cur) { if (which === 'A') g.slotA = null; else g.slotB = null; }
     else if (g.selected && have(g.selected)) { if (which === 'A') g.slotA = g.selected; else g.slotB = g.selected; }
-    g.craftGuess = null; renderCraft();
+    g.craftGuess = null; g.craftCarry = null; renderCraft();
   }
   function slotDrop(which, val) {
     if (val == null || !have(val)) return;
     if (which === 'A') g.slotA = val; else g.slotB = val;
-    g.craftGuess = null; renderCraft();
+    g.craftGuess = null; g.craftCarry = null; renderCraft();
   }
 
   // ── Grid render ────────────────────────────────────────────────
@@ -554,7 +576,7 @@
     G('bmg-hint-x').onclick = clearHint;
     Array.prototype.forEach.call(el.querySelectorAll('.bmg-recipe'), function (btn) {
       btn.onclick = function () {
-        g.slotA = +btn.dataset.a; g.slotB = +btn.dataset.b; g.craftGuess = null;
+        g.slotA = +btn.dataset.a; g.slotB = +btn.dataset.b; g.craftGuess = null; g.craftCarry = null;
         renderCraft();
         var sa = G('bmg-slotA'); if (sa) sa.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
@@ -657,6 +679,7 @@
     var r = additionRows(a, b);
     var W = r.width;
     if (!g.craftGuess || g.craftGuess.length !== W) g.craftGuess = new Array(W).fill(0);
+    if (!g.craftCarry || g.craftCarry.length !== W) g.craftCarry = new Array(W).fill(0);
     out.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:#5a5a5a;font-weight:800">?</span>';
 
     // Column-addition layout: gutter (for +/sign) then W aligned digit columns.
@@ -674,12 +697,15 @@
       for (var i = 0; i < W; i++) s += dcell(str[i]);
       return s + '</div>';
     }
+    var carryCells = gutter('');
+    for (var c = 0; c < W; c++) carryCells += '<span class="bmg-bit' + (g.craftCarry[c] ? ' on' : '') + '" data-carry-i="' + c + '" title="Carry helper">' + g.craftCarry[c] + '</span>';
     var ansCells = gutter('');
-    for (var j = 0; j < W; j++) ansCells += '<span class="bmg-bit' + (g.craftGuess[j] ? ' on' : '') + '" data-i="' + j + '">' + g.craftGuess[j] + '</span>';
+    for (var j = 0; j < W; j++) ansCells += '<span class="bmg-bit' + (g.craftGuess[j] ? ' on' : '') + '" data-answer-i="' + j + '">' + g.craftGuess[j] + '</span>';
 
     entry.innerHTML =
       '<div style="font-size:0.74rem;color:#444;margin-bottom:6px">Add the two binary numbers, column by column:</div>' +
       '<div style="display:inline-block;background:#bdbdbd;border:2px solid;border-color:#fff #999 #999 #fff;padding:6px 10px 8px;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:center;margin-bottom:2px">' + carryCells + '</div>' +
         opRow(r.aB, '') +
         opRow(r.bB, '+') +
         '<div style="height:3px;background:#555;width:' + (GUT + W * COLW) + 'px;margin:3px 0"></div>' +
@@ -693,10 +719,19 @@
       (canDo ? '' : '<div style="font-size:0.72rem;color:#7a2a2a;margin-top:4px">You don\'t have both ingredients.</div>');
 
     Array.prototype.forEach.call(entry.querySelectorAll('.bmg-bit'), function (cell) {
-      cell.onclick = function () { var i = +cell.dataset.i; g.craftGuess[i] = g.craftGuess[i] ? 0 : 1; renderCraft(); };
+      cell.onclick = function () {
+        if (cell.dataset.carryI != null) {
+          var c = +cell.dataset.carryI;
+          g.craftCarry[c] = g.craftCarry[c] ? 0 : 1;
+        } else {
+          var i = +cell.dataset.answerI;
+          g.craftGuess[i] = g.craftGuess[i] ? 0 : 1;
+        }
+        renderCraft();
+      };
     });
     G('bmg-craftbtn').onclick = function () { doCraft(a, b, r); };
-    G('bmg-craftclear').onclick = function () { g.slotA = null; g.slotB = null; g.craftGuess = null; renderCraft(); };
+    G('bmg-craftclear').onclick = function () { g.slotA = null; g.slotB = null; g.craftGuess = null; g.craftCarry = null; renderCraft(); };
   }
   function doCraft(a, b, r) {
     var canDo = (a === b) ? (g.inv[a] || 0) >= 2 : have(a) && have(b);
@@ -710,7 +745,7 @@
     g.inv[b]--; if (g.inv[b] <= 0) delete g.inv[b];
     gainElement(r.sum, 1);
     g.selected = r.sum;
-    g.slotA = null; g.slotB = null; g.craftGuess = null;
+    g.slotA = null; g.slotB = null; g.craftGuess = null; g.craftCarry = null;
     toast('Crafted ' + elementName(r.sum) + '!', '#2f6a2f');
     clearHint();
     renderGrid(); renderInv(); renderSelected(); renderStats(); renderCraft();
