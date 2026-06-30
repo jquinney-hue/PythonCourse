@@ -15,7 +15,7 @@
  * the carries are revealed as scaffolding.
  *
  * ── Firebase / privacy ──────────────────────────────────────────────────────
- *   Writes ONLY:  miningGame/{code}: { money, best, updatedAt }
+ *   Writes ONLY:  miningGame/{className}/{code}: { money, best, updatedAt }
  *   where {code} is state.uid (the opaque LOGIN CODE, never a Google UID).
  *   No names / emails / UIDs are ever written. Leaderboard names come from
  *   studentName() / state.nameMap (localStorage only), exactly like quizzes.
@@ -165,23 +165,119 @@
     }, 400);
   }
 
-  // ── Firebase leaderboard (privacy-safe: code/money/best only) ──
+  // ── Firebase leaderboard (privacy-safe: class/code/money/best only) ──
+  var LB_CLASS_KEY = 'pylearn_mining_lb_class';
+
+  function isStaffUser() {
+    return !!(window.state && (state.isAdmin || state.isTeacher));
+  }
+  function savedLeaderboardClass() {
+    try { return localStorage.getItem(LB_CLASS_KEY) || ''; } catch (e) { return ''; }
+  }
+  function saveLeaderboardClass(className) {
+    try { localStorage.setItem(LB_CLASS_KEY, className || ''); } catch (e) {}
+  }
+  function leaderboardClassName() {
+    if (!(window.state && state.db)) return '';
+    if (isStaffUser()) {
+      var sel = G('bmg-class-select');
+      return (sel && sel.value) || savedLeaderboardClass();
+    }
+    return state.className || '';
+  }
+  function leaderboardClassRef(className) {
+    return state.db.ref('miningGame/' + className);
+  }
+  function setLeaderboardStatus(message, color) {
+    var el = G('bmg-lb-status'); if (!el) return;
+    el.textContent = message || '';
+    el.style.color = color || '#555';
+  }
+  function ensureStudentLeaderboardClass() {
+    if (!(window.state && state.db) || isStaffUser()) return Promise.resolve(leaderboardClassName());
+    if (state.className) return Promise.resolve(state.className);
+    if (!state.uid || typeof findClassForCode !== 'function') return Promise.resolve('');
+    return findClassForCode(state.uid).then(function (className) {
+      state.className = className || '';
+      renderLeaderboardClassPicker();
+      return state.className;
+    }).catch(function () { return ''; });
+  }
+  function getLeaderboardClassName() {
+    if (!(window.state && state.db)) return Promise.resolve('');
+    return isStaffUser() ? Promise.resolve(leaderboardClassName()) : ensureStudentLeaderboardClass();
+  }
+  function renderLeaderboardClassPicker() {
+    var wrap = G('bmg-class-picker'); if (!wrap) return;
+    if (!(window.state && state.db)) { wrap.innerHTML = ''; return; }
+
+    if (!isStaffUser()) {
+      wrap.innerHTML = state.className
+        ? '<span style="font-size:0.72rem;color:#555;font-weight:700">Class: ' + esc(state.className) + '</span>'
+        : '';
+      return;
+    }
+
+    wrap.innerHTML =
+      '<label for="bmg-class-select" style="font-size:0.72rem;color:#555;font-weight:700">Class</label>' +
+      '<select id="bmg-class-select" class="bmg-btn" style="padding:2px 8px;font-size:0.74rem;min-width:96px">' +
+        '<option value="">Loading...</option>' +
+      '</select>';
+
+    var sel = G('bmg-class-select');
+    var loader = (typeof getClassNames === 'function')
+      ? getClassNames()
+      : state.db.ref('classNames').get().then(function (snap) {
+          return snap.exists() ? Object.keys(snap.val() || {}).sort() : [];
+        });
+
+    loader.then(function (names) {
+      names = (names || []).slice().sort();
+      var saved = savedLeaderboardClass();
+      var selected = (saved && names.indexOf(saved) !== -1) ? saved : (names[0] || '');
+      sel.innerHTML = names.length
+        ? names.map(function (name) {
+            return '<option value="' + esc(name) + '"' + (name === selected ? ' selected' : '') + '>' + esc(name) + '</option>';
+          }).join('')
+        : '<option value="">No classes</option>';
+      if (selected) saveLeaderboardClass(selected);
+      sel.onchange = function () {
+        saveLeaderboardClass(sel.value);
+        fetchLeaderboard();
+      };
+      fetchLeaderboard();
+    }).catch(function () {
+      sel.innerHTML = '<option value="">Could not load</option>';
+      setLeaderboardStatus('Could not load class list.', '#7a2a2a');
+    });
+  }
+
   function syncLeaderboard() {
-    if (!(window.state && state.db && state.uid && !state.isAdmin)) return;
+    if (!(window.state && state.db && state.uid && !state.isAdmin && !state.isTeacher)) return;
     clearTimeout(g.syncTimer);
     g.syncTimer = setTimeout(function () {
-      try {
-        state.db.ref('miningGame/' + state.uid).set({
+      ensureStudentLeaderboardClass().then(function (className) {
+        if (!className) return;
+        return leaderboardClassRef(className).child(state.uid).set({
           money: Math.max(0, Math.floor(g.money)),
           best: Math.max(1, Math.floor(g.best)),
           updatedAt: Date.now()
         });
-      } catch (e) {}
+      }).catch(function () {});
     }, 2500);
   }
   function fetchLeaderboard() {
     if (!(window.state && state.db)) { renderLeaderboard([]); return; }
-    state.db.ref('miningGame').get().then(function (snap) {
+    getLeaderboardClassName().then(function (className) {
+      if (!className) {
+        setLeaderboardStatus(isStaffUser() ? 'Choose a class to view.' : 'Your class is still loading.');
+        renderLeaderboard([], 'No class leaderboard selected.');
+        return null;
+      }
+      setLeaderboardStatus('');
+      return leaderboardClassRef(className).get();
+    }).then(function (snap) {
+      if (!snap) return;
       var data = snap.val() || {};
       var rows = Object.keys(data).map(function (code) {
         var d = data[code] || {};
@@ -189,7 +285,9 @@
       }).filter(function (r) { return r.best > 0 || r.money > 0; });
       rows.sort(function (a, b) { return b.best - a.best || b.money - a.money; });
       renderLeaderboard(rows);
-    }).catch(function () {});
+    }).catch(function () {
+      setLeaderboardStatus('Could not load leaderboard.', '#7a2a2a');
+    });
   }
 
   // ── Helpers ────────────────────────────────────────────────────
@@ -624,19 +722,21 @@
   }
 
   // ── Leaderboard render ─────────────────────────────────────────
-  function renderLeaderboard(rows) {
+  function renderLeaderboard(rows, emptyMessage) {
     var el = G('bmg-lb'); if (!el) return;
     g._lastLb = rows || [];
+    if (emptyMessage && (!rows || !rows.length)) { el.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;grid-column:1/-1">' + esc(emptyMessage) + '</div>'; return; }
     if (!rows || !rows.length) { el.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;grid-column:1/-1">No miners yet — be the first!</div>'; return; }
     var me = window.state && state.uid;
     var medals = ['🥇', '🥈', '🥉'];
     el.innerHTML = rows.slice(0, 30).map(function (r, i) {
       var nm = (typeof studentName === 'function' && studentName(r.code)) || r.code;
       var isMe = (r.code === me);
+      var bestTitle = elementName(r.best) + ' - denary ' + r.best;
       return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:2px solid;border-color:#fff #999 #999 #fff;background:' + (isMe ? '#e6c64a' : '#bdbdbd') + '">' +
         '<span style="width:22px;text-align:center;font-size:0.82rem;font-weight:800;color:#333">' + (medals[i] || (i + 1)) + '</span>' +
         '<span style="flex:1;min-width:0;font-size:0.8rem;font-weight:700;color:#1f1f1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(nm) + (isMe ? ' (you)' : '') + '</span>' +
-        '<span style="font-family:ui-monospace,monospace;font-size:0.76rem;font-weight:800;color:#1a5a2a" title="' + esc(elementName(r.best)) + '">' + esc(elementSymbol(r.best)) + ' ' + binStr(r.best) + '</span>' +
+        '<span style="font-family:ui-monospace,monospace;font-size:0.76rem;font-weight:800;color:#1a5a2a;white-space:nowrap;flex-shrink:0" title="' + esc(bestTitle) + '">' + esc(elementSymbol(r.best)) + ' ' + r.best + '</span>' +
         '<span style="font-size:0.76rem;font-weight:800;color:#6a4e10">' + r.money + '💰</span>' +
       '</div>';
     }).join('');
@@ -905,9 +1005,11 @@
         // Leaderboard — full width, at the very bottom
         '<div class="bmg-panel" style="margin-top:10px">' +
           '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">' +
+            '<span id="bmg-class-picker" style="display:flex;align-items:center;gap:6px"></span>' +
             '<span class="bmg-h" style="margin:0">🏆 Class Leaderboard</span>' +
             '<button id="bmg-loadnames" class="bmg-btn" style="padding:3px 10px;font-size:0.74rem">📋 Load names</button>' +
             '<span id="bmg-loadnames-status" style="font-size:0.72rem;color:#555"></span>' +
+            '<span id="bmg-lb-status" style="font-size:0.72rem;color:#555"></span>' +
           '</div>' +
           '<div id="bmg-lb" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:5px"></div>' +
         '</div>' +
@@ -964,6 +1066,7 @@
     };
 
     renderAll();
+    renderLeaderboardClassPicker();
 
     // Leaderboard: immediate + 30s poll (clear any previous widget's timer)
     if (window._bmgLbTimer) { clearInterval(window._bmgLbTimer); window._bmgLbTimer = null; }
