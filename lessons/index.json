@@ -157,6 +157,12 @@
               "title": "L2: Pixel Art Binary",
               "file": "lessons/year8-pixel-art-quiz.json",
               "order": 2
+            },
+            {
+              "id": "year8-binary-mine",
+              "title": "L3: Binary Mine",
+              "file": "lessons/year8-binary-mine.json",
+              "order": 3
             }
           ]
         }

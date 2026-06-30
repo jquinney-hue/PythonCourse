@@ -1,0 +1,14 @@
+{
+  "id": "year8-binary-mine",
+  "title": "L3: Binary Mine",
+  "description": "Mine and combine elements. Combining two elements adds their binary codes together — the sum is a brand-new element. Climb as high as you can on the class leaderboard.",
+  "steps": [
+    {
+      "id": "play",
+      "title": "Binary Mine",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-2 text-gray-800'>Binary Mine</h2><p class='text-gray-700 mb-3'>Every block is an element with a <strong>binary code</strong>. To mine a block you need a pickaxe that is strong enough. You make stronger pickaxes by <strong>combining two elements</strong> — and combining is just <strong>binary addition</strong>: the two codes add together to make a new element.</p><div class='ex-box' style='padding:0.6rem 0.8rem;margin-bottom:0.9rem'><div style='display:flex;flex-wrap:wrap;gap:1.25rem;font-size:0.9rem'><div><span style='color:#94a3b8'>Mine</span><br><span style='color:#cbd5e1'>Left-click a block</span></div><div><span style='color:#94a3b8'>Build</span><br><span style='color:#cbd5e1'>Right-click the sky</span></div><div><span style='color:#94a3b8'>Combine</span><br><span style='color:#cbd5e1'>0110 + 1100 = 10010</span></div><div><span style='color:#94a3b8'>Goal</span><br><span style='color:#cbd5e1'>Discover the highest element</span></div></div></div><div id='bmg-root'></div>",
+      "js": "if (window.initBinaryMiningGame) { initBinaryMiningGame('bmg-root'); } else { document.getElementById('bmg-root').innerHTML = '<p style=\"color:#f87171\">Game could not load — please refresh the page.</p>'; }"
+    }
+  ]
+}
