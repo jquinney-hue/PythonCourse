@@ -131,6 +131,18 @@
     "apFeedback": {
       ".read": "auth != null && ((auth.token.firebase.sign_in_provider === 'google.com' && root.child('admins').child(auth.uid).val() === true) || root.child('teacherSessions').child(auth.uid).exists() || root.child('studentSessions').child(auth.uid).exists())",
       ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'google.com' && root.child('admins').child(auth.uid).val() === true) || root.child('teacherSessions').child(auth.uid).exists())"
+    },
+
+    "miningGame": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'google.com' && root.child('admins').child(auth.uid).val() === true) || root.child('teacherSessions').child(auth.uid).exists() || root.child('studentSessions').child(auth.uid).child('code').val() === $code)",
+        ".validate": "newData.hasChildren(['money', 'best', 'updatedAt'])",
+        "money":     { ".validate": "newData.isNumber()" },
+        "best":      { ".validate": "newData.isNumber()" },
+        "updatedAt": { ".validate": "newData.isNumber()" },
+        "$other":    { ".validate": false }
+      }
     }
   }
 }

@@ -171,7 +171,9 @@
     g.syncTimer = setTimeout(function () {
       try {
         state.db.ref('miningGame/' + state.uid).set({
-          money: g.money | 0, best: g.best | 0, updatedAt: Date.now()
+          money: Math.max(0, Math.floor(g.money)),
+          best: Math.max(1, Math.floor(g.best)),
+          updatedAt: Date.now()
         });
       } catch (e) {}
     }, 2500);
