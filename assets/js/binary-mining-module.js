@@ -125,6 +125,7 @@
       mined: {},      // "x,y" -> true  (mine cells removed)
       placed: {},     // "x,y" -> value (built on the surface)
       shop: {},       // value -> count  (sold elements, buyable back at 2x)
+      _lastLb: [],    // last leaderboard rows (for re-render after Load names)
       selected: 1,
       slotA: null,
       slotB: null,
@@ -625,18 +626,18 @@
   // ── Leaderboard render ─────────────────────────────────────────
   function renderLeaderboard(rows) {
     var el = G('bmg-lb'); if (!el) return;
-    if (!rows || !rows.length) { el.innerHTML = '<div style="color:#64748b;font-size:0.78rem;padding:6px">No miners yet — be the first!</div>'; return; }
+    g._lastLb = rows || [];
+    if (!rows || !rows.length) { el.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;grid-column:1/-1">No miners yet — be the first!</div>'; return; }
     var me = window.state && state.uid;
     var medals = ['🥇', '🥈', '🥉'];
-    el.innerHTML = rows.slice(0, 12).map(function (r, i) {
+    el.innerHTML = rows.slice(0, 30).map(function (r, i) {
       var nm = (typeof studentName === 'function' && studentName(r.code)) || r.code;
       var isMe = (r.code === me);
-      return '<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;' +
-        'background:' + (isMe ? 'rgba(251,191,36,0.16)' : 'transparent') + '">' +
-        '<span style="width:20px;text-align:center;font-size:0.78rem">' + (medals[i] || (i + 1)) + '</span>' +
-        '<span style="flex:1;min-width:0;font-size:0.76rem;color:' + (isMe ? '#fde68a' : '#cbd5e1') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(nm) + (isMe ? ' (you)' : '') + '</span>' +
-        '<span style="font-family:monospace;font-size:0.72rem;color:#a7f3d0" title="' + esc(elementName(r.best)) + '">' + binStr(r.best) + '</span>' +
-        '<span style="font-size:0.72rem;color:#fcd34d;width:48px;text-align:right">' + r.money + '💰</span>' +
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:2px solid;border-color:#fff #999 #999 #fff;background:' + (isMe ? '#e6c64a' : '#bdbdbd') + '">' +
+        '<span style="width:22px;text-align:center;font-size:0.82rem;font-weight:800;color:#333">' + (medals[i] || (i + 1)) + '</span>' +
+        '<span style="flex:1;min-width:0;font-size:0.8rem;font-weight:700;color:#1f1f1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(nm) + (isMe ? ' (you)' : '') + '</span>' +
+        '<span style="font-family:ui-monospace,monospace;font-size:0.76rem;font-weight:800;color:#1a5a2a" title="' + esc(elementName(r.best)) + '">' + esc(elementSymbol(r.best)) + ' ' + binStr(r.best) + '</span>' +
+        '<span style="font-size:0.76rem;font-weight:800;color:#6a4e10">' + r.money + '💰</span>' +
       '</div>';
     }).join('');
   }
@@ -798,6 +799,55 @@
     };
   }
 
+  // ── Load names from the class code spreadsheet (local only) ────
+  // Mirrors the quiz "Load names" flow: pulls code→name from the Google sheet
+  // into state.nameMap / localStorage. Names are NEVER written to Firebase.
+  function loadLeaderboardNames() {
+    var btn = G('bmg-loadnames'), status = G('bmg-loadnames-status');
+    if (!btn) return;
+    if (typeof requestGoogleStudentToken !== 'function' || typeof fetchAllStudentSheetData !== 'function' ||
+        typeof findGoogleCodeSpreadsheet !== 'function' || typeof googleLookupRowToCandidate !== 'function') {
+      if (status) { status.textContent = 'Name loading is not available here.'; status.style.color = '#7a2a2a'; }
+      return;
+    }
+    var orig = '📋 Load names';
+    btn.disabled = true; btn.textContent = '⏳ Connecting…';
+    if (status) status.textContent = '';
+    (async function () {
+      try {
+        // Must run in the click's user-gesture chain for the Google popup.
+        if (!window.googleStudentAccessToken) await requestGoogleStudentToken();
+        btn.textContent = '⏳ Finding sheet…';
+        var spreadsheetId = sessionStorage.getItem('pylearn_student_sheet_id');
+        if (!spreadsheetId) {
+          var sheet = await findGoogleCodeSpreadsheet();
+          if (!sheet) throw new Error('Could not find the code spreadsheet.');
+          spreadsheetId = sheet.id;
+          sessionStorage.setItem('pylearn_student_sheet_id', spreadsheetId);
+        }
+        btn.textContent = '⏳ Reading names…';
+        var sheetData = await fetchAllStudentSheetData(spreadsheetId);
+        var imported = 0;
+        sheetData.forEach(function (sheet) {
+          var cols = googleLookupHeaderIndexes(sheet.rows[0] || []);
+          var hasHeader = cols.email != null || cols.name != null || cols.firstName != null || cols.code != null;
+          for (var r = hasHeader ? 1 : 0; r < sheet.rows.length; r++) {
+            var cand = googleLookupRowToCandidate(sheet.rows[r], sheet.title, hasHeader ? cols : null);
+            if (cand && cand.code && cand.displayName) { state.nameMap[cand.code] = cand.displayName; imported++; }
+          }
+        });
+        if (imported) { try { localStorage.setItem('pylearn_name_map', JSON.stringify(state.nameMap)); } catch (_e) {} }
+        renderLeaderboard(g._lastLb || []);
+        btn.textContent = '✓ ' + imported + ' names';
+        if (status) { status.textContent = imported ? '' : 'No names found — check the sheet.'; status.style.color = imported ? '#1a4a1a' : '#7a5a10'; }
+        setTimeout(function () { btn.disabled = false; btn.textContent = orig; }, 2500);
+      } catch (e) {
+        btn.disabled = false; btn.textContent = orig;
+        if (status) { status.textContent = '⚠ ' + (e.message || 'Failed'); status.style.color = '#7a2a2a'; }
+      }
+    })();
+  }
+
   // ── Mount ──────────────────────────────────────────────────────
   window.initBinaryMiningGame = function (containerId) {
     var wrap = G(containerId); if (!wrap) return;
@@ -818,15 +868,14 @@
           '<button id="bmg-journal-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📖 Journal</button>' +
         '</div>' +
         '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
-          // Left column: mine + leaderboard
-          '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:10px">' +
+          // Left column: the mine
+          '<div style="flex:0 0 auto">' +
             '<div class="bmg-panel">' +
               '<div class="bmg-h">The Mine</div>' +
               '<div id="bmg-grid" style="display:grid;grid-template-columns:repeat(' + COLS + ',' + CELL + 'px);grid-auto-rows:' + CELL + 'px;gap:0;border:3px solid;border-color:#373737 #fff #fff #373737;overflow-y:auto;overflow-x:hidden;max-height:' + (MAX_VIS_ROWS * CELL) + 'px;user-select:none"></div>' +
               '<button id="bmg-dig" class="bmg-btn" style="width:' + GRIDW + 'px;margin-top:8px;padding:7px;font-size:0.82rem"></button>' +
               '<div style="font-size:0.66rem;color:#555;margin-top:5px;max-width:' + GRIDW + 'px">Left-click to <b>mine</b> &middot; right-click the sky to <b>build</b> &middot; <b>Dig deeper</b> for richer ore.</div>' +
             '</div>' +
-            '<div class="bmg-panel"><div class="bmg-h">🏆 Leaderboard</div><div id="bmg-lb"></div></div>' +
           '</div>' +
           // Right column: Minecraft inventory panel
           '<div class="bmg-panel" style="flex:1;min-width:350px;max-width:470px">' +
@@ -852,6 +901,15 @@
             '<div id="bmg-selbar" style="display:flex;align-items:center;gap:8px;margin-top:8px;min-height:26px;font-size:0.8rem"></div>' +
             '<div style="text-align:right;margin-top:8px"><button id="bmg-reset" class="bmg-btn" style="padding:2px 8px;font-size:0.66rem;color:#7a3a3a">Reset</button></div>' +
           '</div>' +
+        '</div>' +
+        // Leaderboard — full width, at the very bottom
+        '<div class="bmg-panel" style="margin-top:10px">' +
+          '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">' +
+            '<span class="bmg-h" style="margin:0">🏆 Class Leaderboard</span>' +
+            '<button id="bmg-loadnames" class="bmg-btn" style="padding:3px 10px;font-size:0.74rem">📋 Load names</button>' +
+            '<span id="bmg-loadnames-status" style="font-size:0.72rem;color:#555"></span>' +
+          '</div>' +
+          '<div id="bmg-lb" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:5px"></div>' +
         '</div>' +
       '</div>';
 
@@ -898,6 +956,7 @@
     G('bmg-dig').onclick = digDeeper;
     G('bmg-journal-btn').onclick = openJournal;
     G('bmg-shop-btn').onclick = openShop;
+    G('bmg-loadnames').onclick = loadLeaderboardNames;
 
     G('bmg-reset').onclick = function () {
       if (!confirm('Reset your mine, inventory and money? This cannot be undone.')) return;
