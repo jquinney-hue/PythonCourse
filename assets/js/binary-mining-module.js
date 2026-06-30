@@ -124,10 +124,12 @@
       discovered: { 1: true },
       mined: {},      // "x,y" -> true  (mine cells removed)
       placed: {},     // "x,y" -> value (built on the surface)
+      shop: {},       // value -> count  (sold elements, buyable back at 2x)
       selected: 1,
       slotA: null,
       slotB: null,
       craftGuess: null,
+      dragVal: null,
       saveTimer: null,
       syncTimer: null
     };
@@ -145,6 +147,7 @@
       g.discovered = raw.discovered || { 1: true };
       g.mined      = raw.mined || {};
       g.placed     = raw.placed || {};
+      g.shop       = raw.shop || {};
       g.selected   = raw.selected || bestOwned() || 1;
       return true;
     } catch (e) { return false; }
@@ -155,7 +158,7 @@
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
           inv: g.inv, money: g.money, best: g.best, depth: g.depth,
-          discovered: g.discovered, mined: g.mined, placed: g.placed, selected: g.selected
+          discovered: g.discovered, mined: g.mined, placed: g.placed, shop: g.shop, selected: g.selected
         }));
       } catch (e) {}
     }, 400);
@@ -238,10 +241,57 @@
   function toast(msg, color) {
     var el = G('bmg-toast'); if (!el) return;
     el.textContent = msg;
-    el.style.color = color || '#4ade80';
+    el.style.color = color || '#2f6a2f';
     el.style.opacity = '1';
     clearTimeout(el._t);
     el._t = setTimeout(function () { el.style.opacity = '0'; }, 2200);
+  }
+
+  // ── Minecraft-style skin (injected once) ───────────────────────
+  function injectStyle() {
+    if (document.getElementById('bmg-style')) return;
+    var s = document.createElement('style');
+    s.id = 'bmg-style';
+    s.textContent =
+      '.bmg-wrap{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#222}' +
+      '.bmg-panel{background:#c6c6c6;border:4px solid;border-color:#fff #565656 #565656 #fff;padding:10px}' +
+      '.bmg-h{font-size:1.02rem;font-weight:800;color:#3f3f3f;letter-spacing:1px;margin:0 0 6px;text-shadow:1px 1px 0 #fff}' +
+      '.bmg-slot{width:42px;height:42px;background:#8b8b8b;border:3px solid;border-color:#373737 #fff #fff #373737;box-sizing:border-box;position:relative}' +
+      '.bmg-slot.sel{box-shadow:inset 0 0 0 3px #ffd34d}' +
+      '.bmg-slot.bmg-drop{background:#a7a76a}' +
+      '.bmg-item{position:absolute;inset:2px;display:flex;align-items:center;justify-content:center;user-select:none}' +
+      '.bmg-item[draggable=true]{cursor:grab}.bmg-item[draggable=true]:active{cursor:grabbing}' +
+      '.bmg-sym{font-family:ui-sans-serif,system-ui,sans-serif;font-weight:800;color:#0a0f1a;font-size:13px;text-shadow:0 1px 0 rgba(255,255,255,0.4)}' +
+      '.bmg-count{position:absolute;right:1px;bottom:-4px;font-size:13px;font-weight:800;color:#fff;text-shadow:1px 1px 0 #3f3f3f}' +
+      '.bmg-char{width:104px;height:140px;background:#0a0a0a;border:3px solid;border-color:#373737 #fff #fff #373737;display:flex;align-items:center;justify-content:center;color:#4a4a4a;font-size:0.66rem;text-align:center;line-height:1.5}' +
+      '.bmg-arrow{font-size:1.7rem;color:#5a5a5a;font-weight:800;line-height:1}' +
+      '.bmg-btn{font-family:inherit;background:#c6c6c6;border:3px solid;border-color:#fff #565656 #565656 #fff;color:#2a2a2a;font-weight:700;cursor:pointer}' +
+      '.bmg-btn:active{border-color:#565656 #fff #fff #565656}' +
+      '.bmg-btn:disabled{color:#888;cursor:not-allowed}' +
+      '.bmg-bit{width:26px;height:30px;display:inline-flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:1.05rem;font-weight:800;background:#8b8b8b;border:2px solid;border-color:#373737 #fff #fff #373737;cursor:pointer;color:#2a2a2a;margin:0 1px;box-sizing:border-box}' +
+      '.bmg-bit.on{background:#f4d03f;color:#1a1a1a}';
+    document.head.appendChild(s);
+  }
+
+  function itemHTML(v, count, drag) {
+    return '<div class="bmg-item"' + (drag ? ' draggable="true"' : '') + ' data-val="' + v + '" ' +
+      'title="' + esc(elementName(v)) + ' — ' + binStr(v) + '" style="background:' + elementColor(v) + '">' +
+      '<span class="bmg-sym">' + esc(elementSymbol(v)) + '</span>' +
+      ((count && count > 1) ? '<span class="bmg-count">' + count + '</span>' : '') +
+    '</div>';
+  }
+
+  // Fill / clear the two crafting ingredient slots.
+  function slotClick(which) {
+    var cur = (which === 'A') ? g.slotA : g.slotB;
+    if (cur) { if (which === 'A') g.slotA = null; else g.slotB = null; }
+    else if (g.selected && have(g.selected)) { if (which === 'A') g.slotA = g.selected; else g.slotB = g.selected; }
+    g.craftGuess = null; renderCraft();
+  }
+  function slotDrop(which, val) {
+    if (val == null || !have(val)) return;
+    if (which === 'A') g.slotA = val; else g.slotB = val;
+    g.craftGuess = null; renderCraft();
   }
 
   // ── Grid render ────────────────────────────────────────────────
@@ -299,52 +349,46 @@
   function renderInv() {
     var el = G('bmg-inv'); if (!el) return;
     var vals = ownedValues();
-    if (!vals.length) { el.innerHTML = '<div style="color:#64748b;font-size:0.8rem;padding:6px">Empty — go mining!</div>'; return; }
-    el.innerHTML = vals.map(function (v) {
-      var sel = (v === g.selected);
-      return '<button class="bmg-invtile" data-val="' + v + '" title="' + esc(elementName(v)) + '" ' +
-        'style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;' +
-        'border:1px solid ' + (sel ? '#fbbf24' : '#334155') + ';background:' + (sel ? '#3a2f12' : '#111827') + ';text-align:left">' +
-        '<span style="width:18px;height:18px;border-radius:4px;flex-shrink:0;background:' + elementColor(v) + '"></span>' +
-        '<span style="flex:1;min-width:0">' +
-          '<span style="display:block;font-size:0.72rem;color:#e2e8f0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(elementName(v)) + '</span>' +
-          '<span style="font-family:monospace;font-size:0.72rem;color:#94a3b8">' + binStr(v) + '</span>' +
-        '</span>' +
-        '<span style="font-size:0.72rem;color:#fbbf24;font-weight:700">×' + g.inv[v] + '</span>' +
-      '</button>';
-    }).join('');
+    var INV_COLS = 8, INV_MIN = 32;
+    var slots = Math.max(INV_MIN, Math.ceil(vals.length / INV_COLS) * INV_COLS);
+    var html = '';
+    for (var i = 0; i < slots; i++) {
+      var v = vals[i];
+      html += '<div class="bmg-slot' + (v === g.selected ? ' sel' : '') + '"' + (v != null ? ' data-inv="' + v + '"' : '') + '>' +
+        (v != null ? itemHTML(v, g.inv[v], true) : '') + '</div>';
+    }
+    el.innerHTML = html;
   }
   function renderSelected() {
-    var el = G('bmg-selected'); if (!el) return;
+    var el = G('bmg-selbar'); if (!el) return;
     var v = g.selected;
-    if (!v || !have(v)) { el.innerHTML = '<div style="color:#64748b;font-size:0.8rem">No element selected.</div>'; return; }
+    if (!v || !have(v)) {
+      el.innerHTML = '<span style="color:#5a5a5a;font-size:0.76rem">Click an item to select it, then Sell it — or right-click the sky to build with it.</span>';
+      return;
+    }
     el.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-        '<span style="width:30px;height:30px;border-radius:6px;background:' + elementColor(v) + '"></span>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:0.82rem;color:#f1f5f9;font-weight:700">' + esc(elementName(v)) + '</div>' +
-          '<div style="font-family:monospace;font-size:0.8rem;color:#94a3b8">' + binStr(v) + ' <span style="color:#475569">(' + v + ')</span></div>' +
-        '</div>' +
-        '<span style="font-size:0.78rem;color:#fbbf24;font-weight:700">×' + g.inv[v] + '</span>' +
-      '</div>' +
-      '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
-        '<button id="bmg-toA" style="flex:1;padding:5px;border-radius:5px;border:1px solid #3b82f6;background:#1e3a5f;color:#bfdbfe;font-size:0.75rem;font-weight:600;cursor:pointer">→ Slot A</button>' +
-        '<button id="bmg-toB" style="flex:1;padding:5px;border-radius:5px;border:1px solid #3b82f6;background:#1e3a5f;color:#bfdbfe;font-size:0.75rem;font-weight:600;cursor:pointer">→ Slot B</button>' +
-        '<button id="bmg-sell" style="flex:1;padding:5px;border-radius:5px;border:1px solid #f59e0b;background:#3a2f12;color:#fcd34d;font-size:0.75rem;font-weight:600;cursor:pointer">Sell +' + v + '</button>' +
-      '</div>';
-    G('bmg-toA').onclick  = function () { addToCraft('A'); };
-    G('bmg-toB').onclick  = function () { addToCraft('B'); };
+      '<span style="width:24px;height:24px;flex-shrink:0;background:' + elementColor(v) + ';border:2px solid;border-color:#373737 #fff #fff #373737"></span>' +
+      '<span style="font-weight:800;color:#2a2a2a">' + esc(elementName(v)) + '</span>' +
+      '<span style="font-family:ui-monospace,monospace;color:#444">' + binStr(v) + '</span>' +
+      '<span style="color:#555">×' + g.inv[v] + '</span>' +
+      '<button id="bmg-sell" class="bmg-btn" style="margin-left:auto;padding:3px 10px;font-size:0.76rem">Sell +' + v + ' 💰</button>';
     G('bmg-sell').onclick = function () { sellSelected(); };
   }
 
-  // ── Stats ──────────────────────────────────────────────────────
+  // ── Stats (top bar) ────────────────────────────────────────────
   function renderStats() {
     var el = G('bmg-stats'); if (!el) return;
+    function stat(label, val) {
+      return '<span style="display:inline-flex;gap:5px;align-items:baseline">' +
+        '<span style="color:#555;font-size:0.72rem">' + label + '</span>' +
+        '<span style="color:#222;font-weight:800">' + val + '</span></span>';
+    }
     el.innerHTML =
-      '<div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">💰 Money</span><span style="color:#fcd34d;font-weight:700">' + g.money + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">⛏ Best</span><span style="color:#a7f3d0;font-weight:700">' + esc(elementName(g.best)) + ' <span style="font-family:monospace">' + binStr(g.best) + '</span></span></div>' +
-      '<div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">📖 Discovered</span><span style="color:#e2e8f0;font-weight:700">' + discoveredCount() + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">🪜 Depth</span><span style="color:#e2e8f0;font-weight:700">' + g.depth + '</span></div>';
+      '<span style="font-weight:800;color:#2a2a2a;letter-spacing:1px">⛏ BINARY MINE</span>' +
+      stat('💰', g.money) +
+      stat('🪜', g.depth) +
+      stat('⛏', esc(elementSymbol(g.best)) + ' ' + binStr(g.best)) +
+      stat('📖', discoveredCount());
   }
 
   // ── Mining + hint ──────────────────────────────────────────────
@@ -356,7 +400,7 @@
       g.mined[key] = true;
       gainElement(v, 1);
       if (!have(g.selected)) g.selected = v;
-      toast('+ ' + elementName(v) + ' (' + binStr(v) + ')', '#4ade80');
+      toast('+ ' + elementName(v) + ' (' + binStr(v) + ')', '#2f6a2f');
       renderGrid(); renderInv(); renderSelected(); renderStats();
       clearHint();
       save(); syncLeaderboard();
@@ -411,31 +455,44 @@
       btn.onclick = function () {
         g.slotA = +btn.dataset.a; g.slotB = +btn.dataset.b; g.craftGuess = null;
         renderCraft();
-        G('bmg-craft').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        var sa = G('bmg-slotA'); if (sa) sa.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
     });
   }
   function clearHint() { var el = G('bmg-hint'); if (el) { el.style.display = 'none'; el.innerHTML = ''; } }
 
-  // ── Selling + placing + digging ────────────────────────────────
+  // ── Selling + buyback + placing + digging ──────────────────────
+  function buybackCost(v) { return v * 2; }  // sold for v, bought back for 2v
   function sellSelected() {
     var v = g.selected;
     if (!have(v)) return;
     g.inv[v]--; if (g.inv[v] <= 0) delete g.inv[v];
     g.money += v;
-    toast('Sold ' + elementName(v) + ' for ' + v + ' 💰', '#fcd34d');
+    g.shop[v] = (g.shop[v] || 0) + 1;  // stock it for buyback
+    toast('Sold ' + elementName(v) + ' for ' + v + ' 💰', '#7a5a10');
     if (!have(v)) g.selected = bestOwned() || 1;
     renderInv(); renderSelected(); renderStats(); renderGrid(); renderDig();
     save(); syncLeaderboard();
+    checkGameOver();
+  }
+  function buyBack(v) {
+    var cost = buybackCost(v);
+    if (!(g.shop[v] > 0) || g.money < cost) return false;
+    g.money -= cost;
+    g.shop[v]--; if (g.shop[v] <= 0) delete g.shop[v];
+    gainElement(v, 1);
+    g.selected = v;
+    toast('Bought back ' + elementName(v) + ' for ' + cost + ' 💰', '#2f6a2f');
+    renderInv(); renderSelected(); renderStats(); renderGrid(); renderDig();
+    save(); syncLeaderboard();
+    return true;
   }
   function renderDig() {
     var b = G('bmg-dig'); if (!b) return;
     var cost = digCost(g.depth);
     var can = g.money >= cost;
-    b.innerHTML = '⛏ Dig deeper &nbsp;<span style="color:#fcd34d">' + cost + ' 💰</span>';
+    b.innerHTML = '⛏ Dig deeper — ' + cost + ' 💰';
     b.disabled = !can;
-    b.style.opacity = can ? '1' : '0.5';
-    b.style.cursor = can ? 'pointer' : 'not-allowed';
     b.title = can ? 'Unlock the next, richer layer of ore' : 'Sell elements to afford ' + cost + ' money';
   }
   function digDeeper() {
@@ -443,20 +500,22 @@
     if (g.money < cost) return;
     g.money -= cost;
     g.depth += 1;
-    toast('Dug deeper! Layer ' + g.depth + ' unlocked.', '#a7f3d0');
+    toast('Dug deeper! Layer ' + g.depth + ' unlocked.', '#2f6a2f');
     renderGrid(); renderStats(); renderDig();
     // Keep the newest row in view
     var grid = G('bmg-grid'); if (grid) grid.scrollTop = grid.scrollHeight;
     save(); syncLeaderboard();
+    checkGameOver();
   }
   function placeAt(key) {
     var v = g.selected;
-    if (!have(v)) { toast('Select an element to place first', '#f87171'); return; }
+    if (!have(v)) { toast('Select an element to place first', '#a32a2a'); return; }
     g.placed[key] = v;
     g.inv[v]--; if (g.inv[v] <= 0) delete g.inv[v];
     if (!have(v)) g.selected = bestOwned() || g.selected;
     renderGrid(); renderInv(); renderSelected();
     save();
+    checkGameOver();
   }
   function pickUp(key) {
     var v = g.placed[key]; if (!v) return;
@@ -476,73 +535,64 @@
       bB: b.toString(2).padStart(width, '0')
     };
   }
-  function addToCraft(slot) {
-    var v = g.selected;
-    if (!have(v)) return;
-    if (slot === 'A') g.slotA = v; else g.slotB = v;
-    g.craftGuess = null;
-    renderCraft();
-  }
-  function bitCell(ch, opts) {
-    opts = opts || {};
-    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:30px;' +
-      'font-family:monospace;font-size:1.05rem;font-weight:700;border-radius:4px;margin:0 1px;' +
-      'color:' + (opts.color || '#e2e8f0') + ';background:' + (opts.bg || 'transparent') + ';' +
-      (opts.border ? 'border:1px solid ' + opts.border + ';' : '') + (opts.cursor ? 'cursor:pointer;' : '') + '" ' +
-      (opts.attrs || '') + '>' + ch + '</span>';
-  }
   function renderCraft() {
-    var el = G('bmg-craft-body'); if (!el) return;
+    var slotA = G('bmg-slotA'), slotB = G('bmg-slotB'), out = G('bmg-slotOut');
+    var binA = G('bmg-binA'), binB = G('bmg-binB'), entry = G('bmg-craft-entry');
+    if (!slotA) return;
     var a = g.slotA, b = g.slotB;
+    slotA.innerHTML = a ? itemHTML(a, 0, false) : '';
+    slotB.innerHTML = b ? itemHTML(b, 0, false) : '';
+    slotA.classList.toggle('sel', !!a);
+    slotB.classList.toggle('sel', !!b);
+    binA.textContent = a ? binStr(a) : '';
+    binB.textContent = b ? binStr(b) : '';
 
     if (!a || !b) {
-      el.innerHTML = '<div style="color:#64748b;font-size:0.8rem;padding:8px 0">' +
-        'Pick two elements (use <b>→ Slot A</b> / <b>→ Slot B</b>) to combine them.' +
-        '<div style="margin-top:6px;color:#94a3b8">A: ' + (a ? esc(elementName(a)) + ' (' + binStr(a) + ')' : '—') +
-        ' &nbsp; B: ' + (b ? esc(elementName(b)) + ' (' + binStr(b) + ')' : '—') + '</div></div>';
+      out.innerHTML = '';
+      entry.innerHTML = '<div style="color:#5a5a5a;font-size:0.76rem">Drag two elements into the slots (or click a slot to drop your selected one), then add their binary codes.</div>';
       return;
     }
     var canDo = (a === b) ? (g.inv[a] || 0) >= 2 : have(a) && have(b);
     var r = additionRows(a, b);
     var W = r.width;
     if (!g.craftGuess || g.craftGuess.length !== W) g.craftGuess = new Array(W).fill(0);
+    out.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:#5a5a5a;font-weight:800">?</span>';
 
-    function inputRow(binPadded, label) {
-      var cells = '';
-      for (var i = 0; i < W; i++) cells += bitCell(binPadded[i], { color: '#cbd5e1' });
-      return '<div style="display:flex;align-items:center;gap:8px">' +
-        '<span style="width:104px;font-size:0.7rem;color:#93c5fd;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(label) + '</span>' +
-        '<span style="display:flex">' + cells + '</span></div>';
+    // Column-addition layout: gutter (for +/sign) then W aligned digit columns.
+    var GUT = 20, COLW = 28; // bmg-bit footprint = 26 + 1px margin each side
+    function dcell(ch) {
+      return '<span style="display:inline-flex;width:26px;height:30px;align-items:center;justify-content:center;' +
+        'font-family:ui-monospace,monospace;font-size:1.1rem;font-weight:800;color:#222;margin:0 1px;box-sizing:border-box">' + ch + '</span>';
     }
-    var resultCells = '';
-    for (var j = 0; j < W; j++) {
-      var bit = g.craftGuess[j];
-      resultCells += bitCell(String(bit), {
-        color: bit ? '#fcd34d' : '#475569', bg: '#0f172a', border: '#334155', cursor: true,
-        attrs: 'class="bmg-guess" data-i="' + j + '"'
-      });
+    function gutter(ch) {
+      return '<span style="display:inline-flex;width:' + GUT + 'px;height:30px;align-items:center;justify-content:center;' +
+        'font-family:ui-monospace,monospace;font-size:1.15rem;font-weight:800;color:#555">' + ch + '</span>';
     }
+    function opRow(str, sign) {
+      var s = '<div style="display:flex;align-items:center">' + gutter(sign);
+      for (var i = 0; i < W; i++) s += dcell(str[i]);
+      return s + '</div>';
+    }
+    var ansCells = gutter('');
+    for (var j = 0; j < W; j++) ansCells += '<span class="bmg-bit' + (g.craftGuess[j] ? ' on' : '') + '" data-i="' + j + '">' + g.craftGuess[j] + '</span>';
 
-    el.innerHTML =
-      inputRow(r.aB, elementName(a) + ' ' + binStr(a)) +
-      inputRow(r.bB, '+ ' + elementName(b) + ' ' + binStr(b)) +
-      '<div style="border-top:1px solid #334155;margin:4px 0 4px 112px"></div>' +
-      '<div style="display:flex;align-items:center;gap:8px">' +
-        '<span style="width:104px;font-size:0.7rem;color:#fcd34d;text-align:right">= your answer</span>' +
-        '<span style="display:flex">' + resultCells + '</span></div>' +
-      '<div id="bmg-craft-msg" style="font-size:0.74rem;color:#94a3b8;margin:6px 0 0 112px;min-height:1rem">Tap the boxes to enter the binary sum, then Check.</div>' +
-      '<div style="display:flex;gap:6px;margin-top:8px;margin-left:112px;flex-wrap:wrap">' +
-        '<button id="bmg-craftbtn" ' + (canDo ? '' : 'disabled') + ' style="padding:5px 12px;border-radius:5px;border:none;background:' + (canDo ? '#16a34a' : '#334155') + ';color:#fff;font-size:0.78rem;font-weight:700;cursor:' + (canDo ? 'pointer' : 'not-allowed') + '">Check &amp; Craft</button>' +
-        '<button id="bmg-craftclear" style="padding:5px 9px;border-radius:5px;border:1px solid #475569;background:#1e293b;color:#94a3b8;font-size:0.75rem;cursor:pointer">Clear</button>' +
+    entry.innerHTML =
+      '<div style="font-size:0.74rem;color:#444;margin-bottom:6px">Add the two binary numbers, column by column:</div>' +
+      '<div style="display:inline-block;background:#bdbdbd;border:2px solid;border-color:#fff #999 #999 #fff;padding:6px 10px 8px;margin-bottom:8px">' +
+        opRow(r.aB, '') +
+        opRow(r.bB, '+') +
+        '<div style="height:3px;background:#555;width:' + (GUT + W * COLW) + 'px;margin:3px 0"></div>' +
+        '<div style="display:flex;align-items:center">' + ansCells + '</div>' +
       '</div>' +
-      (canDo ? '' : '<div style="font-size:0.72rem;color:#f87171;margin:6px 0 0 112px">You don\'t have both ingredients.</div>');
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+        '<button id="bmg-craftbtn" class="bmg-btn" ' + (canDo ? '' : 'disabled') + ' style="padding:4px 14px;font-size:0.82rem">Craft</button>' +
+        '<button id="bmg-craftclear" class="bmg-btn" style="padding:4px 10px;font-size:0.76rem">Clear</button>' +
+        '<span id="bmg-craft-msg" style="font-size:0.73rem;color:#7a2a2a"></span>' +
+      '</div>' +
+      (canDo ? '' : '<div style="font-size:0.72rem;color:#7a2a2a;margin-top:4px">You don\'t have both ingredients.</div>');
 
-    Array.prototype.forEach.call(el.querySelectorAll('.bmg-guess'), function (cell) {
-      cell.onclick = function () {
-        var i = +cell.dataset.i;
-        g.craftGuess[i] = g.craftGuess[i] ? 0 : 1;
-        renderCraft();
-      };
+    Array.prototype.forEach.call(entry.querySelectorAll('.bmg-bit'), function (cell) {
+      cell.onclick = function () { var i = +cell.dataset.i; g.craftGuess[i] = g.craftGuess[i] ? 0 : 1; renderCraft(); };
     });
     G('bmg-craftbtn').onclick = function () { doCraft(a, b, r); };
     G('bmg-craftclear').onclick = function () { g.slotA = null; g.slotB = null; g.craftGuess = null; renderCraft(); };
@@ -552,7 +602,7 @@
     if (!canDo) return;
     if (parseInt(g.craftGuess.join(''), 2) !== r.sum) {
       var m = G('bmg-craft-msg');
-      if (m) { m.textContent = 'Not quite — add the two binary numbers column by column and try again.'; m.style.color = '#f87171'; }
+      if (m) { m.textContent = 'Not quite — add column by column and try again.'; }
       return;
     }
     g.inv[a]--; if (g.inv[a] <= 0) delete g.inv[a];
@@ -560,10 +610,14 @@
     gainElement(r.sum, 1);
     g.selected = r.sum;
     g.slotA = null; g.slotB = null; g.craftGuess = null;
-    toast('Crafted ' + elementName(r.sum) + '!', '#a7f3d0');
+    toast('Crafted ' + elementName(r.sum) + '!', '#2f6a2f');
     clearHint();
     renderGrid(); renderInv(); renderSelected(); renderStats(); renderCraft();
+    // Brief flash of the crafted item in the output slot
+    var out = G('bmg-slotOut');
+    if (out) { out.innerHTML = itemHTML(r.sum, 0, false); setTimeout(function () { if (g.slotA == null && g.slotB == null) out.innerHTML = ''; }, 800); }
     save(); syncLeaderboard();
+    checkGameOver();
   }
 
   // ── Leaderboard render ─────────────────────────────────────────
@@ -631,51 +685,175 @@
     document.addEventListener('keydown', onEsc);
   }
 
+  // ── Shop (buy back what you've sold, at 2x) ────────────────────
+  function openShop() {
+    var existing = G('bmg-shop'); if (existing) { try { document.body.removeChild(existing); } catch (e) {} }
+    var overlay = document.createElement('div');
+    overlay.id = 'bmg-shop';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(2,6,15,0.82);display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-monospace,monospace';
+
+    function body() {
+      var vals = Object.keys(g.shop).map(Number).filter(function (v) { return g.shop[v] > 0; }).sort(function (a, b) { return a - b; });
+      var rows = vals.map(function (v) {
+        var cost = buybackCost(v);
+        var can = g.money >= cost;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:7px;background:#bdbdbd;border:2px solid;border-color:#fff #999 #999 #fff;margin-bottom:6px">' +
+          '<span style="width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:' + elementColor(v) + ';border:2px solid;border-color:#373737 #fff #fff #373737;font-weight:800;color:#0a0f1a">' + esc(elementSymbol(v)) + '</span>' +
+          '<span style="flex:1;min-width:0"><span style="font-weight:800;color:#222">' + esc(elementName(v)) + '</span> ' +
+            '<span style="font-family:ui-monospace,monospace;color:#444">' + binStr(v) + '</span> ' +
+            '<span style="color:#666">×' + g.shop[v] + '</span></span>' +
+          '<button class="bmg-btn bmg-buyback" data-v="' + v + '" ' + (can ? '' : 'disabled') + ' style="padding:4px 10px;font-size:0.78rem">Buy back — ' + cost + ' 💰</button>' +
+        '</div>';
+      }).join('');
+      if (!rows) rows = '<div style="color:#555;font-size:0.82rem;padding:6px">You haven\'t sold anything yet. Sell elements you no longer need, then buy them back here if you change your mind.</div>';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:3px solid #999">' +
+          '<div><span style="font-size:1.05rem;font-weight:800;color:#2a2a2a">🛒 Shop</span>' +
+          '<span style="font-size:0.76rem;color:#555;margin-left:10px">Buy back at 2× the sale price &middot; 💰 ' + g.money + '</span></div>' +
+          '<button id="bmg-shop-x" class="bmg-btn" style="padding:5px 12px;font-size:0.82rem">✕ Close</button>' +
+        '</div>' +
+        '<div style="padding:14px 18px;overflow-y:auto">' + rows + '</div>';
+    }
+    function refresh() {
+      overlay.querySelector('.bmg-shop-card').innerHTML = body();
+      wire();
+    }
+    function wire() {
+      G('bmg-shop-x').onclick = close;
+      Array.prototype.forEach.call(overlay.querySelectorAll('.bmg-buyback'), function (btn) {
+        btn.onclick = function () { if (buyBack(+btn.dataset.v)) refresh(); };
+      });
+    }
+    overlay.innerHTML = '<div class="bmg-shop-card bmg-panel" style="max-width:520px;width:100%;max-height:84vh;display:flex;flex-direction:column;padding:0">' + body() + '</div>';
+    document.body.appendChild(overlay);
+    function close() { try { document.body.removeChild(overlay); } catch (e) {} document.removeEventListener('keydown', onEsc); }
+    function onEsc(e) { if (e.key === 'Escape') close(); }
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', onEsc);
+    wire();
+  }
+
+  // ── Hard-lock detection + game over ────────────────────────────
+  function totalItemCount() {
+    var n = 0; Object.keys(g.inv).forEach(function (k) { n += g.inv[k]; }); return n;
+  }
+  function anyVisibleMineable() {
+    for (var y = 0; y < g.depth; y++) {
+      for (var x = 0; x < COLS; x++) {
+        if (g.mined[x + ',' + y]) continue;
+        if (canMine(cellValue(x, y))) return true;
+      }
+    }
+    return false;
+  }
+  function anyAffordableBuyback() {
+    var ks = Object.keys(g.shop);
+    for (var i = 0; i < ks.length; i++) {
+      if (g.shop[ks[i]] > 0 && buybackCost(+ks[i]) <= g.money) return true;
+    }
+    return false;
+  }
+  // True dead end: nothing to mine, can't craft (need 2 items), can't dig, can't buy back.
+  function isHardLocked() {
+    if (anyVisibleMineable()) return false;   // can still mine
+    if (totalItemCount() >= 2) return false;  // can still craft → progress
+    if (g.money >= digCost(g.depth)) return false; // can dig deeper
+    if (anyAffordableBuyback()) return false; // can buy something back
+    return true;
+  }
+  function renderAll() {
+    renderGrid(); renderInv(); renderSelected(); renderStats(); renderCraft(); renderDig();
+  }
+  function doReset() {
+    try { localStorage.removeItem(LS_KEY); } catch (e) {}
+    g = freshState();
+    g.selected = 1;
+    renderAll();
+    save(); syncLeaderboard();
+  }
+  function checkGameOver() {
+    if (!isHardLocked()) return;
+    if (G('bmg-gameover')) return;
+    var overlay = document.createElement('div');
+    overlay.id = 'bmg-gameover';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(2,6,15,0.92);display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-monospace,monospace';
+    overlay.innerHTML =
+      '<div class="bmg-panel" style="max-width:380px;width:100%;text-align:center">' +
+        '<div style="font-size:2.4rem;margin-bottom:6px">💀</div>' +
+        '<div style="font-size:1.3rem;font-weight:800;color:#7a2a2a;letter-spacing:1px;margin-bottom:4px">GAME OVER</div>' +
+        '<div style="font-size:0.8rem;color:#444;margin-bottom:12px">You ran out of moves — no ore you can mine, nothing to craft or buy back, and not enough money to dig. Here\'s how you did:</div>' +
+        '<div style="background:#bdbdbd;border:2px solid;border-color:#fff #999 #999 #fff;padding:10px;text-align:left;font-size:0.86rem;margin-bottom:14px">' +
+          '<div style="display:flex;justify-content:space-between"><span style="color:#555">⛏ Best element</span><b>' + esc(elementName(g.best)) + ' (' + binStr(g.best) + ')</b></div>' +
+          '<div style="display:flex;justify-content:space-between"><span style="color:#555">📖 Discovered</span><b>' + discoveredCount() + '</b></div>' +
+          '<div style="display:flex;justify-content:space-between"><span style="color:#555">🪜 Depth reached</span><b>' + g.depth + '</b></div>' +
+          '<div style="display:flex;justify-content:space-between"><span style="color:#555">💰 Money</span><b>' + g.money + '</b></div>' +
+        '</div>' +
+        '<button id="bmg-gameover-reset" class="bmg-btn" style="padding:8px 18px;font-size:0.95rem;font-weight:800;color:#1a4a1a">Start again</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    G('bmg-gameover-reset').onclick = function () {
+      try { document.body.removeChild(overlay); } catch (e) {}
+      doReset();
+    };
+  }
+
   // ── Mount ──────────────────────────────────────────────────────
   window.initBinaryMiningGame = function (containerId) {
     var wrap = G(containerId); if (!wrap) return;
+    injectStyle();
 
     g = freshState();
     load();
     g.selected = have(g.selected) ? g.selected : (bestOwned() || 1);
 
-    wrap.innerHTML = [
-      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">',
-        // Left: world
-        '<div style="flex:0 0 auto">',
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
-            '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b">Your mine</span>',
-            '<span id="bmg-toast" style="font-size:0.76rem;font-weight:600;opacity:0;transition:opacity .2s">&nbsp;</span>',
-          '</div>',
-          '<div id="bmg-grid" style="display:grid;grid-template-columns:repeat(' + COLS + ',' + CELL + 'px);grid-auto-rows:' + CELL + 'px;gap:0;border:2px solid #1e293b;border-radius:6px;overflow-y:auto;overflow-x:hidden;max-height:' + (MAX_VIS_ROWS * CELL) + 'px;user-select:none"></div>',
-          '<button id="bmg-dig" style="margin-top:6px;width:' + (COLS * CELL) + 'px;padding:7px;border-radius:6px;border:1px solid #3b82f6;background:#15233b;color:#bfdbfe;font-size:0.8rem;font-weight:700"></button>',
-          '<div style="font-size:0.68rem;color:#64748b;margin-top:5px;max-width:' + (COLS * CELL) + 'px">',
-            'Left-click a block to <b>mine</b> it (you need a strong enough pickaxe). Right-click the sky to <b>place</b> your selected block. <b>Dig deeper</b> to reach richer ore.',
-          '</div>',
-        '</div>',
-        // Right: panels
-        '<div style="flex:1;min-width:280px;max-width:430px;display:flex;flex-direction:column;gap:10px">',
-          panel('Stats', '<div id="bmg-stats" style="display:flex;flex-direction:column;gap:3px;font-size:0.8rem"></div>' +
-            '<button id="bmg-journal-btn" style="margin-top:8px;width:100%;padding:6px;border-radius:6px;border:1px solid #4c3a78;background:#1d1733;color:#c4b5fd;font-size:0.76rem;font-weight:700;cursor:pointer">📖 Open Element Journal</button>'),
-          '<div id="bmg-hint" style="display:none;background:#1a1320;border:1px solid #4c1d2e;border-radius:8px;padding:8px"></div>',
-          panel('Selected', '<div id="bmg-selected"></div>'),
-          panel('Combine — work out the binary sum',
-            '<div id="bmg-craft-body"></div>', 'bmg-craft'),
-          panel('Inventory', '<div id="bmg-inv" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:150px;overflow-y:auto"></div>'),
-          panel('🏆 Class leaderboard', '<div id="bmg-lb"></div>'),
-          '<button id="bmg-reset" style="align-self:flex-start;padding:3px 8px;border-radius:5px;border:1px solid #3f1d1d;background:#1a0f0f;color:#7f5252;font-size:0.66rem;cursor:pointer">Reset game</button>',
-        '</div>',
-      '</div>'
-    ].join('');
-
-    function panel(title, body, id) {
-      return '<div' + (id ? ' id="' + id + '"' : '') + ' style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:9px 10px">' +
-        '<div style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin-bottom:6px;font-weight:700">' + title + '</div>' +
-        body +
+    var GRIDW = COLS * CELL;
+    wrap.innerHTML =
+      '<div class="bmg-wrap">' +
+        // Top bar
+        '<div class="bmg-panel" style="display:flex;align-items:center;gap:16px;margin-bottom:10px;flex-wrap:wrap">' +
+          '<div id="bmg-stats" style="display:flex;align-items:center;gap:16px;flex:1;flex-wrap:wrap"></div>' +
+          '<span id="bmg-toast" style="font-size:0.78rem;font-weight:700;opacity:0;transition:opacity .2s">&nbsp;</span>' +
+          '<button id="bmg-shop-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">🛒 Shop</button>' +
+          '<button id="bmg-journal-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📖 Journal</button>' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
+          // Left column: mine + leaderboard
+          '<div style="flex:0 0 auto;display:flex;flex-direction:column;gap:10px">' +
+            '<div class="bmg-panel">' +
+              '<div class="bmg-h">The Mine</div>' +
+              '<div id="bmg-grid" style="display:grid;grid-template-columns:repeat(' + COLS + ',' + CELL + 'px);grid-auto-rows:' + CELL + 'px;gap:0;border:3px solid;border-color:#373737 #fff #fff #373737;overflow-y:auto;overflow-x:hidden;max-height:' + (MAX_VIS_ROWS * CELL) + 'px;user-select:none"></div>' +
+              '<button id="bmg-dig" class="bmg-btn" style="width:' + GRIDW + 'px;margin-top:8px;padding:7px;font-size:0.82rem"></button>' +
+              '<div style="font-size:0.66rem;color:#555;margin-top:5px;max-width:' + GRIDW + 'px">Left-click to <b>mine</b> &middot; right-click the sky to <b>build</b> &middot; <b>Dig deeper</b> for richer ore.</div>' +
+            '</div>' +
+            '<div class="bmg-panel"><div class="bmg-h">🏆 Leaderboard</div><div id="bmg-lb"></div></div>' +
+          '</div>' +
+          // Right column: Minecraft inventory panel
+          '<div class="bmg-panel" style="flex:1;min-width:350px;max-width:470px">' +
+            '<div style="display:flex;gap:12px;margin-bottom:10px">' +
+              '<div class="bmg-char">Character<br>(coming<br>soon)</div>' +
+              '<div style="flex:1;min-width:0">' +
+                '<div class="bmg-h">Crafting</div>' +
+                '<div style="display:flex;align-items:center;gap:10px">' +
+                  '<div style="display:flex;flex-direction:column;gap:3px">' +
+                    '<div style="display:flex;align-items:center;gap:6px"><div class="bmg-slot" id="bmg-slotA"></div><span id="bmg-binA" style="font-family:ui-monospace,monospace;font-weight:800;color:#333"></span></div>' +
+                    '<div style="color:#555;font-weight:800;padding-left:15px;line-height:0.6">+</div>' +
+                    '<div style="display:flex;align-items:center;gap:6px"><div class="bmg-slot" id="bmg-slotB"></div><span id="bmg-binB" style="font-family:ui-monospace,monospace;font-weight:800;color:#333"></span></div>' +
+                  '</div>' +
+                  '<div class="bmg-arrow">&#10142;</div>' +
+                  '<div class="bmg-slot" id="bmg-slotOut"></div>' +
+                '</div>' +
+                '<div id="bmg-craft-entry" style="margin-top:8px"></div>' +
+              '</div>' +
+            '</div>' +
+            '<div id="bmg-hint" style="display:none;background:#b85c5c;border:3px solid;border-color:#fff #6e2e2e #6e2e2e #fff;padding:8px;margin-bottom:10px"></div>' +
+            '<div class="bmg-h">Inventory</div>' +
+            '<div id="bmg-inv" style="display:grid;grid-template-columns:repeat(8,42px);gap:2px;max-height:188px;overflow-y:auto"></div>' +
+            '<div id="bmg-selbar" style="display:flex;align-items:center;gap:8px;margin-top:8px;min-height:26px;font-size:0.8rem"></div>' +
+            '<div style="text-align:right;margin-top:8px"><button id="bmg-reset" class="bmg-btn" style="padding:2px 8px;font-size:0.66rem;color:#7a3a3a">Reset</button></div>' +
+          '</div>' +
+        '</div>' +
       '</div>';
-    }
 
-    // Wire grid
+    // Wire mine grid
     var grid = G('bmg-grid');
     grid.addEventListener('click', function (e) {
       var cell = e.target.closest('.bmg-cell'); if (!cell) return;
@@ -689,27 +867,41 @@
       if (cell.dataset.kind === 'sky') placeAt(cell.dataset.key);
     });
 
-    // Wire inventory selection
-    G('bmg-inv').addEventListener('click', function (e) {
-      var t = e.target.closest('.bmg-invtile'); if (!t) return;
-      g.selected = +t.dataset.val;
+    // Wire inventory: click to select, drag to craft slots
+    var inv = G('bmg-inv');
+    inv.addEventListener('click', function (e) {
+      var s = e.target.closest('.bmg-slot[data-inv]'); if (!s) return;
+      g.selected = +s.dataset.inv;
       renderInv(); renderSelected();
+    });
+    inv.addEventListener('dragstart', function (e) {
+      var it = e.target.closest('.bmg-item'); if (!it) return;
+      g.dragVal = +it.dataset.val;
+      try { e.dataTransfer.setData('text/plain', it.dataset.val); e.dataTransfer.effectAllowed = 'copy'; } catch (_e) {}
+    });
+
+    // Wire crafting slots (drag-drop + click)
+    [['A', G('bmg-slotA')], ['B', G('bmg-slotB')]].forEach(function (p) {
+      var which = p[0], slot = p[1];
+      slot.addEventListener('dragover', function (e) { e.preventDefault(); slot.classList.add('bmg-drop'); });
+      slot.addEventListener('dragleave', function () { slot.classList.remove('bmg-drop'); });
+      slot.addEventListener('drop', function (e) {
+        e.preventDefault(); slot.classList.remove('bmg-drop');
+        var val = (g.dragVal != null) ? g.dragVal : parseInt(e.dataTransfer.getData('text/plain'), 10);
+        slotDrop(which, val); g.dragVal = null;
+      });
+      slot.addEventListener('click', function () { slotClick(which); });
     });
 
     G('bmg-dig').onclick = digDeeper;
     G('bmg-journal-btn').onclick = openJournal;
+    G('bmg-shop-btn').onclick = openShop;
 
     G('bmg-reset').onclick = function () {
       if (!confirm('Reset your mine, inventory and money? This cannot be undone.')) return;
-      try { localStorage.removeItem(LS_KEY); } catch (e) {}
-      g = freshState();
-      renderAll();
-      save(); syncLeaderboard();
+      doReset();
     };
 
-    function renderAll() {
-      renderGrid(); renderInv(); renderSelected(); renderStats(); renderCraft(); renderDig();
-    }
     renderAll();
 
     // Leaderboard: immediate + 30s poll (clear any previous widget's timer)
@@ -717,6 +909,9 @@
     fetchLeaderboard();
     syncLeaderboard();
     window._bmgLbTimer = setInterval(fetchLeaderboard, 30000);
+
+    // A loaded save could already be in a dead end — check on mount.
+    checkGameOver();
 
     // Lesson step auto-completes on mount (it's a sandbox, not a graded task)
     if (window.__markStepComplete) { try { window.__markStepComplete(); } catch (e) {} }
