@@ -983,6 +983,132 @@
     })();
   }
 
+  // ── Save / Load to Google Drive (tamper-evident) ───────────────
+  // Saves the full game state to "JHNCC Computing" in the player's Drive root.
+  // The payload is base64'd and signed with a SHA-256 hash of a baked secret, so
+  // a hand-edited file fails verification on load. NB this is tamper-EVIDENCE
+  // (obfuscation), not true security — the secret lives in client JS.
+  var SAVE_FOLDER = 'JHNCC Computing';
+  var SAVE_FILENAME = 'binary-mine-save.json';
+  var SAVE_SECRET = 'bm1-JHNCC-9f3a7c21-do-not-edit';
+
+  function snapshotState() {
+    return {
+      inv: g.inv, money: g.money, best: g.best, depth: g.depth,
+      discovered: g.discovered, mined: g.mined, placed: g.placed, shop: g.shop, selected: g.selected
+    };
+  }
+  function sha256hex(str) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    });
+  }
+  function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+  function b64decode(str) { return decodeURIComponent(escape(atob(str))); }
+  function encodeSave() {
+    var payload = b64encode(JSON.stringify(snapshotState()));
+    return sha256hex(SAVE_SECRET + payload).then(function (sig) {
+      return JSON.stringify({ app: 'binary-mine', v: 1, payload: payload, sig: sig });
+    });
+  }
+  function decodeSave(text) {
+    var obj;
+    try { obj = JSON.parse(text); } catch (e) { return Promise.reject(new Error('That is not a Binary Mine save file.')); }
+    if (!obj || obj.app !== 'binary-mine' || !obj.payload || !obj.sig) return Promise.reject(new Error('That is not a Binary Mine save file.'));
+    return sha256hex(SAVE_SECRET + obj.payload).then(function (sig) {
+      if (sig !== obj.sig) throw new Error('This save file has been changed or is corrupt — it cannot be loaded.');
+      return JSON.parse(b64decode(obj.payload));
+    });
+  }
+  function applyLoadedState(s) {
+    if (!s || typeof s !== 'object') throw new Error('Save file is empty.');
+    g.inv        = s.inv || {};
+    g.money      = Math.max(0, Math.floor(s.money || 0));
+    g.best       = Math.max(1, Math.floor(s.best || 1));
+    g.depth      = Math.max(START_DEPTH, Math.floor(s.depth || START_DEPTH));
+    g.discovered = s.discovered || { 1: true };
+    g.mined      = s.mined || {};
+    g.placed     = s.placed || {};
+    g.shop       = s.shop || {};
+    g.slotA = null; g.slotB = null; g.craftGuess = null;
+    g.selected = have(s.selected) ? s.selected : (bestOwned() || 1);
+    renderAll();
+    save(); syncLeaderboard(); checkGameOver();
+  }
+
+  // Small modal used by both Save and Load to show progress + the folder link.
+  function openDriveModal(title) {
+    var existing = G('bmg-drive'); if (existing) { try { document.body.removeChild(existing); } catch (e) {} }
+    var overlay = document.createElement('div');
+    overlay.id = 'bmg-drive';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(2,6,15,0.82);display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-monospace,monospace';
+    overlay.innerHTML =
+      '<div class="bmg-panel" style="max-width:420px;width:100%">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+          '<span style="font-size:1.02rem;font-weight:800;color:#2a2a2a">' + esc(title) + '</span>' +
+          '<button id="bmg-drive-x" class="bmg-btn" style="padding:4px 10px;font-size:0.8rem">✕ Close</button>' +
+        '</div>' +
+        '<div id="bmg-drive-status" style="font-size:0.84rem;color:#333;min-height:1.4em">Connecting to Google Drive…</div>' +
+        '<div id="bmg-drive-folder" style="font-size:0.78rem;margin-top:8px"></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    function close() { try { document.body.removeChild(overlay); } catch (e) {} document.removeEventListener('keydown', onEsc); }
+    function onEsc(e) { if (e.key === 'Escape') close(); }
+    G('bmg-drive-x').onclick = close;
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', onEsc);
+    return {
+      status: function (msg, color) { var el = G('bmg-drive-status'); if (el) { el.textContent = msg; el.style.color = color || '#333'; } },
+      showFolder: function (folderId) {
+        var el = G('bmg-drive-folder'); if (!el) return;
+        el.innerHTML = '📁 <a href="https://drive.google.com/drive/folders/' + esc(folderId) + '" target="_blank" rel="noopener" style="color:#1a4a8a;font-weight:700">Open “' + esc(SAVE_FOLDER) + '” in Google Drive</a>';
+      },
+      close: close
+    };
+  }
+
+  var driveBusy = false;
+  function driveSaveOrLoad(mode) {
+    if (driveBusy) return;
+    if (typeof driveEnsureStudentToken !== 'function' || typeof window.driveFindOrCreateRootFolder !== 'function') {
+      toast('Google Drive is not available here.', '#a32a2a'); return;
+    }
+    driveBusy = true;
+    var isSave = (mode === 'save');
+    (async function () {
+      var modal = null;
+      try {
+        var token = await driveEnsureStudentToken(null);
+        modal = openDriveModal(isSave ? '💾 Save to Google Drive' : '📂 Load from Google Drive');
+        modal.status('Finding your “' + SAVE_FOLDER + '” folder…');
+        var folderId = await window.driveFindOrCreateRootFolder(SAVE_FOLDER, token);
+        modal.showFolder(folderId);
+        if (isSave) {
+          modal.status('Saving your game…');
+          var text = await encodeSave();
+          await window.driveUpsertTextFile(folderId, SAVE_FILENAME, text, token);
+          modal.status('✓ Saved! Your progress is safely stored in Google Drive.', '#1a4a1a');
+          toast('Saved to Google Drive', '#2f6a2f');
+        } else {
+          modal.status('Looking for your save…');
+          var file = await window.driveFindLatestFileByName(folderId, SAVE_FILENAME, token);
+          if (!file) { modal.status('No save file found in “' + SAVE_FOLDER + '”. Save your game first.', '#7a5a10'); return; }
+          var raw = await window.driveFetchFileAsText(file.id, token);
+          var state = await decodeSave(raw);
+          applyLoadedState(state);
+          modal.status('✓ Loaded! Your game has been restored from Google Drive.', '#1a4a1a');
+          toast('Loaded from Google Drive', '#2f6a2f');
+        }
+      } catch (e) {
+        var msg = (e && e.message) ? e.message : 'Something went wrong.';
+        if (modal) modal.status('⚠ ' + msg, '#7a2a2a');
+        else toast('⚠ ' + msg, '#a32a2a');
+      } finally {
+        driveBusy = false;
+      }
+    })();
+  }
+
   // ── Mount ──────────────────────────────────────────────────────
   window.initBinaryMiningGame = function (containerId) {
     var wrap = G(containerId); if (!wrap) return;
@@ -1001,6 +1127,8 @@
           '<span id="bmg-toast" style="font-size:0.78rem;font-weight:700;opacity:0;transition:opacity .2s">&nbsp;</span>' +
           '<button id="bmg-shop-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">🛒 Shop</button>' +
           '<button id="bmg-journal-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📖 Journal</button>' +
+          '<button id="bmg-save-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">💾 Save</button>' +
+          '<button id="bmg-load-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📂 Load</button>' +
         '</div>' +
         '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
           // Left column: the mine
@@ -1093,6 +1221,8 @@
     G('bmg-dig').onclick = digDeeper;
     G('bmg-journal-btn').onclick = openJournal;
     G('bmg-shop-btn').onclick = openShop;
+    G('bmg-save-btn').onclick = function () { driveSaveOrLoad('save'); };
+    G('bmg-load-btn').onclick = function () { driveSaveOrLoad('load'); };
     G('bmg-loadnames').onclick = loadLeaderboardNames;
 
     G('bmg-reset').onclick = function () {

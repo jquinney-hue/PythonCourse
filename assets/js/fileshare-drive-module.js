@@ -456,6 +456,50 @@
     })[0] || null;
   };
 
+  /**
+   * driveFindOrCreateRootFolder(name, token)
+   * Finds a folder with this name in the user's My Drive root, creating it if
+   * missing. Returns the folder id. (drive.readonly finds a pre-existing folder;
+   * drive.file creates one.)
+   */
+  window.driveFindOrCreateRootFolder = async function (name, token) {
+    var q = "mimeType='application/vnd.google-apps.folder' and name=" + JSON.stringify(name) +
+            " and 'root' in parents and trashed=false";
+    var res = await driveReq(
+      'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)&pageSize=5',
+      { method: 'GET' }, token
+    );
+    if (res.files && res.files.length) return res.files[0].id;
+    var meta = { name: name, mimeType: 'application/vnd.google-apps.folder', parents: ['root'] };
+    var created = await driveReq(
+      'https://www.googleapis.com/drive/v3/files?fields=id',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) },
+      token
+    );
+    return created.id;
+  };
+
+  /**
+   * driveUpsertTextFile(folderId, filename, text, token)
+   * Creates the file, or overwrites the newest one with the same name (so saves
+   * don't pile up duplicates). Returns { id, name }.
+   */
+  window.driveUpsertTextFile = async function (folderId, filename, text, token) {
+    var files = await window.driveListFolderFiles(folderId, token);
+    var existing = (files || []).filter(function (f) { return f && f.name === filename; })
+      .sort(function (a, b) { return String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')); })[0];
+    if (existing) {
+      var resp = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existing.id) + '?uploadType=media&fields=id,name',
+        { method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: text }
+      );
+      if (!resp.ok) throw new Error('Drive update failed (' + resp.status + ')');
+      return resp.json();
+    }
+    var blob = new Blob([text], { type: 'application/json' });
+    return window.driveUploadFile(folderId, filename, blob, 'application/json', token);
+  };
+
   // ── Quiz folder cache (localStorage) ─────────────────────────
 
   var LS_PREFIX = 'pylearn_quiz_drive_';
