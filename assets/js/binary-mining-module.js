@@ -507,7 +507,7 @@
         '<span style="color:#222;font-weight:800">' + val + '</span></span>';
     }
     el.innerHTML =
-      '<span style="font-weight:800;color:#2a2a2a;letter-spacing:1px">⛏ BINARY MINE</span>' +
+      '<span style="font-weight:800;color:#2a2a2a;letter-spacing:1px;white-space:nowrap">⛏ BINARY MINE</span>' +
       stat('💰', g.money) +
       stat('🪜', g.depth) +
       stat('⛏', esc(elementSymbol(g.best)) + ' ' + binStr(g.best)) +
@@ -1122,13 +1122,15 @@
     wrap.innerHTML =
       '<div class="bmg-wrap">' +
         // Top bar
-        '<div class="bmg-panel" style="display:flex;align-items:center;gap:16px;margin-bottom:10px;flex-wrap:wrap">' +
-          '<div id="bmg-stats" style="display:flex;align-items:center;gap:16px;flex:1;flex-wrap:wrap"></div>' +
+        '<div class="bmg-panel" style="display:flex;align-items:center;gap:10px 14px;margin-bottom:10px;flex-wrap:wrap">' +
+          '<div id="bmg-stats" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"></div>' +
           '<span id="bmg-toast" style="font-size:0.78rem;font-weight:700;opacity:0;transition:opacity .2s">&nbsp;</span>' +
-          '<button id="bmg-shop-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">🛒 Shop</button>' +
-          '<button id="bmg-journal-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📖 Journal</button>' +
-          '<button id="bmg-save-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">💾 Save</button>' +
-          '<button id="bmg-load-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📂 Load</button>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">' +
+            '<button id="bmg-shop-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">🛒 Shop</button>' +
+            '<button id="bmg-journal-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📖 Journal</button>' +
+            '<button id="bmg-save-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">💾 Save</button>' +
+            '<button id="bmg-load-btn" class="bmg-btn" style="padding:4px 10px;font-size:0.78rem">📂 Load</button>' +
+          '</div>' +
         '</div>' +
         '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">' +
           // Left column: the mine
