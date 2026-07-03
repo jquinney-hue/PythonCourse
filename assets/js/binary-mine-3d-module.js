@@ -620,12 +620,12 @@
     contentIdCacheCount++;
     return id;
   }
-  function oreRenderId(v) { return 'ore:' + Math.min(64, bits(v)); }
+  function oreRenderId(v) { return 'ore:' + Math.min(64, bits(v)); }  // legacy (bit-length ore grouping) — unused
   function isOreRenderId(id) { return typeof id === 'string' && id.indexOf('ore:') === 0; }
-  function renderIdForContentId(id) {
-    return (typeof id === 'number' && id >= 1 && id < REAL_NAMES.length) ? id
-      : (typeof id === 'number' ? oreRenderId(id) : id);
-  }
+  // Render every element by its own value so real AND procedural elements show
+  // their own 2-letter symbol + colour (matching the inventory tiles). Generic
+  // terrain ids pass through as their type string.
+  function renderIdForContentId(id) { return id; }
   // Content of a cell: { el: value } for ore, or { gen: type } for terrain.
   function contentAt(x, y, z) {
     var id = contentIdAt(x, y, z);
@@ -729,6 +729,16 @@
     el.style.opacity = '1';
     clearTimeout(el._t);
     el._t = setTimeout(function () { el.style.opacity = '0'; }, 2200);
+  }
+  function overlayRoot() {
+    var gamebox = G('bmg3-gamebox');
+    return (gamebox && document.fullscreenElement === gamebox) ? gamebox : document.body;
+  }
+  function attachOverlay(overlay) {
+    overlayRoot().appendChild(overlay);
+  }
+  function removeOverlay(overlay) {
+    try { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) {}
   }
 
   // ── Minecraft-style skin (injected once) ───────────────────────
@@ -852,6 +862,13 @@
   var HELD_PICK_SWING_MS = 260;
   var HELD_PICK_TUNE_STEP = 0.08;
 
+  // Live element-symbol labels (billboarded sprites). One small texture per
+  // SYMBOL (bounded, shared across all element values) instead of baking a
+  // unique symbol texture into every element block. Only ore within LABEL_RADIUS
+  // of the player is labelled; the meshes themselves are flat-coloured.
+  var LABEL_RADIUS = 6, LABEL_R2 = LABEL_RADIUS * LABEL_RADIUS, MAX_LABELS = 220;
+  var labelGroup = null, labelPool = [], labelActive = 0, symSpriteCache = {};
+
   // First-person player: ~1.8 blocks tall, ~0.75 wide, eye near the top of the
   // space it occupies. Position is the FEET (bottom-centre); the camera sits at
   // feet + EYE each frame.
@@ -859,11 +876,13 @@
   var GRAVITY = -26, JUMP_SPEED = 8.0, MOVE_SPEED = 4.6;
   var player = null;          // { x, y, z, vy, onGround }
   var keys = null;            // { f, b, l, r, jump }
+  var _moveEuler = null;      // reused YXZ euler for yaw-based movement
   var clockLast = 0;
   var worldRenderKey = '';
   var worldDirty = false;
   var statsLast = 0;
   var inputHandlers = null;   // document-level listeners, removed on teardown
+  var suppressPauseOnUnlock = false;
 
   function loadThree() {
     if (threeLoad) return threeLoad;
@@ -931,17 +950,87 @@
   // Material for any block id: an element value (number) or a generic type string.
   function materialForId(id) {
     if (matCache[id]) return matCache[id];
-    var tex = new THREE.CanvasTexture(isGeneric(id) ? genericCanvas(id) : (isOreRenderId(id) ? oreCanvas(id) : symbolCanvas(+id)));
-    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = THREE.ClampToEdgeWrapping;
-    tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.anisotropy = 4;
-    var m = new THREE.MeshLambertMaterial({ map: tex });
+    var m;
+    if (isGeneric(id)) {
+      var tex = new THREE.CanvasTexture(genericCanvas(id));
+      if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false;
+      tex.anisotropy = 4;
+      m = new THREE.MeshLambertMaterial({ map: tex });
+    } else {
+      // Element ore: flat colour only. Its symbol is drawn live as a sprite label
+      // (updateOreLabels), so no texture is ever baked per element value.
+      var col = isOreRenderId(id)
+        ? 'hsl(' + ((Math.min(64, parseInt(String(id).slice(4), 10) || 1) * 43 + 190) % 360) + ',58%,50%)'
+        : elementColor(+id);
+      m = new THREE.MeshLambertMaterial({ color: new THREE.Color(col) });
+    }
     matCache[id] = m;
     return m;
+  }
+
+  // ── Live symbol labels (billboarded sprites, one texture per symbol) ──
+  function symbolSpriteTexture(sym) {
+    if (symSpriteCache[sym]) return symSpriteCache[sym];
+    var c = document.createElement('canvas'); c.width = c.height = 72;
+    var ctx = c.getContext('2d');
+    ctx.font = 'bold 38px system-ui,-apple-system,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(6,10,18,0.92)'; ctx.strokeText(sym, 36, 39);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(sym, 36, 39);
+    var tex = new THREE.CanvasTexture(c);
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    symSpriteCache[sym] = tex;
+    return tex;
+  }
+  function ensureLabelGroup() {
+    if (!labelGroup && scene) { labelGroup = new THREE.Group(); scene.add(labelGroup); }
+  }
+  function acquireLabel(i) {
+    if (labelPool[i]) return labelPool[i];
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: true, depthWrite: false }));
+    sp.scale.set(0.66, 0.66, 0.66);
+    if (labelGroup) labelGroup.add(sp);
+    labelPool[i] = sp;
+    return sp;
+  }
+  function updateOreLabels(list) {
+    ensureLabelGroup();
+    if (!labelGroup) return;
+    labelActive = Math.min(list.length, MAX_LABELS);
+    for (var i = 0; i < labelActive; i++) {
+      var it = list[i], sp = acquireLabel(i);
+      sp.material.map = symbolSpriteTexture(elementSymbol(it.value));
+      sp.material.needsUpdate = true;
+      sp.userData.cx = it.x; sp.userData.cy = it.y; sp.userData.cz = it.z;
+      sp.visible = true;
+    }
+    for (var j = labelActive; j < labelPool.length; j++) labelPool[j].visible = false;
+  }
+  // Nudge each label toward the camera so it floats just off the nearest face
+  // (and stays properly occluded by closer blocks via depthTest).
+  function updateOreLabelPositions() {
+    if (!labelGroup || !camera || !labelActive) return;
+    var px = camera.position.x, py = camera.position.y, pz = camera.position.z;
+    for (var i = 0; i < labelActive; i++) {
+      var sp = labelPool[i]; if (!sp || !sp.visible) continue;
+      var dx = px - sp.userData.cx, dy = py - sp.userData.cy, dz = pz - sp.userData.cz;
+      var d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1, k = 0.56 / d;
+      sp.position.set(sp.userData.cx + dx * k, sp.userData.cy + dy * k, sp.userData.cz + dz * k);
+    }
+  }
+  function disposeLabels() {
+    labelPool.forEach(function (sp) { if (sp.material) { try { sp.material.dispose(); } catch (e) {} } });
+    labelPool = []; labelActive = 0; labelGroup = null;
+    Object.keys(symSpriteCache).forEach(function (kk) { try { symSpriteCache[kk].dispose(); } catch (e) {} });
+    symSpriteCache = {};
   }
 
   function makeHeldPickaxe(info) {
@@ -1054,6 +1143,7 @@
     }
     if (resizeObs) { try { resizeObs.disconnect(); } catch (e) {} resizeObs = null; }
     matCache = {};
+    disposeLabels();
     heldPickGroup = null;
     heldPickSel = null;
     heldPickSwingStart = 0;
@@ -1116,6 +1206,7 @@
       clockLast = now;
       updatePlayer(dt);
       maybeRebuildWorldAroundPlayer();
+      updateOreLabelPositions();
       if (now - statsLast > 700) { statsLast = now; renderStats(); }
       animateHeldPickaxe(now);
       renderer.render(scene, camera);
@@ -1174,14 +1265,14 @@
   }
   function stepPhysics(dt) {
     if (controls && controls.isLocked) {
-      var d = new THREE.Vector3();
-      camera.getWorldDirection(d); d.y = 0;
-      if (d.lengthSq() < 1e-6) d.set(0, 0, -1);
-      d.normalize();
-      var rx = -d.z, rz = d.x;  // right vector (horizontal)
+      if (!_moveEuler) _moveEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+      _moveEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+      var yaw = _moveEuler.y;
+      var fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      var rx = Math.cos(yaw), rz = -Math.sin(yaw);
       var f = (keys.f ? 1 : 0) - (keys.b ? 1 : 0);
       var s = (keys.r ? 1 : 0) - (keys.l ? 1 : 0);
-      var mx = d.x * f + rx * s, mz = d.z * f + rz * s;
+      var mx = fx * f + rx * s, mz = fz * f + rz * s;
       var len = Math.hypot(mx, mz);
       if (len > 0) {
         mx = mx / len * MOVE_SPEED * dt; mz = mz / len * MOVE_SPEED * dt;
@@ -1228,7 +1319,7 @@
       if (controls && controls.isLocked) {
         try { controls.unlock(); } catch (e) {}
       }
-    } else if (relock && controls && !controls.isLocked) {
+    } else if (relock && !activeTut && controls && !controls.isLocked) {
       try { controls.lock(); } catch (e) {}
     }
     tutorialNotify(open ? 'inv-open' : 'inv-close');
@@ -1287,7 +1378,7 @@
   }
   function togglePauseMenu() {
     if (G('bmg3-shop') || G('bmg3-journal') || G('bmg3-drive') || G('bmg3-gameover')) return;
-    if (activeTut) return;
+    if (activeTut) endTutorial(true);
     setPauseOpen(!isPauseOpen(), true);
   }
   function runPauseAction(act) {
@@ -1320,6 +1411,11 @@
     } else if (!inGameFullscreen && kb.unlock) {
       try { kb.unlock(); } catch (e) {}
     }
+  }
+  function unlockWithoutAutoPause() {
+    if (!controls || !controls.isLocked) return;
+    suppressPauseOnUnlock = true;
+    try { controls.unlock(); } catch (e) { suppressPauseOnUnlock = false; }
   }
   function toggleGameFullscreen() {
     var target = G('bmg3-gamebox'); if (!target) return;
@@ -1427,6 +1523,11 @@
     function onLock() { resetKeys(); setLockOverlay(false); }
     function onUnlock() {
       resetKeys();
+      if (suppressPauseOnUnlock) {
+        suppressPauseOnUnlock = false;
+        setLockOverlay(!(isPauseOpen() || isInventoryOpen() || activeTut));
+        return;
+      }
       if (activeTut) { setLockOverlay(false); return; }
       if (!isPauseOpen() && !isInventoryOpen() && !G('bmg3-shop') && !G('bmg3-journal') && !G('bmg3-drive') && !G('bmg3-gameover')) {
         setPauseOpen(true, false);
@@ -1584,6 +1685,7 @@
     });
 
     var groups = {};  // render id -> exposed face records
+    var labelList = []; // nearby element ore to label with a live symbol sprite
 
     var cx = player ? Math.round(player.x) : 0;
     var cz = player ? Math.round(player.z) : 0;
@@ -1600,7 +1702,12 @@
           if (g.mined[key]) continue;
           var mask = faceMaskAtXYZ(x, y, z);
           if (!mask) continue;
-          addCellFaces(groups, renderIdForContentId(contentIdAt(x, y, z)), key, x, y, z, mask);
+          var cid = contentIdAt(x, y, z);
+          addCellFaces(groups, renderIdForContentId(cid), key, x, y, z, mask);
+          if (typeof cid === 'number' && labelList.length < MAX_LABELS) {
+            var ly = y - py;
+            if (dx * dx + ly * ly + dz * dz <= LABEL_R2) labelList.push({ x: x, y: y, z: z, value: cid });
+          }
         }
       }
     }
@@ -1608,13 +1715,20 @@
       var w = parseKey(key);
       if (Math.abs(w.x - cx) <= RENDER_RADIUS + 2 && Math.abs(w.z - cz) <= RENDER_RADIUS + 2) {
         var mask = faceMaskAtXYZ(w.x, w.y, w.z);
-        if (mask) addCellFaces(groups, g.placed[key], key, w.x, w.y, w.z, mask);
+        if (!mask) return;
+        addCellFaces(groups, g.placed[key], key, w.x, w.y, w.z, mask);
+        var pv = g.placed[key];
+        if (typeof pv === 'number' && labelList.length < MAX_LABELS) {
+          var pdx = w.x - cx, pdy = w.y - py, pdz = w.z - cz;
+          if (pdx * pdx + pdy * pdy + pdz * pdz <= LABEL_R2) labelList.push({ x: w.x, y: w.y, z: w.z, value: pv });
+        }
       }
     });
 
     Object.keys(groups).forEach(function (id) {
       worldGroup.add(buildFaceMesh(id, groups[id]));
     });
+    updateOreLabels(labelList);
     worldRenderKey = renderKeyForPlayer();
     worldDirty = false;
   }
@@ -1748,7 +1862,6 @@
       return;
     }
     var v = c.el;
-    if (!tutorialSeen('first-ore') && !activeTut) { startTutorial('first-ore', { value: v }); return; }
     var w = parseKey(key);
     var layerType = genericTypeAt(w.x, w.y, w.z);
     var layerMeta = GENERIC[layerType];
@@ -1758,6 +1871,11 @@
       else toast(layerMeta.name + ' needs a pickaxe with bit-length ' + layerNeed + '+.', '#a35a1a');
       return;
     }
+    if (!canMine(v) && !anyPickCanMine(v) && !hasCraftableRecipeFor(v) && !tutorialSeen('missing-ingredients') && !activeTut) {
+      startTutorial('missing-ingredients', { value: v });
+      return;
+    }
+    if (!tutorialSeen('first-ore') && !activeTut) { startTutorial('first-ore', { value: v }); return; }
     if (canMine(v)) {
       g.mined[key] = true;
       gainElement(v, 1);
@@ -1786,6 +1904,11 @@
       return (q[0] * q[1]) - (p[0] * p[1]);
     });
     return { pairs: pairs, craftable: craftable };
+  }
+  function hasCraftableRecipeFor(v) {
+    var rp = recipePairs(v);
+    for (var i = 0; i < rp.pairs.length; i++) if (rp.craftable(rp.pairs[i])) return true;
+    return false;
   }
   function showHint(v) {
     var el = G('bmg3-hint'); if (!el) return;
@@ -1833,6 +1956,7 @@
   function sellSelected() {
     var v = g.selected;
     if (typeof v !== 'number' || !have(v)) return;
+    var showShopTut = !tutorialSeen('shop-after-sale') && !activeTut;
     g.inv[v]--; if (g.inv[v] <= 0) delete g.inv[v];
     g.money += v;
     g.shop[v] = (g.shop[v] || 0) + 1;
@@ -1840,6 +1964,7 @@
     if (!have(v)) repairHotbarAndSelection();
     renderInv(); renderSelected(); renderStats(); renderPauseMenu();
     save(); syncLeaderboard();
+    if (showShopTut) startTutorial('shop-after-sale', { value: v });
     checkGameOver();
   }
   function buyBack(v) {
@@ -2012,7 +2137,7 @@
 
   // ── Element journal ────────────────────────────────────────────
   function openJournal() {
-    var existing = G('bmg3-journal'); if (existing) { try { document.body.removeChild(existing); } catch (e) {} }
+    var existing = G('bmg3-journal'); if (existing) removeOverlay(existing);
     var vals = Object.keys(g.discovered).map(Number).sort(function (a, b) { return a - b; });
     var realCount = vals.filter(function (v) { return v < REAL_NAMES.length; }).length;
 
@@ -2045,9 +2170,9 @@
         '</div>' +
         '<div style="padding:14px 18px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">' + cards + '</div>' +
       '</div>';
-    document.body.appendChild(overlay);
+    attachOverlay(overlay);
 
-    function close() { try { document.body.removeChild(overlay); } catch (e) {} document.removeEventListener('keydown', onEsc); }
+    function close() { removeOverlay(overlay); document.removeEventListener('keydown', onEsc); }
     function onEsc(e) { if (e.key === 'Escape') close(); }
     G('bmg3-journal-x').onclick = close;
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
@@ -2056,7 +2181,7 @@
 
   // ── Shop (buy back what you've sold, at 2x) ────────────────────
   function openShop() {
-    var existing = G('bmg3-shop'); if (existing) { try { document.body.removeChild(existing); } catch (e) {} }
+    var existing = G('bmg3-shop'); if (existing) removeOverlay(existing);
     var overlay = document.createElement('div');
     overlay.id = 'bmg3-shop';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(2,6,15,0.82);display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-monospace,monospace';
@@ -2090,8 +2215,8 @@
       });
     }
     overlay.innerHTML = '<div class="bmg3-shop-card bmg3-panel" style="max-width:520px;width:100%;max-height:84vh;display:flex;flex-direction:column;padding:0">' + body() + '</div>';
-    document.body.appendChild(overlay);
-    function close() { try { document.body.removeChild(overlay); } catch (e) {} document.removeEventListener('keydown', onEsc); }
+    attachOverlay(overlay);
+    function close() { removeOverlay(overlay); document.removeEventListener('keydown', onEsc); }
     function onEsc(e) { if (e.key === 'Escape') close(); }
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
     document.addEventListener('keydown', onEsc);
@@ -2192,9 +2317,9 @@
         '</div>' +
         '<button id="bmg3-gameover-reset" class="bmg3-btn" style="padding:8px 18px;font-size:0.95rem;font-weight:800;color:#1a4a1a">Start again</button>' +
       '</div>';
-    document.body.appendChild(overlay);
+    attachOverlay(overlay);
     G('bmg3-gameover-reset').onclick = function () {
-      try { document.body.removeChild(overlay); } catch (e) {}
+      removeOverlay(overlay);
       doReset();
     };
   }
@@ -2302,7 +2427,7 @@
     save(); syncLeaderboard(); checkGameOver();
   }
   function openDriveModal(title) {
-    var existing = G('bmg3-drive'); if (existing) { try { document.body.removeChild(existing); } catch (e) {} }
+    var existing = G('bmg3-drive'); if (existing) removeOverlay(existing);
     var overlay = document.createElement('div');
     overlay.id = 'bmg3-drive';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(2,6,15,0.82);display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-monospace,monospace';
@@ -2315,8 +2440,8 @@
         '<div id="bmg3-drive-status" style="font-size:0.84rem;color:#333;min-height:1.4em">Connecting to Google Drive…</div>' +
         '<div id="bmg3-drive-folder" style="font-size:0.78rem;margin-top:8px"></div>' +
       '</div>';
-    document.body.appendChild(overlay);
-    function close() { try { document.body.removeChild(overlay); } catch (e) {} document.removeEventListener('keydown', onEsc); }
+    attachOverlay(overlay);
+    function close() { removeOverlay(overlay); document.removeEventListener('keydown', onEsc); }
     function onEsc(e) { if (e.key === 'Escape') close(); }
     G('bmg3-drive-x').onclick = close;
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
@@ -2431,6 +2556,24 @@
           html: 'Combine two elements in your inventory (press <b>E</b>) to craft a <b>pickaxe</b> — its power is the <b>binary sum</b>. A pickaxe can mine ore of the same value (or brute-force weaker ore). Left-click ore to collect it.' }
       ];
     }
+    if (id === 'missing-ingredients') {
+      var mv = (ctx && ctx.value) || 1;
+      return [
+        { title: 'Not the right ingredients', final: true,
+          html: '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' + tutElTile(mv) +
+            '<div>This ore is <b>' + esc(elementName(mv)) + '</b> (<code>' + binStr(mv) + '</code>), but you do not have the right element values to craft a pickaxe for it yet.</div></div>' +
+            'Leave this one for now and look for other, softer elements first. Each new element gives you more possible binary sums for stronger pickaxes.' }
+      ];
+    }
+    if (id === 'shop-after-sale') {
+      var sv = (ctx && ctx.value) || 1;
+      return [
+        { title: 'Sold items go to the shop', cta: 'shop',
+          html: 'You sold <b>' + esc(elementName(sv)) + '</b> for money. Sold elements are not gone forever: open the <b>Shop / Buy back</b> screen if you need to recover one later, at twice the sale price.' },
+        { title: 'Buy back later', final: true,
+          html: 'Use selling when you want money, but remember that some elements can become useful again as crafting ingredients for future pickaxes.' }
+      ];
+    }
     return null;
   }
 
@@ -2450,6 +2593,7 @@
     var needOpen = step.requireInv && !isInventoryOpen();
     var buttons = '';
     if (needOpen || step.cta === 'open') buttons += '<button class="bmg3-btn" data-tut="open" style="padding:3px 10px;font-size:0.76rem">Open inventory (E)</button>';
+    if (step.cta === 'shop') buttons += '<button class="bmg3-btn" data-tut="shop" style="padding:3px 10px;font-size:0.76rem">Open shop</button>';
     if (step.next) buttons += '<button class="bmg3-btn" data-tut="next" style="padding:3px 10px;font-size:0.76rem">Next &#10142;</button>';
     if (step.final) buttons += '<button class="bmg3-btn" data-tut="finish" style="padding:3px 12px;font-size:0.78rem;font-weight:800">Got it!</button>';
     card.innerHTML =
@@ -2473,6 +2617,7 @@
   }
   function tutButton(act) {
     if (act === 'open') { setInventoryOpen(true, false); return; }
+    if (act === 'shop') { endTutorial(true); setPauseOpen(false, false); setInventoryOpen(false, false); openShop(); return; }
     if (act === 'next') { tutorialAdvance(); return; }
     if (act === 'finish' || act === 'skip') { endTutorial(true); return; }
   }
@@ -2488,6 +2633,8 @@
     activeTut = null;
     clearTutHighlights();
     renderTutorial();
+    unlockWithoutAutoPause();
+    setLockOverlay(!(isPauseOpen() || isInventoryOpen()));
   }
   function tutorialNotify(evt) {
     if (!activeTut) return;
