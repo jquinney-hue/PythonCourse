@@ -1,0 +1,14 @@
+{
+  "id": "year8-binary-mine-3d",
+  "title": "L4: Binary Mine 3D",
+  "description": "The 3D voxel version of Binary Mine. Orbit a block world, mine and build in three dimensions, and keep combining elements — combining is still binary addition. Climb the class leaderboard.",
+  "steps": [
+    {
+      "id": "play",
+      "title": "Binary Mine 3D",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-2 text-gray-800'>Binary Mine 3D</h2><p class='text-gray-700 mb-3'>Same game, now in 3D. Every block is an element with a <strong>binary code</strong>, and combining two elements is still <strong>binary addition</strong> — the two codes add together to make a new element. Drag to rotate the world, scroll to zoom.</p><div class='ex-box' style='padding:0.6rem 0.8rem;margin-bottom:0.9rem'><div style='display:flex;flex-wrap:wrap;gap:1.25rem;font-size:0.9rem'><div><span style='color:#94a3b8'>Mine</span><br><span style='color:#cbd5e1'>Left-click a block</span></div><div><span style='color:#94a3b8'>Build</span><br><span style='color:#cbd5e1'>Right-click a block face</span></div><div><span style='color:#94a3b8'>Combine</span><br><span style='color:#cbd5e1'>0110 + 1100 = 10010</span></div><div><span style='color:#94a3b8'>Goal</span><br><span style='color:#cbd5e1'>Discover the highest element</span></div></div></div><div id='bmg3-root'></div>",
+      "js": "if (window.initBinaryMine3D) { initBinaryMine3D('bmg3-root'); } else { document.getElementById('bmg3-root').innerHTML = '<p style=\"color:#f87171\">Game could not load — please refresh the page.</p>'; }"
+    }
+  ]
+}

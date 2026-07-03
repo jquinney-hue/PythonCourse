@@ -163,6 +163,12 @@
               "title": "L3: Binary Mine",
               "file": "lessons/year8-binary-mine.json",
               "order": 3
+            },
+            {
+              "id": "year8-binary-mine-3d",
+              "title": "L4: Binary Mine 3D",
+              "file": "lessons/year8-binary-mine-3d.json",
+              "order": 4
             }
           ]
         }

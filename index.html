@@ -11,6 +11,16 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <!-- Three.js (voxel Binary Mine 3D, Year 8 Binary L4). Loaded on demand via
+       dynamic import(); costs nothing on pages that don't use it. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
   <!-- Skulpt: Python in the browser (vendored locally) -->
   <script src="assets/js/skulpt.min.js"></script>
   <script src="assets/js/skulpt-stdlib.js"></script>
@@ -1462,5 +1472,6 @@
 <script src="assets/js/pixel-art-module.js?v=20260624"></script>
 <script src="assets/js/quiz-answer-module.js?v=20260625"></script>
 <script src="assets/js/binary-mining-module.js?v=20260701b"></script>
+<script src="assets/js/binary-mine-3d-module.js?v=20260702y"></script>
 </body>
 </html>
