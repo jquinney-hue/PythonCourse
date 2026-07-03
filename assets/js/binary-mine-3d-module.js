@@ -786,7 +786,14 @@
       '.bmg3-cross:before,.bmg3-cross:after{content:"";position:absolute;background:rgba(255,255,255,0.9);box-shadow:0 0 2px rgba(0,0,0,0.8)}' +
       '.bmg3-cross:before{left:9px;top:0;width:2px;height:20px}' +
       '.bmg3-cross:after{top:9px;left:0;height:2px;width:20px}' +
-      '.bmg3-lockmsg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:#fff;background:rgba(10,20,35,0.5);font-weight:800;font-size:1.05rem;cursor:pointer;z-index:4;padding:16px}';
+      '.bmg3-lockmsg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:#fff;background:rgba(10,20,35,0.5);font-weight:800;font-size:1.05rem;cursor:pointer;z-index:4;padding:16px}' +
+      '.bmg3-tutorial{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:min(470px,calc(100% - 16px));max-height:calc(100% - 20px);overflow:auto;background:rgba(14,22,36,0.95);border:2px solid #ffd34d;border-radius:10px;padding:10px 12px;color:#eef2f7;z-index:12;display:none;box-shadow:0 10px 30px rgba(0,0,0,0.55)}' +
+      '.bmg3-tutorial.open{display:block}' +
+      '.bmg3-tut-tile{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;background:#8b8b8b;border:2px solid;border-color:#373737 #fff #fff #373737;font-weight:800;color:#0a0f1a;font-size:0.72rem;box-sizing:border-box}' +
+      '.bmg3-tut-glow{outline:3px solid #ffd34d !important;outline-offset:1px;animation:bmg3pulse 1.05s ease-in-out infinite;z-index:2}' +
+      '@keyframes bmg3pulse{0%,100%{box-shadow:0 0 0 2px rgba(255,211,77,0.35),0 0 9px rgba(255,211,77,0.5)}50%{box-shadow:0 0 0 5px rgba(255,211,77,0.7),0 0 20px rgba(255,211,77,0.95)}}' +
+      '.bmg3-gamebox.bmg3-tut .bmg3-inv-overlay{align-items:flex-end}' +
+      '.bmg3-gamebox.bmg3-tut .bmg3-inventory-panel{max-height:calc(100% - 118px)}';
     document.head.appendChild(s);
   }
 
@@ -824,11 +831,13 @@
     if (cur) { if (which === 'A') g.slotA = null; else g.slotB = null; }
     else if (typeof g.selected === 'number' && have(g.selected)) { if (which === 'A') g.slotA = g.selected; else g.slotB = g.selected; }
     g.craftGuess = null; g.craftCarry = null; renderCraft();
+    if ((which === 'A' ? g.slotA : g.slotB) != null) tutorialNotify(which === 'A' ? 'slotA' : 'slotB');
   }
   function slotDrop(which, val) {
     if (val == null || !have(val)) return;
     if (which === 'A') g.slotA = val; else g.slotB = val;
     g.craftGuess = null; g.craftCarry = null; renderCraft();
+    tutorialNotify(which === 'A' ? 'slotA' : 'slotB');
   }
 
   // ── Three.js scene (first-person) ──────────────────────────────
@@ -1198,7 +1207,7 @@
 
   // ── First-person input + reach ─────────────────────────────────
   function setLockOverlay(show) {
-    if (show && (isInventoryOpen() || isPauseOpen())) show = false;
+    if (show && (isInventoryOpen() || isPauseOpen() || activeTut)) show = false;
     var msg = G('bmg3-lockmsg'); if (!msg) return;
     if (msg) msg.style.display = show ? 'flex' : 'none';
   }
@@ -1222,6 +1231,7 @@
     } else if (relock && controls && !controls.isLocked) {
       try { controls.lock(); } catch (e) {}
     }
+    tutorialNotify(open ? 'inv-open' : 'inv-close');
   }
   function toggleInventory() {
     if (G('bmg3-shop') || G('bmg3-journal') || G('bmg3-drive') || G('bmg3-gameover')) return;
@@ -1277,6 +1287,7 @@
   }
   function togglePauseMenu() {
     if (G('bmg3-shop') || G('bmg3-journal') || G('bmg3-drive') || G('bmg3-gameover')) return;
+    if (activeTut) return;
     setPauseOpen(!isPauseOpen(), true);
   }
   function runPauseAction(act) {
@@ -1330,13 +1341,17 @@
       return function (e) {
         if (down && e.code === 'Escape' && !e.repeat) {
           if (G('bmg3-shop') || G('bmg3-journal') || G('bmg3-drive') || G('bmg3-gameover')) return;
-          if (isInventoryOpen()) setInventoryOpen(false, true);
+          if (activeTut) {
+            if (isInventoryOpen()) setInventoryOpen(false, false);
+            else endTutorial(true);
+          } else if (isInventoryOpen()) setInventoryOpen(false, true);
           else togglePauseMenu();
           e.preventDefault();
           return;
         }
         if (down && !e.repeat && (e.code === 'KeyP' || e.code === 'KeyM')) {
           if (G('bmg3-shop') || G('bmg3-journal') || G('bmg3-drive') || G('bmg3-gameover')) return;
+          if (activeTut) { e.preventDefault(); return; }
           if (isInventoryOpen()) setInventoryOpen(false, true);
           else togglePauseMenu();
           e.preventDefault();
@@ -1387,6 +1402,7 @@
     function tryLock() { if (controls && !controls.isLocked) { try { controls.lock(); } catch (e) {} } }
     function onMouseDown(e) {
       if (!controls) return;
+      if (activeTut) return;      // tutorial owns the cursor; interact via its card / inventory
       if (isPauseOpen()) return;
       if (isInventoryOpen()) return;
       if (!controls.isLocked) { tryLock(); return; }  // re-acquire control by clicking the world
@@ -1411,6 +1427,7 @@
     function onLock() { resetKeys(); setLockOverlay(false); }
     function onUnlock() {
       resetKeys();
+      if (activeTut) { setLockOverlay(false); return; }
       if (!isPauseOpen() && !isInventoryOpen() && !G('bmg3-shop') && !G('bmg3-journal') && !G('bmg3-drive') && !G('bmg3-gameover')) {
         setPauseOpen(true, false);
         return;
@@ -1717,6 +1734,7 @@
     if (c.gen != null) {
       var meta = GENERIC[c.gen];
       if (!canMineGeneric(c.gen)) {
+        if (meta && (meta.bits || 0) > 0 && ownedPickPowers().length === 0 && !tutorialSeen('need-pickaxe') && !activeTut) { startTutorial('need-pickaxe'); return; }
         var need = meta && meta.bits ? meta.bits : 0;
         if (anyPickCanMineGeneric(c.gen)) toast('Select a pickaxe with bit-length ' + need + '+ to mine ' + meta.name + '.', '#a35a1a');
         else toast(meta.name + ' needs a pickaxe with bit-length ' + need + '+.', '#a35a1a');
@@ -1730,6 +1748,7 @@
       return;
     }
     var v = c.el;
+    if (!tutorialSeen('first-ore') && !activeTut) { startTutorial('first-ore', { value: v }); return; }
     var w = parseKey(key);
     var layerType = genericTypeAt(w.x, w.y, w.z);
     var layerMeta = GENERIC[layerType];
@@ -1965,6 +1984,7 @@
     renderInv(); renderSelected(); renderStats(); renderCraft();
     var out = G('bmg3-slotOut');
     if (out) { out.innerHTML = pickIconHTML(r.sum); setTimeout(function () { if (g.slotA == null && g.slotB == null) out.innerHTML = ''; }, 800); }
+    tutorialNotify('craft');
     save(); syncLeaderboard();
     checkGameOver();
   }
@@ -2352,10 +2372,144 @@
     })();
   }
 
+  // ── First-time tutorials ───────────────────────────────────────
+  // Step-by-step coach cards that appear the first time a mechanic bites (e.g.
+  // hitting rock with no pickaxe, or clicking element ore). They guide REAL
+  // interaction — open the inventory, drag elements into the craft slots, do the
+  // binary addition — and advance when the player actually does each action.
+  // "Seen" state lives in its own localStorage key so it survives game resets.
+  var TUT_KEY = 'pylearn_mining3d_tutorials';
+  var activeTut = null;         // { id, steps, i, ctx }
+  var TUT_HIGHLIGHTS = [];
+  function tutorialsSeen() { try { return JSON.parse(localStorage.getItem(TUT_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function tutorialSeen(id) { return !!tutorialsSeen()[id]; }
+  function markTutorialSeen(id) { try { var s = tutorialsSeen(); s[id] = 1; localStorage.setItem(TUT_KEY, JSON.stringify(s)); } catch (e) {} }
+
+  function tutTile(bg, inner) {
+    return '<span class="bmg3-tut-tile" style="background:' + bg + '">' + inner + '</span>';
+  }
+  function tutElTile(v) { return tutTile(elementColor(v), esc(elementSymbol(v))); }
+  function tutArrow() { return '<span style="color:#ffd34d;font-weight:800;font-size:1.1rem">&#10142;</span>'; }
+
+  // The interactive crafting walkthrough, shared by tutorials that need it.
+  function hasAnyPick() { return ownedPickPowers().length > 0; }
+  function craftWalkthroughSteps(intro) {
+    return [
+      { title: 'Craft a pickaxe', html: intro, requireInv: true, cta: 'open', waitFor: 'inv-open',
+        done: function () { return isInventoryOpen() || hasAnyPick(); } },
+      { title: 'Add the first element', requireInv: true, highlight: ['#bmg3-inv', '#bmg3-slotA'], waitFor: 'slotA',
+        html: 'Your elements are in the <b>Inventory</b> grid. <b>Drag one</b> (e.g. Hydrogen ' + tutElTile(1) + ') into the <b>left</b> crafting slot.',
+        done: function () { return g.slotA != null || hasAnyPick(); } },
+      { title: 'Add the second element', requireInv: true, highlight: ['#bmg3-inv', '#bmg3-slotB'], waitFor: 'slotB',
+        html: 'Now drag a <b>second element</b> into the <b>right</b> crafting slot. ' + tutElTile(1) + ' ' + tutArrow() + ' + ' + tutArrow() + ' ' + tutElTile(1),
+        done: function () { return g.slotB != null || hasAnyPick(); } },
+      { title: 'Do the binary addition', requireInv: true, highlight: ['#bmg3-craft-entry'], waitFor: 'craft',
+        html: 'Add the two binary numbers, column by column. <b>Tap the answer squares</b> to enter the sum, then press <b>Craft</b>. The sum is your pickaxe\'s power.',
+        done: function () { return hasAnyPick(); } },
+      { title: 'Pickaxe ready!', final: true,
+        html: 'Your new pickaxe is crafted and <b>equipped on the hotbar</b>. Press <b>E</b> to close the inventory, then <b>left-click</b> the block to mine it.' }
+    ];
+  }
+  function buildTutorial(id, ctx) {
+    if (id === 'need-pickaxe') {
+      var intro =
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+          tutTile('#8f8f8f', 'Rock') + '<span style="font-size:1.15rem">&#9995;&#10060;</span>' + tutArrow() + tutTile('#8b8b8b', '&#9935;') +
+        '</div>' +
+        'That block is <b>rock</b> — too hard to mine with your bare hands. You need a <b>pickaxe</b>. Craft one by combining two elements.';
+      return craftWalkthroughSteps(intro);
+    }
+    if (id === 'first-ore') {
+      var v = (ctx && ctx.value) || 1;
+      return [
+        { title: 'You found ore!', next: true,
+          html: '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' + tutElTile(v) +
+            '<div>This glowing block is <b>ore</b> — a raw <b>element</b>, ' + esc(elementName(v)) +
+            ', worth <code>' + binStr(v) + '</code> in binary.</div></div>' +
+            'Mining ore is how you collect elements.' },
+        { title: 'Elements make pickaxes', final: true,
+          html: 'Combine two elements in your inventory (press <b>E</b>) to craft a <b>pickaxe</b> — its power is the <b>binary sum</b>. A pickaxe can mine ore of the same value (or brute-force weaker ore). Left-click ore to collect it.' }
+      ];
+    }
+    return null;
+  }
+
+  function clearTutHighlights() {
+    TUT_HIGHLIGHTS.forEach(function (el) { try { el.classList.remove('bmg3-tut-glow'); } catch (e) {} });
+    TUT_HIGHLIGHTS = [];
+  }
+  function renderTutorial() {
+    var card = G('bmg3-tutorial'); if (!card) return;
+    clearTutHighlights();
+    if (!activeTut) { card.classList.remove('open'); card.innerHTML = ''; var gb0 = G('bmg3-gamebox'); if (gb0) gb0.classList.remove('bmg3-tut'); return; }
+    var step = activeTut.steps[activeTut.i];
+    if (step.done && step.done()) { tutorialAdvance(); return; }  // already satisfied → never wait on it
+    var n = activeTut.steps.length;
+    var dots = '';
+    for (var k = 0; k < n; k++) dots += '<span style="width:7px;height:7px;border-radius:50%;background:' + (k === activeTut.i ? '#ffd34d' : 'rgba(255,255,255,0.35)') + '"></span>';
+    var needOpen = step.requireInv && !isInventoryOpen();
+    var buttons = '';
+    if (needOpen || step.cta === 'open') buttons += '<button class="bmg3-btn" data-tut="open" style="padding:3px 10px;font-size:0.76rem">Open inventory (E)</button>';
+    if (step.next) buttons += '<button class="bmg3-btn" data-tut="next" style="padding:3px 10px;font-size:0.76rem">Next &#10142;</button>';
+    if (step.final) buttons += '<button class="bmg3-btn" data-tut="finish" style="padding:3px 12px;font-size:0.78rem;font-weight:800">Got it!</button>';
+    card.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">' +
+        '<span style="font-weight:800;color:#ffe9a8;font-size:0.9rem">' + esc(step.title) + '</span>' +
+        '<span style="display:flex;gap:4px;align-items:center">' + dots + '</span>' +
+      '</div>' +
+      '<div style="font-size:0.82rem;line-height:1.4;color:#eef2f7">' + step.html + '</div>' +
+      (step.waitFor && !needOpen ? '<div style="font-size:0.7rem;color:#ffd34d;margin-top:6px">&#9757; do the highlighted step to continue</div>' : '') +
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">' + buttons +
+        '<button class="bmg3-btn" data-tut="skip" style="margin-left:auto;font-size:0.68rem;padding:2px 8px;opacity:0.85">Skip</button>' +
+      '</div>';
+    card.classList.add('open');
+    var gb = G('bmg3-gamebox'); if (gb) gb.classList.add('bmg3-tut');
+    if (step.highlight && isInventoryOpen()) {
+      step.highlight.forEach(function (sel) { var el = document.querySelector(sel); if (el) { el.classList.add('bmg3-tut-glow'); TUT_HIGHLIGHTS.push(el); } });
+    }
+    Array.prototype.forEach.call(card.querySelectorAll('[data-tut]'), function (btn) {
+      btn.onclick = function (e) { e.preventDefault(); e.stopPropagation(); tutButton(btn.dataset.tut); };
+    });
+  }
+  function tutButton(act) {
+    if (act === 'open') { setInventoryOpen(true, false); return; }
+    if (act === 'next') { tutorialAdvance(); return; }
+    if (act === 'finish' || act === 'skip') { endTutorial(true); return; }
+  }
+  function tutorialAdvance() {
+    if (!activeTut) return;
+    activeTut.i++;
+    if (activeTut.i >= activeTut.steps.length) { endTutorial(true); return; }
+    renderTutorial();
+  }
+  function endTutorial(seen) {
+    if (!activeTut) return;
+    if (seen) markTutorialSeen(activeTut.id);
+    activeTut = null;
+    clearTutHighlights();
+    renderTutorial();
+  }
+  function tutorialNotify(evt) {
+    if (!activeTut) return;
+    var step = activeTut.steps[activeTut.i];
+    if (step && step.waitFor === evt) tutorialAdvance();
+    else if (step && step.requireInv && (evt === 'inv-open' || evt === 'inv-close')) renderTutorial(); // refresh CTA / highlights
+  }
+  function startTutorial(id, ctx) {
+    if (tutorialSeen(id) || activeTut) return;
+    var steps = buildTutorial(id, ctx);
+    if (!steps || !steps.length) return;
+    activeTut = { id: id, steps: steps, i: 0, ctx: ctx };
+    if (controls && controls.isLocked) { try { controls.unlock(); } catch (e) {} }
+    setLockOverlay(false);
+    renderTutorial();
+  }
+
   // ── Mount ──────────────────────────────────────────────────────
   window.initBinaryMine3D = function (containerId) {
     var wrap = G(containerId); if (!wrap) return;
     injectStyle();
+    activeTut = null; TUT_HIGHLIGHTS = [];
 
     g = freshState();
     load();
@@ -2381,6 +2535,7 @@
               '</div>' +
               '<div id="bmg3-hotbar" class="bmg3-hotbar"></div>' +
               '<button id="bmg3-fullscreen" class="bmg3-btn bmg3-fullscreen-btn" title="Fullscreen">&#x26F6;</button>' +
+              '<div id="bmg3-tutorial" class="bmg3-tutorial"></div>' +
               '<div id="bmg3-pause-overlay" class="bmg3-pause-overlay">' +
                 '<div id="bmg3-pause-card" class="bmg3-panel bmg3-pause-card"></div>' +
               '</div>' +
