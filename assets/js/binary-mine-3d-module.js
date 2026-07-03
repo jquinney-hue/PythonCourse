@@ -216,12 +216,14 @@
       selected: 1,
       hotbar: new Array(8).fill(null),
       hotbarIndex: 0,
+      hotbarSkip: {},
       slotA: null,
       slotB: null,
       craftGuess: null,
       craftCarry: null,
       dragSel: null,
       dragVal: null,
+      dragFromHotbar: null,
       saveTimer: null,
       syncTimer: null
     };
@@ -246,6 +248,7 @@
       g.hotbar     = Array.isArray(raw.hotbar) ? raw.hotbar.slice(0, 8) : new Array(8).fill(null);
       while (g.hotbar.length < 8) g.hotbar.push(null);
       g.hotbarIndex = Math.max(0, Math.min(7, Math.floor(raw.hotbarIndex || 0)));
+      g.hotbarSkip = raw.hotbarSkip || {};
       repairHotbarAndSelection();
       return true;
     } catch (e) { return false; }
@@ -257,7 +260,7 @@
         localStorage.setItem(LS_KEY, JSON.stringify({
           inv: g.inv, money: g.money, best: g.best, depth: g.depth,
           discovered: g.discovered, mined: g.mined, placed: g.placed, blocks: g.blocks,
-          picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex
+          picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex, hotbarSkip: g.hotbarSkip
         }));
       } catch (e) {}
     }, 400);
@@ -452,6 +455,8 @@
   }
   function putInHotbar(sel, idx) {
     if (!haveSel(sel)) return;
+    if (!g.hotbarSkip) g.hotbarSkip = {};
+    delete g.hotbarSkip[selectorText(sel)];
     idx = (idx == null) ? g.hotbarIndex : idx;
     idx = Math.max(0, Math.min(7, idx));
     for (var i = 0; i < g.hotbar.length; i++) {
@@ -463,6 +468,7 @@
   }
   function repairHotbarAndSelection() {
     if (!Array.isArray(g.hotbar)) g.hotbar = new Array(8).fill(null);
+    if (!g.hotbarSkip) g.hotbarSkip = {};
     while (g.hotbar.length < 8) g.hotbar.push(null);
     var seen = {};
     g.hotbar = g.hotbar.slice(0, 8).map(function (sel) {
@@ -473,21 +479,32 @@
       return sel;
     });
     var entries = ownedSelectors();
+    Object.keys(g.hotbarSkip).forEach(function (key) {
+      var sel = selectorFromText(key);
+      if (!haveSel(sel)) delete g.hotbarSkip[key];
+    });
     entries.forEach(function (sel) {
       if (g.hotbar.some(function (h) { return sameSel(h, sel); })) return;
+      if (g.hotbarSkip[selectorText(sel)]) return;
       for (var i = 0; i < g.hotbar.length; i++) {
         if (g.hotbar[i] == null) { g.hotbar[i] = sel; return; }
       }
     });
     g.hotbarIndex = Math.max(0, Math.min(7, Math.floor(g.hotbarIndex || 0)));
+    var currentHotbarSel = haveSel(g.hotbar[g.hotbarIndex]) ? g.hotbar[g.hotbarIndex] : null;
+    if (!currentHotbarSel) {
+      for (var h = 0; h < g.hotbar.length; h++) {
+        if (haveSel(g.hotbar[h])) { currentHotbarSel = g.hotbar[h]; break; }
+      }
+    }
     if (!haveSel(g.selected)) {
-      g.selected = haveSel(g.hotbar[g.hotbarIndex]) ? g.hotbar[g.hotbarIndex] : firstOwnedSelector();
+      g.selected = currentHotbarSel || firstOwnedSelector();
     }
     if (haveSel(g.selected)) {
       var found = -1;
       for (var j = 0; j < g.hotbar.length; j++) if (sameSel(g.hotbar[j], g.selected)) { found = j; break; }
       if (found >= 0) g.hotbarIndex = found;
-      else putInHotbar(g.selected, g.hotbarIndex);
+      else if (!g.hotbarSkip[selectorText(g.selected)]) putInHotbar(g.selected, g.hotbarIndex);
     }
   }
   function selectHotbar(idx) {
@@ -508,6 +525,8 @@
   }
   function placeInHotbar(sel, idx) {
     if (!haveSel(sel)) return;
+    if (!g.hotbarSkip) g.hotbarSkip = {};
+    delete g.hotbarSkip[selectorText(sel)];
     idx = Math.max(0, Math.min(7, idx));
     var oldIdx = -1;
     for (var i = 0; i < g.hotbar.length; i++) {
@@ -518,6 +537,24 @@
     g.hotbar[idx] = sel;
     g.hotbarIndex = idx;
     g.selected = sel;
+    repairHotbarAndSelection();
+    renderInv(); renderHotbar(); renderSelected();
+    renderPauseMenu();
+    save();
+  }
+  function removeFromHotbar(sel) {
+    if (!haveSel(sel)) return;
+    if (!g.hotbarSkip) g.hotbarSkip = {};
+    var removed = false;
+    for (var i = 0; i < g.hotbar.length; i++) {
+      if (sameSel(g.hotbar[i], sel)) {
+        g.hotbar[i] = null;
+        removed = true;
+      }
+    }
+    if (!removed) return;
+    g.hotbarSkip[selectorText(sel)] = true;
+    if (sameSel(g.selected, sel)) g.selected = null;
     repairHotbarAndSelection();
     renderInv(); renderHotbar(); renderSelected();
     renderPauseMenu();
@@ -768,6 +805,7 @@
       '.bmg3-inventory-hotbar{display:grid;grid-template-columns:repeat(8,46px);gap:3px;justify-content:center;margin-top:16px;padding-top:12px;border-top:3px solid #8f8f8f}' +
       '.bmg3-hotkey{position:absolute;left:2px;top:0;font-size:10px;font-weight:800;color:#fff;text-shadow:1px 1px 0 #333;z-index:2}' +
       '.bmg3-slot.bmg3-drop{background:#a7a76a}' +
+      '#bmg3-inv.bmg3-drop{outline:3px solid #ffd34d;outline-offset:3px;background:rgba(255,211,77,0.16)}' +
       '.bmg3-item{position:absolute;inset:2px;display:flex;align-items:center;justify-content:center;user-select:none}' +
       '.bmg3-item[draggable=true]{cursor:grab}.bmg3-item[draggable=true]:active{cursor:grabbing}' +
       '.bmg3-sym{font-family:ui-sans-serif,system-ui,sans-serif;font-weight:800;color:#0a0f1a;font-size:13px;text-shadow:0 1px 0 rgba(255,255,255,0.4)}' +
@@ -2379,7 +2417,7 @@
     return {
       inv: g.inv, money: g.money, best: g.best, depth: g.depth,
       discovered: g.discovered, mined: g.mined, placed: g.placed, blocks: g.blocks,
-      picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex
+      picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex, hotbarSkip: g.hotbarSkip
     };
   }
   function sha256hex(str) {
@@ -2419,6 +2457,7 @@
     g.hotbar     = Array.isArray(s.hotbar) ? s.hotbar.slice(0, 8) : new Array(8).fill(null);
     while (g.hotbar.length < 8) g.hotbar.push(null);
     g.hotbarIndex = Math.max(0, Math.min(7, Math.floor(s.hotbarIndex || 0)));
+    g.hotbarSkip = s.hotbarSkip || {};
     g.slotA = null; g.slotB = null; g.craftGuess = null; g.craftCarry = null;
     g.selected = haveSel(s.selected) ? s.selected : firstOwnedSelector();
     repairHotbarAndSelection();
@@ -2739,6 +2778,23 @@
       var bs = e.target.closest('.bmg3-slot[data-block]');
       if (bs) { selectItem(bs.dataset.block); return; }
     });
+    inv.addEventListener('dragover', function (e) {
+      if (g.dragFromHotbar == null) return;
+      e.preventDefault();
+      inv.classList.add('bmg3-drop');
+    });
+    inv.addEventListener('dragleave', function (e) {
+      if (!inv.contains(e.relatedTarget)) inv.classList.remove('bmg3-drop');
+    });
+    inv.addEventListener('drop', function (e) {
+      if (g.dragFromHotbar == null) return;
+      e.preventDefault();
+      inv.classList.remove('bmg3-drop');
+      var raw = (e.dataTransfer && e.dataTransfer.getData('application/x-bmg3-sel')) || selectorText(g.dragSel || '');
+      var sel = selectorFromText(raw);
+      if (haveSel(sel)) removeFromHotbar(sel);
+      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
+    });
     var hotbar = G('bmg3-hotbar');
     function onHotbarClick(e) {
       var slot = e.target.closest('.bmg3-hotbar-slot[data-hotbar]');
@@ -2762,7 +2818,7 @@
       var raw = (e.dataTransfer && e.dataTransfer.getData('application/x-bmg3-sel')) || selectorText(g.dragSel || '');
       var sel = selectorFromText(raw);
       if (haveSel(sel)) placeInHotbar(sel, +slot.dataset.hotbar);
-      g.dragSel = null; g.dragVal = null;
+      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
     }
     [hotbar, invHotbar].forEach(function (bar) {
       if (!bar) return;
@@ -2799,6 +2855,8 @@
       if (!haveSel(sel)) return;
       g.dragSel = sel;
       g.dragVal = (typeof sel === 'number') ? sel : null;
+      var fromHotbar = e.target.closest('.bmg3-hotbar-slot[data-hotbar]');
+      g.dragFromHotbar = fromHotbar ? +fromHotbar.dataset.hotbar : null;
       try {
         e.dataTransfer.setData('application/x-bmg3-sel', selectorText(sel));
         e.dataTransfer.setData('text/plain', selectorText(sel));
@@ -2806,7 +2864,8 @@
       } catch (_e) {}
     });
     gamebox.addEventListener('dragend', function () {
-      g.dragSel = null; g.dragVal = null;
+      if (inv) inv.classList.remove('bmg3-drop');
+      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
     });
 
     // Wire crafting slots (drag-drop + click)
@@ -2817,7 +2876,7 @@
       slot.addEventListener('drop', function (e) {
         e.preventDefault(); slot.classList.remove('bmg3-drop');
         var val = (g.dragVal != null) ? g.dragVal : parseInt(e.dataTransfer.getData('text/plain'), 10);
-        slotDrop(which, val); g.dragSel = null; g.dragVal = null;
+        slotDrop(which, val); g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
       });
       slot.addEventListener('click', function () { slotClick(which); });
     });
