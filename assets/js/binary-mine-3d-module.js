@@ -11,7 +11,7 @@
  * faucet of new element value.
  *
  * The ONLY difference from L3 is presentation: the mine is a 3D voxel world you
- * orbit, mine (left-click) and build in (right-click). Crafting, inventory,
+ * orbit and mine with left-click. Crafting, inventory,
  * shop, journal, leaderboard and save/load are DOM overlays, identical in spirit
  * to the 2D game.
  *
@@ -21,7 +21,7 @@
  *   Own Drive save file     : binary-mine-3d-save.json  (app tag 'binary-mine-3d')
  *
  * ── Firebase / privacy (same guarantees as L3) ──────────────────────────────
- *   Writes ONLY:  miningGame3D/{className}/{code}: { money, best, updatedAt }
+ *   Writes ONLY:  miningGame3D/{className}/{code}: { money, best, depth, updatedAt }
  *   where {code} is state.uid (the opaque LOGIN CODE, never a Google UID).
  *   No names / emails / UIDs are ever written.
  *
@@ -225,16 +225,18 @@
 
   // ── Game state ─────────────────────────────────────────────────
   var g = null;
+  var INV_COLS = 8, INV_MIN_SLOTS = 32;
   function freshState() {
     return {
       inv: Object.assign({}, START_INV),  // value -> count
       money: 0,
       best: 1,
+      bestDepth: 0,
       depth: START_DEPTH,   // legacy save field; no longer gates terrain
       discovered: { 1: true },
       mined: {},            // "x,y,z" -> true  (natural cells removed)
       placed: {},           // "x,y,z" -> value | generic-type (built blocks)
-      blocks: {},           // generic-type -> count (build-only, not craftable)
+      blocks: {},           // generic-type -> count (collected terrain, not craftable)
       picks: {},            // pickaxe power -> { a, b } ingredient values
       shop: {},             // value -> count (sold elements, buyable back at 2x)
       _lastLb: [],
@@ -243,6 +245,7 @@
       hotbar: new Array(8).fill(null),
       hotbarIndex: 0,
       hotbarSkip: {},
+      invSlots: new Array(INV_MIN_SLOTS).fill(null),
       slotA: null,
       slotB: null,
       craftGuess: null,
@@ -250,6 +253,7 @@
       dragSel: null,
       dragVal: null,
       dragFromHotbar: null,
+      dragFromInv: null,
       saveTimer: null,
       syncTimer: null
     };
@@ -263,6 +267,7 @@
       g.inv        = raw.inv || Object.assign({}, START_INV);
       g.money      = raw.money || 0;
       g.best       = raw.best || 1;
+      g.bestDepth  = Math.max(0, Math.floor(raw.bestDepth || raw.deepest || 0));
       g.depth      = raw.depth || START_DEPTH;
       g.discovered = raw.discovered || { 1: true };
       g.mined      = raw.mined || {};
@@ -275,6 +280,8 @@
       while (g.hotbar.length < 8) g.hotbar.push(null);
       g.hotbarIndex = Math.max(0, Math.min(7, Math.floor(raw.hotbarIndex || 0)));
       g.hotbarSkip = raw.hotbarSkip || {};
+      g.invSlots = Array.isArray(raw.invSlots) ? raw.invSlots.slice() : [];
+      g.bestDepth = Math.max(g.bestDepth || 0, deepestMinedDepth());
       repairHotbarAndSelection();
       return true;
     } catch (e) { return false; }
@@ -284,15 +291,15 @@
     g.saveTimer = setTimeout(function () {
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
-          inv: g.inv, money: g.money, best: g.best, depth: g.depth,
+          inv: g.inv, money: g.money, best: g.best, bestDepth: g.bestDepth, depth: g.depth,
           discovered: g.discovered, mined: g.mined, placed: g.placed, blocks: g.blocks,
-          picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex, hotbarSkip: g.hotbarSkip
+          picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex, hotbarSkip: g.hotbarSkip, invSlots: g.invSlots
         }));
       } catch (e) {}
     }, 400);
   }
 
-  // ── Firebase leaderboard (privacy-safe: class/code/money/best only) ──
+  // ── Firebase leaderboard (privacy-safe: class/code/money/depth only) ──
   var LB_CLASS_KEY = 'pylearn_mining3d_lb_class';
   var lbClassLoadRetries = 0;
 
@@ -400,9 +407,11 @@
     g.syncTimer = setTimeout(function () {
       ensureStudentLeaderboardClass().then(function (className) {
         if (!className) return;
+        var depth = leaderboardDepthScore();
         return leaderboardClassRef(className).child(state.uid).set({
           money: Math.max(0, Math.floor(g.money)),
           best: Math.max(1, Math.floor(g.best)),
+          depth: depth,
           updatedAt: Date.now()
         });
       }).catch(function () {});
@@ -428,9 +437,9 @@
       var data = snap.val() || {};
       var rows = Object.keys(data).map(function (code) {
         var d = data[code] || {};
-        return { code: code, money: +d.money || 0, best: +d.best || 0 };
-      }).filter(function (r) { return r.best > 0 || r.money > 0; });
-      rows.sort(function (a, b) { return b.best - a.best || b.money - a.money; });
+        return { code: code, money: +d.money || 0, best: +d.best || 0, depth: +d.depth || 0 };
+      }).filter(function (r) { return r.depth > 0 || r.money > 0; });
+      rows.sort(function (a, b) { return b.depth - a.depth || b.money - a.money || b.best - a.best; });
       renderLeaderboard(rows);
     }).catch(function () {
       setLeaderboardStatus('Could not load leaderboard.', '#7a2a2a');
@@ -471,6 +480,38 @@
     for (var i = 0; i < g.hotbar.length; i++) if (sameSel(g.hotbar[i], sel)) return true;
     return false;
   }
+  function hotbarIndexOf(sel) {
+    for (var i = 0; i < g.hotbar.length; i++) if (sameSel(g.hotbar[i], sel)) return i;
+    return -1;
+  }
+  function ensureInventorySlots() {
+    if (!Array.isArray(g.invSlots)) g.invSlots = [];
+    while (g.invSlots.length < INV_MIN_SLOTS) g.invSlots.push(null);
+  }
+  function inventoryIndexOf(sel) {
+    ensureInventorySlots();
+    for (var i = 0; i < g.invSlots.length; i++) if (sameSel(g.invSlots[i], sel)) return i;
+    return -1;
+  }
+  function inventoryHas(sel) {
+    return inventoryIndexOf(sel) >= 0;
+  }
+  function clearFromInventory(sel) {
+    ensureInventorySlots();
+    for (var i = 0; i < g.invSlots.length; i++) if (sameSel(g.invSlots[i], sel)) g.invSlots[i] = null;
+  }
+  function firstEmptyInventorySlot() {
+    ensureInventorySlots();
+    for (var i = 0; i < g.invSlots.length; i++) if (g.invSlots[i] == null) return i;
+    g.invSlots.push(null);
+    return g.invSlots.length - 1;
+  }
+  function setInventorySlot(idx, sel) {
+    ensureInventorySlots();
+    idx = Math.max(0, Math.floor(idx || 0));
+    while (g.invSlots.length <= idx) g.invSlots.push(null);
+    g.invSlots[idx] = haveSel(sel) ? sel : null;
+  }
   function activeHotbarSelection() {
     var sel = g.hotbar[g.hotbarIndex];
     return haveSel(sel) ? sel : null;
@@ -492,16 +533,51 @@
     delete g.hotbarSkip[selectorText(sel)];
     idx = (idx == null) ? g.hotbarIndex : idx;
     idx = Math.max(0, Math.min(7, idx));
-    for (var i = 0; i < g.hotbar.length; i++) {
-      if (sameSel(g.hotbar[i], sel)) { g.hotbarIndex = i; g.selected = sel; return; }
+    ensureInventorySlots();
+    var oldHotbar = hotbarIndexOf(sel);
+    var oldInv = inventoryIndexOf(sel);
+    var displaced = g.hotbar[idx];
+    if (oldHotbar >= 0) {
+      if (oldHotbar !== idx) g.hotbar[oldHotbar] = haveSel(displaced) ? displaced : null;
+    } else if (oldInv >= 0) {
+      g.invSlots[oldInv] = haveSel(displaced) ? displaced : null;
+      if (haveSel(displaced)) g.hotbarSkip[selectorText(displaced)] = true;
+    } else if (haveSel(displaced)) {
+      setInventorySlot(firstEmptyInventorySlot(), displaced);
+      g.hotbarSkip[selectorText(displaced)] = true;
     }
+    clearFromInventory(sel);
     g.hotbar[idx] = sel;
     g.hotbarIndex = idx;
+    g.selected = sel;
+  }
+  function putInInventory(sel, idx) {
+    if (!haveSel(sel)) return;
+    if (!g.hotbarSkip) g.hotbarSkip = {};
+    ensureInventorySlots();
+    idx = Math.max(0, Math.floor(idx || 0));
+    while (g.invSlots.length <= idx) g.invSlots.push(null);
+    var oldInv = inventoryIndexOf(sel);
+    var oldHotbar = hotbarIndexOf(sel);
+    var displaced = g.invSlots[idx];
+    if (oldInv >= 0) {
+      if (oldInv !== idx) g.invSlots[oldInv] = haveSel(displaced) ? displaced : null;
+      if (haveSel(displaced)) g.hotbarSkip[selectorText(displaced)] = true;
+    } else if (oldHotbar >= 0) {
+      g.hotbar[oldHotbar] = haveSel(displaced) ? displaced : null;
+      if (haveSel(displaced)) delete g.hotbarSkip[selectorText(displaced)];
+    } else if (haveSel(displaced)) {
+      setInventorySlot(firstEmptyInventorySlot(), displaced);
+      g.hotbarSkip[selectorText(displaced)] = true;
+    }
+    g.invSlots[idx] = sel;
+    g.hotbarSkip[selectorText(sel)] = true;
     g.selected = sel;
   }
   function repairHotbarAndSelection() {
     if (!Array.isArray(g.hotbar)) g.hotbar = new Array(8).fill(null);
     if (!g.hotbarSkip) g.hotbarSkip = {};
+    ensureInventorySlots();
     while (g.hotbar.length < 8) g.hotbar.push(null);
     var seen = {};
     g.hotbar = g.hotbar.slice(0, 8).map(function (sel) {
@@ -511,6 +587,14 @@
       seen[key] = true;
       return sel;
     });
+    var invSeen = {};
+    for (var slot = 0; slot < g.invSlots.length; slot++) {
+      var invSel = g.invSlots[slot];
+      if (!haveSel(invSel)) { g.invSlots[slot] = null; continue; }
+      var invKey = selectorText(invSel);
+      if (seen[invKey] || invSeen[invKey]) { g.invSlots[slot] = null; continue; }
+      invSeen[invKey] = true;
+    }
     var entries = ownedSelectors();
     Object.keys(g.hotbarSkip).forEach(function (key) {
       var sel = selectorFromText(key);
@@ -518,10 +602,16 @@
     });
     entries.forEach(function (sel) {
       if (g.hotbar.some(function (h) { return sameSel(h, sel); })) return;
+      if (inventoryHas(sel)) return;
       if (g.hotbarSkip[selectorText(sel)]) return;
       for (var i = 0; i < g.hotbar.length; i++) {
         if (g.hotbar[i] == null) { g.hotbar[i] = sel; return; }
       }
+    });
+    entries.forEach(function (sel) {
+      if (g.hotbar.some(function (h) { return sameSel(h, sel); })) return;
+      if (inventoryHas(sel)) return;
+      setInventorySlot(firstEmptyInventorySlot(), sel);
     });
     g.hotbarIndex = Math.max(0, Math.min(7, Math.floor(g.hotbarIndex || 0)));
     var currentHotbarSel = haveSel(g.hotbar[g.hotbarIndex]) ? g.hotbar[g.hotbarIndex] : null;
@@ -537,7 +627,6 @@
       var found = -1;
       for (var j = 0; j < g.hotbar.length; j++) if (sameSel(g.hotbar[j], g.selected)) { found = j; break; }
       if (found >= 0) g.hotbarIndex = found;
-      else if (!g.hotbarSkip[selectorText(g.selected)]) putInHotbar(g.selected, g.hotbarIndex);
     }
   }
   function selectHotbar(idx) {
@@ -560,18 +649,15 @@
   }
   function placeInHotbar(sel, idx) {
     if (!haveSel(sel)) return;
-    if (!g.hotbarSkip) g.hotbarSkip = {};
-    delete g.hotbarSkip[selectorText(sel)];
-    idx = Math.max(0, Math.min(7, idx));
-    var oldIdx = -1;
-    for (var i = 0; i < g.hotbar.length; i++) {
-      if (sameSel(g.hotbar[i], sel)) { oldIdx = i; break; }
-    }
-    var displaced = g.hotbar[idx];
-    if (oldIdx >= 0 && oldIdx !== idx) g.hotbar[oldIdx] = displaced;
-    g.hotbar[idx] = sel;
-    g.hotbarIndex = idx;
-    g.selected = sel;
+    putInHotbar(sel, idx);
+    repairHotbarAndSelection();
+    renderInv(); renderHotbar(); renderSelected();
+    renderPauseMenu();
+    save();
+  }
+  function placeInInventory(sel, idx) {
+    if (!haveSel(sel)) return;
+    putInInventory(sel, idx);
     repairHotbarAndSelection();
     renderInv(); renderHotbar(); renderSelected();
     renderPauseMenu();
@@ -588,6 +674,7 @@
       }
     }
     if (!removed) return;
+    setInventorySlot(firstEmptyInventorySlot(), sel);
     g.hotbarSkip[selectorText(sel)] = true;
     if (sameSel(g.selected, sel)) g.selected = null;
     repairHotbarAndSelection();
@@ -632,6 +719,30 @@
     return y;
   }
   function depthBelowSurface(x, y, z) { return surfaceHeight(x, z) - y; }
+  function recordDepth(depth) {
+    depth = Math.max(0, Math.floor(depth || 0));
+    if (depth > (g.bestDepth || 0)) g.bestDepth = depth;
+    return g.bestDepth || 0;
+  }
+  function recordDepthForKey(key) {
+    var w = parseKey(key);
+    return recordDepth(depthBelowSurface(w.x, w.y, w.z));
+  }
+  function currentPlayerDepth() {
+    if (!player) return 0;
+    return Math.max(0, surfaceHeight(Math.round(player.x), Math.round(player.z)) - Math.floor(player.y));
+  }
+  function leaderboardDepthScore() {
+    return recordDepth(currentPlayerDepth());
+  }
+  function deepestMinedDepth() {
+    var maxDepth = 0;
+    Object.keys(g.mined || {}).forEach(function (key) {
+      var w = parseKey(key);
+      maxDepth = Math.max(maxDepth, depthBelowSurface(w.x, w.y, w.z));
+    });
+    return Math.max(0, Math.floor(maxDepth));
+  }
   function proceduralRock(tier) {
     var id = 'rock:proc' + tier;
     if (GENERIC[id]) return GENERIC[id];
@@ -859,7 +970,7 @@
       '.bmg3-inventory-panel{width:min(760px,calc(100% - 18px));max-height:calc(100% - 18px);overflow:auto;box-sizing:border-box}' +
       '.bmg3-pause-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,13,22,0.62);z-index:8;padding:18px;box-sizing:border-box;pointer-events:auto}' +
       '.bmg3-pause-overlay.open{display:flex}' +
-      '.bmg3-pause-card{width:min(390px,calc(100% - 18px));max-height:calc(100% - 18px);overflow:auto;box-sizing:border-box}' +
+      '.bmg3-pause-card{width:min(680px,calc(100% - 18px));max-height:calc(100% - 18px);overflow:auto;box-sizing:border-box}' +
       '.bmg3-pause-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}' +
       '.bmg3-pause-grid .bmg3-btn{padding:9px 10px;font-size:0.82rem;text-align:left}' +
       '.bmg3-pause-grid .wide{grid-column:1/-1;text-align:center}' +
@@ -898,12 +1009,12 @@
       '<span class="bmg3-sym" style="font-size:10px;position:absolute;right:2px;bottom:0;color:#111">' + power + '</span>' +
     '</div>';
   }
-  // Terrain block shown in the inventory just like an element item (build-only:
+  // Terrain block shown in the inventory just like an element item (not craftable:
   // not draggable into the craft slots).
   function genericItemHTML(type, count, drag) {
     var meta = GENERIC[type];
     return '<div class="bmg3-item"' + (drag ? ' draggable="true"' : '') + ' data-block="' + type + '" data-sel="' + esc(type) + '" ' +
-      'title="' + esc(meta.name) + ' — build block" style="background:' + meta.color + '">' +
+      'title="' + esc(meta.name) + ' — collected terrain" style="background:' + meta.color + '">' +
       '<span class="bmg3-sym" style="font-size:11px">' + esc(meta.sym) + '</span>' +
       ((count && count > 1) ? '<span class="bmg3-count">' + count + '</span>' : '') +
     '</div>';
@@ -1243,7 +1354,7 @@
     var cross = document.createElement('div'); cross.className = 'bmg3-cross'; canvasWrap.appendChild(cross);
     var lockmsg = document.createElement('div'); lockmsg.className = 'bmg3-lockmsg'; lockmsg.id = 'bmg3-lockmsg';
     lockmsg.innerHTML = 'Click to play' +
-      '<span style="font-weight:600;font-size:0.76rem;max-width:390px">Move <b>W A S D</b> &middot; Look <b>mouse</b> &middot; Inventory <b>E</b> &middot; Hotbar <b>1-8</b>/scroll &middot; Jump <b>Space</b> &middot; Mine <b>click</b> &middot; Build <b>right-click</b> &middot; Release <b>Esc</b></span>';
+      '<span style="font-weight:600;font-size:0.76rem;max-width:390px">Move <b>W A S D</b> &middot; Look <b>mouse</b> &middot; Inventory <b>E</b> &middot; Hotbar <b>1-8</b>/scroll &middot; Jump <b>Space</b> &middot; Mine <b>click</b> &middot; Release <b>Esc</b></span>';
     canvasWrap.appendChild(lockmsg);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x4a5a68, 1.05));
@@ -1430,10 +1541,27 @@
         '<button class="bmg3-btn" data-pause-act="save">Save</button>' +
         '<button class="bmg3-btn" data-pause-act="load">Load</button>' +
         '<button class="bmg3-btn wide" data-pause-act="reset" style="color:#7a3a3a">Reset mine</button>' +
+      '</div>' +
+      '<div class="bmg3-pause-selected" style="margin-top:10px">' +
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">' +
+          '<span id="bmg3-class-picker" style="display:flex;align-items:center;gap:6px"></span>' +
+          '<span class="bmg3-h" style="margin:0">🏆 Class Leaderboard</span>' +
+          '<button id="bmg3-loadnames" class="bmg3-btn" style="padding:3px 10px;font-size:0.74rem">📋 Load names</button>' +
+          '<span id="bmg3-loadnames-status" style="font-size:0.72rem;color:#555"></span>' +
+          '<span id="bmg3-lb-status" style="font-size:0.72rem;color:#555"></span>' +
+        '</div>' +
+        '<div id="bmg3-lb" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:5px"></div>' +
       '</div>';
     Array.prototype.forEach.call(card.querySelectorAll('[data-pause-act]'), function (btn) {
       btn.onclick = function (e) { e.preventDefault(); e.stopPropagation(); runPauseAction(btn.dataset.pauseAct); };
     });
+    var loadNames = G('bmg3-loadnames');
+    if (loadNames) loadNames.onclick = loadLeaderboardNames;
+    if (isPauseOpen()) {
+      renderLeaderboard(g._lastLb || []);
+      renderLeaderboardClassPicker();
+      fetchLeaderboard();
+    }
   }
   function setPauseOpen(open, relock) {
     var el = G('bmg3-pause-overlay'); if (!el) return;
@@ -1578,7 +1706,7 @@
       if (isInventoryOpen()) return;
       if (!controls.isLocked) { tryLock(); return; }  // re-acquire control by clicking the world
       if (e.button === 0) { triggerHeldPickSwing(); fpsAction('mine'); }
-      else if (e.button === 2) fpsAction('place');
+      else if (e.button === 2) toast('Building is turned off for this lesson.', '#7a5a10');
     }
     function onContext(e) { e.preventDefault(); }
     function onDoubleClick(e) {
@@ -1659,7 +1787,7 @@
             w.z + 0.5 > player.z - HW && w.z - 0.5 < player.z + HW &&
             w.y + 0.5 > player.y && w.y - 0.5 < player.y + PLAYER_H);
   }
-  // Mine/build the block under the crosshair (screen centre), within reach.
+  // Mine the block under the crosshair (screen centre), within reach.
   function fpsAction(kind) {
     if (!raycaster || !worldGroup) return;
     raycaster.setFromCamera({ x: 0, y: 0 }, camera);
@@ -1677,11 +1805,7 @@
       if (g.placed[info.key] != null) pickUp(info.key);
       else mineNatural(info.key);
     } else {
-      var w = parseKey(info.key);
-      var n = h.face ? h.face.normal : { x: 0, y: 1, z: 0 };  // local == world (no rotation)
-      var nk = (w.x + Math.round(n.x)) + ',' + (w.y + Math.round(n.y)) + ',' + (w.z + Math.round(n.z));
-      if (cellOverlapsPlayer(nk)) { toast('Too close to build there', '#a32a2a'); return; }
-      placeAt(nk);
+      toast('Building is turned off for this lesson.', '#7a5a10');
     }
   }
 
@@ -1813,22 +1937,21 @@
   function renderInv() {
     var el = G('bmg3-inv'); if (!el) return;
     repairHotbarAndSelection();
-    var entries = ownedSelectors()
-      .filter(function (sel) { return !hotbarHas(sel); })
-      .map(entryForSelector);
-    var INV_COLS = 8, INV_MIN = 32;
-    var slots = Math.max(INV_MIN, Math.ceil(entries.length / INV_COLS) * INV_COLS);
+    ensureInventorySlots();
+    var lastUsed = -1;
+    for (var used = 0; used < g.invSlots.length; used++) if (haveSel(g.invSlots[used])) lastUsed = used;
+    var slots = Math.max(INV_MIN_SLOTS, Math.ceil((lastUsed + 1) / INV_COLS) * INV_COLS);
     var html = '';
     for (var i = 0; i < slots; i++) {
-      var e = entries[i];
-      if (!e) { html += '<div class="bmg3-slot"></div>'; continue; }
+      var e = haveSel(g.invSlots[i]) ? entryForSelector(g.invSlots[i]) : null;
+      if (!e) { html += '<div class="bmg3-slot" data-inv-slot="' + i + '"></div>'; continue; }
       var sel = sameSel(g.selected, e.id) ? ' sel' : '';
       if (e.kind === 'pick') {
-        html += '<div class="bmg3-slot' + sel + '" data-pick="' + e.power + '">' + pickIconHTML(e.power, true) + '</div>';
+        html += '<div class="bmg3-slot' + sel + '" data-inv-slot="' + i + '">' + pickIconHTML(e.power, true) + '</div>';
       } else if (e.kind === 'el') {
-        html += '<div class="bmg3-slot' + sel + '" data-inv="' + e.id + '">' + itemHTML(e.id, e.count, true) + '</div>';
+        html += '<div class="bmg3-slot' + sel + '" data-inv-slot="' + i + '">' + itemHTML(e.id, e.count, true) + '</div>';
       } else {
-        html += '<div class="bmg3-slot' + sel + '" data-block="' + e.id + '">' + genericItemHTML(e.id, e.count, true) + '</div>';
+        html += '<div class="bmg3-slot' + sel + '" data-inv-slot="' + i + '">' + genericItemHTML(e.id, e.count, true) + '</div>';
       }
     }
     el.innerHTML = html;
@@ -1876,18 +1999,18 @@
         '<span style="width:24px;height:24px;flex-shrink:0;background:' + GENERIC[v].color + ';border:2px solid;border-color:#373737 #fff #fff #373737"></span>' +
         '<span style="font-weight:800;color:#2a2a2a">' + esc(GENERIC[v].name) + '</span>' +
         '<span style="color:#555">×' + (g.blocks[v] || 0) + '</span>' +
-        '<span style="color:#5a5a5a;font-size:0.74rem;margin-left:6px">' + (selectedIsActiveHotbar() ? 'equipped - right-click a block face to build' : 'drag to hotbar to build') + '</span>';
+        '<span style="color:#5a5a5a;font-size:0.74rem;margin-left:6px">Building is turned off for this lesson</span>';
       return;
     }
     if (!v || !have(v)) {
-      el.innerHTML = '<span style="color:#5a5a5a;font-size:0.76rem">Click inventory items to inspect or sell them. Drag blocks or elements to the hotbar before building.</span>';
+      el.innerHTML = '<span style="color:#5a5a5a;font-size:0.76rem">Click inventory items to inspect, sell, or use them in crafting.</span>';
       return;
     }
     el.innerHTML =
       '<span style="width:24px;height:24px;flex-shrink:0;background:' + elementColor(v) + ';border:2px solid;border-color:#373737 #fff #fff #373737"></span>' +
       '<span style="font-weight:800;color:#2a2a2a">' + esc(elementName(v)) + '</span>' +
       '<span style="font-family:ui-monospace,monospace;color:#444">' + binStr(v) + '</span>' +
-      '<span style="color:#5a5a5a;font-size:0.74rem">' + (selectedIsActiveHotbar() ? 'equipped - right-click to build' : 'inventory item - drag to hotbar to build') + '</span>' +
+      '<span style="color:#5a5a5a;font-size:0.74rem">inventory item - sell or use in crafting</span>' +
       '<span style="color:#555">×' + g.inv[v] + '</span>' +
       '<button id="bmg3-sell" class="bmg3-btn" style="margin-left:auto;padding:3px 10px;font-size:0.76rem">Sell +' + v + ' 💰</button>';
     G('bmg3-sell').onclick = function () { sellSelected(); };
@@ -1905,14 +2028,15 @@
     var layer = 'Surface';
     if (player) {
       var px = Math.round(player.x), pz = Math.round(player.z);
-      var depth = Math.max(0, surfaceHeight(px, pz) - Math.floor(player.y));
+      var depth = currentPlayerDepth();
+      recordDepth(depth);
       layer = 'D' + depth + ' ' + GENERIC[genericTypeAt(px, Math.min(surfaceHeight(px, pz), Math.floor(player.y)), pz)].name;
     }
     el.innerHTML =
       '<span style="font-weight:800;color:#2a2a2a;letter-spacing:1px;white-space:nowrap">⛏ BINARY MINE 3D</span>' +
       stat('💰', g.money) +
       stat('Layer', esc(layer)) +
-      stat('⛏', esc(elementSymbol(g.best)) + ' ' + binStr(g.best)) +
+      stat('Best D', g.bestDepth || 0) +
       stat('📖', discoveredCount());
   }
 
@@ -1932,10 +2056,11 @@
         return;
       }
       g.mined[key] = true;
+      recordDepthForKey(key);
       gainBlock(c.gen, 1);
       toast('+ ' + meta.name, '#5a4a30');
       requestWorldRebuild(); renderInv(); renderSelected(); renderStats();
-      save();
+      save(); syncLeaderboard();
       return;
     }
     var v = c.el;
@@ -1956,6 +2081,7 @@
     if (!tutorialSeen('first-ore') && !activeTut) { startTutorial('first-ore', { value: v }); return; }
     if (canMine(v)) {
       g.mined[key] = true;
+      recordDepthForKey(key);
       gainElement(v, 1);
       toast('+ ' + elementName(v) + ' (' + binStr(v) + ')', '#2f6a2f');
       requestWorldRebuild(); renderInv(); renderSelected(); renderStats();
@@ -2058,23 +2184,7 @@
     return true;
   }
   function placeAt(key) {
-    var sel = activeHotbarSelection();
-    if (solidAt(key)) return;
-    if (!haveSel(sel)) { toast('Select a block or element on the hotbar first', '#a32a2a'); return; }
-    if (isPickSel(sel)) { toast('Pickaxes are tools, not blocks', '#a32a2a'); return; }
-    if (isGeneric(sel)) {
-      if (!(g.blocks[sel] > 0)) { toast('No ' + GENERIC[sel].name + ' blocks to place', '#a32a2a'); return; }
-      g.placed[key] = sel;
-      g.blocks[sel]--; if (g.blocks[sel] <= 0) { delete g.blocks[sel]; repairHotbarAndSelection(); }
-    } else {
-      if (typeof sel !== 'number' || !have(sel)) { toast('Select something to build with first', '#a32a2a'); return; }
-      g.placed[key] = sel;
-      g.inv[sel]--; if (g.inv[sel] <= 0) delete g.inv[sel];
-      if (!have(sel)) repairHotbarAndSelection();
-    }
-    requestWorldRebuild(); renderInv(); renderSelected();
-    save();
-    checkGameOver();
+    toast('Building is turned off for this lesson.', '#7a5a10');
   }
   function pickUp(key) {
     var v = g.placed[key]; if (v == null) return;
@@ -2195,8 +2305,8 @@
 
   // ── Leaderboard render ─────────────────────────────────────────
   function renderLeaderboard(rows, emptyMessage) {
-    var el = G('bmg3-lb'); if (!el) return;
     g._lastLb = rows || [];
+    var el = G('bmg3-lb'); if (!el) return;
     if (emptyMessage && (!rows || !rows.length)) { el.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;grid-column:1/-1">' + esc(emptyMessage) + '</div>'; return; }
     if (!rows || !rows.length) { el.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;grid-column:1/-1">No miners yet — be the first!</div>'; return; }
     var me = window.state && state.uid;
@@ -2204,11 +2314,12 @@
     el.innerHTML = rows.slice(0, 30).map(function (r, i) {
       var nm = (typeof studentName === 'function' && studentName(r.code)) || r.code;
       var isMe = (r.code === me);
-      var bestTitle = elementName(r.best) + ' - denary ' + r.best;
+      var depth = Math.max(0, Math.floor(r.depth || 0));
+      var depthTitle = 'Deepest reached: D' + depth;
       return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:2px solid;border-color:#fff #999 #999 #fff;background:' + (isMe ? '#e6c64a' : '#bdbdbd') + '">' +
         '<span style="width:22px;text-align:center;font-size:0.82rem;font-weight:800;color:#333">' + (medals[i] || (i + 1)) + '</span>' +
         '<span style="flex:1;min-width:0;font-size:0.8rem;font-weight:700;color:#1f1f1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(nm) + (isMe ? ' (you)' : '') + '</span>' +
-        '<span style="font-family:ui-monospace,monospace;font-size:0.76rem;font-weight:800;color:#1a5a2a;white-space:nowrap;flex-shrink:0" title="' + esc(bestTitle) + '">' + esc(elementSymbol(r.best)) + ' ' + r.best + '</span>' +
+        '<span style="font-family:ui-monospace,monospace;font-size:0.76rem;font-weight:800;color:#1a5a2a;white-space:nowrap;flex-shrink:0" title="' + esc(depthTitle) + '">D' + depth + '</span>' +
         '<span style="font-size:0.76rem;font-weight:800;color:#6a4e10">' + r.money + '💰</span>' +
       '</div>';
     }).join('');
@@ -2356,13 +2467,7 @@
     return true;
   }
   function deepestReachedDepth() {
-    var maxDepth = 0;
-    if (player) maxDepth = Math.max(maxDepth, surfaceHeight(Math.round(player.x), Math.round(player.z)) - Math.floor(player.y));
-    Object.keys(g.mined || {}).forEach(function (key) {
-      var w = parseKey(key);
-      maxDepth = Math.max(maxDepth, depthBelowSurface(w.x, w.y, w.z));
-    });
-    return Math.max(0, Math.floor(maxDepth));
+    return Math.max(g.bestDepth || 0, currentPlayerDepth(), deepestMinedDepth());
   }
   function renderAll() {
     requestWorldRebuild(); renderInv(); renderSelected(); renderStats(); renderCraft();
@@ -2456,9 +2561,9 @@
 
   function snapshotState() {
     return {
-      inv: g.inv, money: g.money, best: g.best, depth: g.depth,
+      inv: g.inv, money: g.money, best: g.best, bestDepth: g.bestDepth, depth: g.depth,
       discovered: g.discovered, mined: g.mined, placed: g.placed, blocks: g.blocks,
-      picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex, hotbarSkip: g.hotbarSkip
+      picks: g.picks, shop: g.shop, selected: g.selected, hotbar: g.hotbar, hotbarIndex: g.hotbarIndex, hotbarSkip: g.hotbarSkip, invSlots: g.invSlots
     };
   }
   function sha256hex(str) {
@@ -2488,6 +2593,7 @@
     g.inv        = s.inv || {};
     g.money      = Math.max(0, Math.floor(s.money || 0));
     g.best       = Math.max(1, Math.floor(s.best || 1));
+    g.bestDepth  = Math.max(0, Math.floor(s.bestDepth || s.deepest || 0));
     g.depth      = Math.max(START_DEPTH, Math.floor(s.depth || START_DEPTH));
     g.discovered = s.discovered || { 1: true };
     g.mined      = s.mined || {};
@@ -2499,6 +2605,8 @@
     while (g.hotbar.length < 8) g.hotbar.push(null);
     g.hotbarIndex = Math.max(0, Math.min(7, Math.floor(s.hotbarIndex || 0)));
     g.hotbarSkip = s.hotbarSkip || {};
+    g.invSlots = Array.isArray(s.invSlots) ? s.invSlots.slice() : [];
+    g.bestDepth = Math.max(g.bestDepth || 0, deepestMinedDepth());
     g.slotA = null; g.slotB = null; g.craftGuess = null; g.craftCarry = null;
     g.selected = haveSel(s.selected) ? s.selected : firstOwnedSelector();
     repairHotbarAndSelection();
@@ -2793,48 +2901,47 @@
             '</div>' +
           '</div>' +
         '</div>' +
-        // Leaderboard — full width, at the very bottom
-        '<div class="bmg3-panel" style="margin-top:10px">' +
-          '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">' +
-            '<span id="bmg3-class-picker" style="display:flex;align-items:center;gap:6px"></span>' +
-            '<span class="bmg3-h" style="margin:0">🏆 Class Leaderboard</span>' +
-            '<button id="bmg3-loadnames" class="bmg3-btn" style="padding:3px 10px;font-size:0.74rem">📋 Load names</button>' +
-            '<span id="bmg3-loadnames-status" style="font-size:0.72rem;color:#555"></span>' +
-            '<span id="bmg3-lb-status" style="font-size:0.72rem;color:#555"></span>' +
-          '</div>' +
-          '<div id="bmg3-lb" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:5px"></div>' +
-        '</div>' +
       '</div>';
 
-    // Wire inventory: click to select (elements or terrain blocks), drag
-    // elements into the craft slots.
+    // Wire inventory: click to inspect/select, drag to exact slots.
     var inv = G('bmg3-inv');
     var invHotbar = G('bmg3-inv-hotbar');
     var gamebox = G('bmg3-gamebox');
+    function invSlotFromEvent(e) {
+      var slot = e.target.closest('.bmg3-slot[data-inv-slot]');
+      return (slot && inv && inv.contains(slot)) ? slot : null;
+    }
+    function clearDropClasses() {
+      if (!gamebox) return;
+      Array.prototype.forEach.call(gamebox.querySelectorAll('.bmg3-drop'), function (el) { el.classList.remove('bmg3-drop'); });
+      if (inv) inv.classList.remove('bmg3-drop');
+    }
     inv.addEventListener('click', function (e) {
-      var ps = e.target.closest('.bmg3-slot[data-pick]');
-      if (ps) { selectItem(pickSel(+ps.dataset.pick)); return; }
-      var es = e.target.closest('.bmg3-slot[data-inv]');
-      if (es) { selectItem(+es.dataset.inv); return; }
-      var bs = e.target.closest('.bmg3-slot[data-block]');
-      if (bs) { selectItem(bs.dataset.block); return; }
+      var slot = invSlotFromEvent(e);
+      if (!slot) return;
+      var sel = g.invSlots[+slot.dataset.invSlot];
+      if (haveSel(sel)) selectItem(sel);
     });
     inv.addEventListener('dragover', function (e) {
-      if (g.dragFromHotbar == null) return;
+      if (!haveSel(g.dragSel)) return;
+      var slot = invSlotFromEvent(e);
+      if (!slot) return;
       e.preventDefault();
-      inv.classList.add('bmg3-drop');
+      slot.classList.add('bmg3-drop');
     });
     inv.addEventListener('dragleave', function (e) {
-      if (!inv.contains(e.relatedTarget)) inv.classList.remove('bmg3-drop');
+      var slot = invSlotFromEvent(e);
+      if (slot) slot.classList.remove('bmg3-drop');
     });
     inv.addEventListener('drop', function (e) {
-      if (g.dragFromHotbar == null) return;
+      var slot = invSlotFromEvent(e);
+      if (!slot) return;
       e.preventDefault();
-      inv.classList.remove('bmg3-drop');
+      clearDropClasses();
       var raw = (e.dataTransfer && e.dataTransfer.getData('application/x-bmg3-sel')) || selectorText(g.dragSel || '');
       var sel = selectorFromText(raw);
-      if (haveSel(sel)) removeFromHotbar(sel);
-      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
+      if (haveSel(sel)) placeInInventory(sel, +slot.dataset.invSlot);
+      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null; g.dragFromInv = null;
     });
     var hotbar = G('bmg3-hotbar');
     function onHotbarClick(e) {
@@ -2844,6 +2951,7 @@
     function onHotbarDragOver(e) {
       var slot = e.target.closest('.bmg3-hotbar-slot[data-hotbar]');
       if (!slot) return;
+      if (!haveSel(g.dragSel)) return;
       e.preventDefault();
       slot.classList.add('bmg3-drop');
     }
@@ -2855,11 +2963,11 @@
       var slot = e.target.closest('.bmg3-hotbar-slot[data-hotbar]');
       if (!slot) return;
       e.preventDefault();
-      slot.classList.remove('bmg3-drop');
+      clearDropClasses();
       var raw = (e.dataTransfer && e.dataTransfer.getData('application/x-bmg3-sel')) || selectorText(g.dragSel || '');
       var sel = selectorFromText(raw);
       if (haveSel(sel)) placeInHotbar(sel, +slot.dataset.hotbar);
-      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
+      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null; g.dragFromInv = null;
     }
     [hotbar, invHotbar].forEach(function (bar) {
       if (!bar) return;
@@ -2897,7 +3005,9 @@
       g.dragSel = sel;
       g.dragVal = (typeof sel === 'number') ? sel : null;
       var fromHotbar = e.target.closest('.bmg3-hotbar-slot[data-hotbar]');
+      var fromInv = e.target.closest('.bmg3-slot[data-inv-slot]');
       g.dragFromHotbar = fromHotbar ? +fromHotbar.dataset.hotbar : null;
+      g.dragFromInv = (fromInv && inv && inv.contains(fromInv)) ? +fromInv.dataset.invSlot : null;
       try {
         e.dataTransfer.setData('application/x-bmg3-sel', selectorText(sel));
         e.dataTransfer.setData('text/plain', selectorText(sel));
@@ -2905,8 +3015,8 @@
       } catch (_e) {}
     });
     gamebox.addEventListener('dragend', function () {
-      if (inv) inv.classList.remove('bmg3-drop');
-      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
+      clearDropClasses();
+      g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null; g.dragFromInv = null;
     });
 
     // Wire crafting slots (drag-drop + click)
@@ -2917,12 +3027,13 @@
       slot.addEventListener('drop', function (e) {
         e.preventDefault(); slot.classList.remove('bmg3-drop');
         var val = (g.dragVal != null) ? g.dragVal : parseInt(e.dataTransfer.getData('text/plain'), 10);
-        slotDrop(which, val); g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null;
+        slotDrop(which, val); g.dragSel = null; g.dragVal = null; g.dragFromHotbar = null; g.dragFromInv = null;
       });
       slot.addEventListener('click', function () { slotClick(which); });
     });
 
-    G('bmg3-loadnames').onclick = loadLeaderboardNames;
+    var loadNamesBtn = G('bmg3-loadnames');
+    if (loadNamesBtn) loadNamesBtn.onclick = loadLeaderboardNames;
     G('bmg3-reset').onclick = function () {
       if (!confirm('Reset your mine, inventory and money? This cannot be undone.')) return;
       doReset();
@@ -2930,7 +3041,6 @@
 
     // Paint the DOM parts immediately; the 3D world fills in once three loads.
     renderInv(); renderSelected(); renderStats(); renderCraft();
-    renderLeaderboardClassPicker();
 
     // Load Three.js on demand, then build the voxel world.
     loadThree().then(function (mods) {
