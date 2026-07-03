@@ -192,6 +192,32 @@
     for (var i = 0; i < ps.length; i++) if (pickCanMine(ps[i], v)) return true;
     return false;
   }
+  function ownedPickForOre(v) {
+    var ps = ownedPickPowers();
+    for (var i = 0; i < ps.length; i++) if (pickCanMine(ps[i], v)) return ps[i];
+    return null;
+  }
+  function ownedPickForGeneric(type) {
+    var meta = GENERIC[type];
+    if (!meta) return null;
+    var need = meta.bits || 0;
+    if (need <= 0) return ownedPickPowers()[0] || null;
+    var ps = ownedPickPowers();
+    for (var i = 0; i < ps.length; i++) if (bits(ps[i]) >= need) return ps[i];
+    return null;
+  }
+  function hotbarIndexForPick(power) {
+    var sel = pickSel(power);
+    for (var i = 0; i < g.hotbar.length; i++) if (sameSel(g.hotbar[i], sel)) return i;
+    return -1;
+  }
+  function equipPickMessage(power, targetName) {
+    var info = pickInfoFromPower(power);
+    var name = info ? info.name : ('pickaxe ' + power);
+    var idx = hotbarIndexForPick(power);
+    if (idx >= 0) return 'You already have ' + name + '. Press ' + (idx + 1) + ' or click that hotbar slot to mine ' + targetName + '.';
+    return 'You already have ' + name + '. Drag it onto the hotbar, then select it to mine ' + targetName + '.';
+  }
   function gainPick(a, b) {
     var lo = Math.min(a, b), hi = Math.max(a, b);
     g.picks[a + b] = { a: lo, b: hi };
@@ -445,6 +471,13 @@
     for (var i = 0; i < g.hotbar.length; i++) if (sameSel(g.hotbar[i], sel)) return true;
     return false;
   }
+  function activeHotbarSelection() {
+    var sel = g.hotbar[g.hotbarIndex];
+    return haveSel(sel) ? sel : null;
+  }
+  function selectedIsActiveHotbar() {
+    return haveSel(g.selected) && sameSel(activeHotbarSelection(), g.selected);
+  }
   function entryForSelector(sel) {
     if (isPickSel(sel)) {
       var power = selPower(sel);
@@ -518,7 +551,9 @@
   }
   function selectItem(sel) {
     if (!haveSel(sel)) return;
-    putInHotbar(sel, g.hotbarIndex);
+    if (!g.hotbarSkip) g.hotbarSkip = {};
+    if (!hotbarHas(sel)) g.hotbarSkip[selectorText(sel)] = true;
+    g.selected = sel;
     renderInv(); renderHotbar(); renderSelected();
     renderPauseMenu();
     save();
@@ -725,8 +760,9 @@
     return power != null && pickCanMine(power, v);
   }
   function selectedPickPower() {
-    if (!isPickSel(g.selected)) return null;
-    var power = selPower(g.selected);
+    var sel = activeHotbarSelection();
+    if (!isPickSel(sel)) return null;
+    var power = selPower(sel);
     return g.picks[power] ? power : null;
   }
   function selectedPickBits() {
@@ -1156,7 +1192,8 @@
   }
   function updateHeldPickaxe() {
     if (!THREE || !camera) return;
-    var sel = (isPickSel(g.selected) && haveSel(g.selected)) ? g.selected : null;
+    var power = selectedPickPower();
+    var sel = (power != null) ? pickSel(power) : null;
     if (sameSel(sel, heldPickSel)) return;
     if (heldPickGroup) {
       camera.remove(heldPickGroup);
@@ -1831,7 +1868,7 @@
         '<span style="width:24px;height:24px;flex-shrink:0;position:relative;border:2px solid;border-color:#373737 #fff #fff #373737;background:#8b8b8b">' + pickIconHTML(power) + '</span>' +
         '<span style="font-weight:800;color:#2a2a2a">' + esc(info.name) + '</span>' +
         '<span style="font-family:ui-monospace,monospace;color:#444">power ' + power + '</span>' +
-        '<span style="color:#5a5a5a;font-size:0.74rem;margin-left:6px">left-click ore to mine</span>';
+        '<span style="color:#5a5a5a;font-size:0.74rem;margin-left:6px">' + (selectedIsActiveHotbar() ? 'equipped - left-click ore to mine' : 'drag to hotbar to equip') + '</span>';
       return;
     }
     if (isGeneric(v)) {
@@ -1839,17 +1876,18 @@
         '<span style="width:24px;height:24px;flex-shrink:0;background:' + GENERIC[v].color + ';border:2px solid;border-color:#373737 #fff #fff #373737"></span>' +
         '<span style="font-weight:800;color:#2a2a2a">' + esc(GENERIC[v].name) + '</span>' +
         '<span style="color:#555">×' + (g.blocks[v] || 0) + '</span>' +
-        '<span style="color:#5a5a5a;font-size:0.74rem;margin-left:6px">right-click a block face to build</span>';
+        '<span style="color:#5a5a5a;font-size:0.74rem;margin-left:6px">' + (selectedIsActiveHotbar() ? 'equipped - right-click a block face to build' : 'drag to hotbar to build') + '</span>';
       return;
     }
     if (!v || !have(v)) {
-      el.innerHTML = '<span style="color:#5a5a5a;font-size:0.76rem">Click an item to select it, then Sell it — or right-click a block to build with it.</span>';
+      el.innerHTML = '<span style="color:#5a5a5a;font-size:0.76rem">Click inventory items to inspect or sell them. Drag blocks or elements to the hotbar before building.</span>';
       return;
     }
     el.innerHTML =
       '<span style="width:24px;height:24px;flex-shrink:0;background:' + elementColor(v) + ';border:2px solid;border-color:#373737 #fff #fff #373737"></span>' +
       '<span style="font-weight:800;color:#2a2a2a">' + esc(elementName(v)) + '</span>' +
       '<span style="font-family:ui-monospace,monospace;color:#444">' + binStr(v) + '</span>' +
+      '<span style="color:#5a5a5a;font-size:0.74rem">' + (selectedIsActiveHotbar() ? 'equipped - right-click to build' : 'inventory item - drag to hotbar to build') + '</span>' +
       '<span style="color:#555">×' + g.inv[v] + '</span>' +
       '<button id="bmg3-sell" class="bmg3-btn" style="margin-left:auto;padding:3px 10px;font-size:0.76rem">Sell +' + v + ' 💰</button>';
     G('bmg3-sell').onclick = function () { sellSelected(); };
@@ -1888,7 +1926,8 @@
       if (!canMineGeneric(c.gen)) {
         if (meta && (meta.bits || 0) > 0 && ownedPickPowers().length === 0 && !tutorialSeen('need-pickaxe') && !activeTut) { startTutorial('need-pickaxe'); return; }
         var need = meta && meta.bits ? meta.bits : 0;
-        if (anyPickCanMineGeneric(c.gen)) toast('Select a pickaxe with bit-length ' + need + '+ to mine ' + meta.name + '.', '#a35a1a');
+        var terrainPick = ownedPickForGeneric(c.gen);
+        if (terrainPick) toast(equipPickMessage(terrainPick, meta.name), '#a35a1a');
         else toast(meta.name + ' needs a pickaxe with bit-length ' + need + '+.', '#a35a1a');
         return;
       }
@@ -1905,7 +1944,8 @@
     var layerMeta = GENERIC[layerType];
     if (!canMineGeneric(layerType)) {
       var layerNeed = layerMeta && layerMeta.bits ? layerMeta.bits : 0;
-      if (anyPickCanMineGeneric(layerType)) toast('Select a pickaxe with bit-length ' + layerNeed + '+ to mine ore in ' + layerMeta.name + '.', '#a35a1a');
+      var layerPick = ownedPickForGeneric(layerType);
+      if (layerPick) toast(equipPickMessage(layerPick, 'ore in ' + layerMeta.name), '#a35a1a');
       else toast(layerMeta.name + ' needs a pickaxe with bit-length ' + layerNeed + '+.', '#a35a1a');
       return;
     }
@@ -1922,7 +1962,7 @@
       clearHint();
       save(); syncLeaderboard();
     } else if (anyPickCanMine(v)) {
-      toast('Select a pickaxe on the hotbar to mine this ore.', '#a35a1a');
+      toast(equipPickMessage(ownedPickForOre(v), elementName(v)), '#a35a1a');
     } else {
       showHint(v);
     }
@@ -2018,8 +2058,9 @@
     return true;
   }
   function placeAt(key) {
-    var sel = g.selected;
+    var sel = activeHotbarSelection();
     if (solidAt(key)) return;
+    if (!haveSel(sel)) { toast('Select a block or element on the hotbar first', '#a32a2a'); return; }
     if (isPickSel(sel)) { toast('Pickaxes are tools, not blocks', '#a32a2a'); return; }
     if (isGeneric(sel)) {
       if (!(g.blocks[sel] > 0)) { toast('No ' + GENERIC[sel].name + ' blocks to place', '#a32a2a'); return; }
