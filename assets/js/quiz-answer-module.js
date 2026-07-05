@@ -340,6 +340,10 @@ function exitStudentQuiz(opts) {
   }
   quiz.unsubscribers.forEach(function(fn) { fn(); });
   quiz.unsubscribers = [];
+  if (quiz.studentTshirtContestCacheOff) {
+    try { quiz.studentTshirtContestCacheOff(); } catch(e) {}
+    quiz.studentTshirtContestCacheOff = null;
+  }
   if (opts.removePlayer && quiz.sessionRef) {
     quiz.sessionRef.child('players/' + state.uid).remove();
   }

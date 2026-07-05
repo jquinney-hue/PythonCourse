@@ -75,6 +75,10 @@
     ]},
   ];
 
+  // Shared with other binary-themed drawing games (e.g. the Byte Brawlers
+  // t-shirt designer) so the 16-colour maps stay a single source of truth.
+  try { window.PA_COLOR_MAPS = COLOR_MAPS; } catch (e) {}
+
   // ── Module state ──────────────────────────────────────────────────────────
 
   var PA_GRID   = 16;

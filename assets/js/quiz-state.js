@@ -27,6 +27,7 @@ var quiz = {
   forced: false,
   displaced: false,
   unsubscribers: [],    // Firebase listeners to clean up
+  studentTshirtContestCacheOff: null,
 };
 
 // ── Generate 4-digit lobby code unique in Firebase ─────────────

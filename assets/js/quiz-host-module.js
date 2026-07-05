@@ -61,20 +61,38 @@ function quizLessonById(lessonId) {
 }
 
 function isQuizShareQuestion(q) {
-  return !!q && (q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share' || q.type === 'pixel_art');
+  return !!q && (q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share' || q.type === 'pixel_art' || q.type === 'tshirt');
+}
+
+function isTshirtContestQuestion(q) {
+  return !!q && q.type === 'tshirt_contest';
+}
+
+function isQuizDriveQuestion(q) {
+  return isQuizShareQuestion(q) || isTshirtContestQuestion(q);
+}
+
+function validateTshirtContestSelection(selectedQs) {
+  var hasContest = (selectedQs || []).some(isTshirtContestQuestion);
+  if (hasContest && selectedQs.length !== 1) {
+    alert('Choose one clothing design contest option at a time. The bracket contest runs as a full quiz by itself.');
+    return false;
+  }
+  return true;
 }
 
 function refreshQuizSetupQuestions() {
   var lesson = getSelectedQuizLesson();
   var allQs = lesson && lesson.data.quizQuestions ? lesson.data.quizQuestions : [];
   document.getElementById('quiz-setup-lesson-name').textContent = lesson ? (lesson.data.title || lesson.meta.title || lesson.meta.id) : 'No quiz available';
+  var defaultCount = allQs.some(isTshirtContestQuestion) ? 1 : Math.min(5, Math.max(1, allQs.length));
   document.getElementById('quiz-q-count').max = Math.max(1, allQs.length);
-  document.getElementById('quiz-q-count').value = Math.min(5, Math.max(1, allQs.length));
+  document.getElementById('quiz-q-count').value = defaultCount;
   document.getElementById('btn-quiz-start-host').disabled = !allQs.length;
   document.getElementById('btn-quiz-start-host').classList.toggle('opacity-60', !allQs.length);
 
   // Show Drive setup panel if any question requires it
-  var hasCanvas = allQs.some(isQuizShareQuestion);
+  var hasCanvas = allQs.some(isQuizDriveQuestion);
   var drivePanel = document.getElementById('quiz-drive-setup');
   if (drivePanel) {
     drivePanel.classList.toggle('hidden', !hasCanvas);
@@ -112,9 +130,18 @@ function refreshQuizSetupQuestions() {
     row.innerHTML =
       '<input type="checkbox" class="quiz-custom-check accent-[rgb(176,28,35)]" data-idx="' + idx + '" />' +
       '<span class="text-sm text-gray-700 flex-1">' + escapeHtml(q.q || q.title || ('Question ' + (idx + 1))) + '</span>' +
-      '<input type="number" class="quiz-custom-time w-16 border border-gray-300 rounded px-2 py-0.5 text-xs" value="' + (q.duration || 60) + '" min="10" max="300" />';
+      '<input type="number" class="quiz-custom-time w-16 border border-gray-300 rounded px-2 py-0.5 text-xs" value="' + (q.duration || (isTshirtContestQuestion(q) ? 180 : 60)) + '" min="' + (isTshirtContestQuestion(q) ? 180 : 10) + '" max="300" />';
     customList.appendChild(row);
   });
+  var quickTime = document.getElementById('quiz-q-time');
+  if (quickTime && allQs.length === 1 && isTshirtContestQuestion(allQs[0])) {
+    quickTime.value = allQs[0].duration || 180;
+    quickTime.min = 180;
+    quickTime.max = 300;
+  } else if (quickTime) {
+    quickTime.min = 10;
+    quickTime.max = 300;
+  }
 }
 
 function populateQuizLessonSelect() {
@@ -292,7 +319,12 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
     var timeEach = parseInt(document.getElementById('quiz-q-time').value) || 60;
     // Shuffle and take count
     var shuffled = allQs.slice().sort(function() { return Math.random() - 0.5; });
-    selectedQs = shuffled.slice(0, count).map(function(q) { return Object.assign({}, q, { duration: timeEach }); });
+    selectedQs = shuffled.slice(0, count).map(function(q) {
+      if (isTshirtContestQuestion(q)) {
+        return Object.assign({}, q, { duration: Math.max(180, Math.min(300, timeEach || q.duration || 180)) });
+      }
+      return Object.assign({}, q, { duration: timeEach });
+    });
   } else {
     var checks = document.querySelectorAll('.quiz-custom-check:checked');
     checks.forEach(function(cb) {
@@ -302,6 +334,8 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
     });
     if (!selectedQs.length) { alert('Select at least one question.'); return; }
   }
+
+  if (!validateTshirtContestSelection(selectedQs)) return;
 
   document.getElementById('modal-quiz-setup').classList.add('hidden');
 
@@ -313,7 +347,7 @@ document.getElementById('btn-quiz-start-host').onclick = async function() {
   });
 
   // If any canvas or pyscratch_share questions are included, Drive setup must have completed first
-  var hasCanvas = selectedQs.some(isQuizShareQuestion);
+  var hasCanvas = selectedQs.some(isQuizDriveQuestion);
   if (hasCanvas && !quiz._driveClassId) {
     alert('This quiz includes a shared submission activity. Please click "Connect Google Drive" and select a class before starting.');
     document.getElementById('modal-quiz-setup').classList.remove('hidden');
@@ -342,7 +376,7 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
   quiz.sessionRef = state.db.ref('quizSessions/' + lobbyCode);
 
   // Now that we have the real lobby code, create Drive folders if needed
-  var hasCanvas = selectedQs.some(isQuizShareQuestion);
+  var hasCanvas = selectedQs.some(isQuizDriveQuestion);
   if (hasCanvas && quiz._driveClassId) {
 
     // ── Drive setup loading overlay ──────────────────────────────
@@ -512,7 +546,19 @@ async function createHostedQuizLobby(lesson, selectedQs, forceClass) {
         minRows: q.minRows || null,
         checks: q.checks || null,
         levelString: q.levelString || null,
-        starterCode: q.starterCode || null
+        starterCode: q.starterCode || null,
+        binarySeconds: q.binarySeconds || null,
+        topicSeconds: q.topicSeconds || null,
+        topicVoteSeconds: q.topicVoteSeconds || null,
+        bracketVoteSeconds: q.bracketVoteSeconds || null,
+        itemType: q.itemType || q.clothingType || q.garmentType || null,
+        templateUrl: q.templateUrl || null,
+        fileSlug: q.fileSlug || null,
+        itemLabel: q.itemLabel || null,
+        itemLabelLower: q.itemLabelLower || null,
+        itemPluralLabel: q.itemPluralLabel || null,
+        itemDesignLabel: q.itemDesignLabel || null,
+        contestTitle: q.contestTitle || null
       };
     }),
   });
@@ -595,7 +641,8 @@ function renderQuizHostFromSession(snap) {
   var qIdx = Number(snap.child('questionIdx').val());
   var questionStart = snap.child('questionStart').val() || 0;
   var answerRevealStart = snap.child('answerRevealStart').val() || 0;
-  var renderKey = [stateVal, qIdx, questionStart, answerRevealStart].join(':');
+  var contestRound = snap.child('tshirtContest/roundIndex').val();
+  var renderKey = [stateVal, qIdx, questionStart, answerRevealStart, contestRound].join(':');
   if (quiz.hostSessionRenderKey === renderKey) return;
   quiz.hostSessionRenderKey = renderKey;
 
@@ -620,6 +667,10 @@ function renderQuizHostFromSession(snap) {
     renderHostShowcaseView(qIdx);
     return;
   }
+  if (isTshirtContestState(stateVal)) {
+    renderHostTshirtContestView(stateVal, snap);
+    return;
+  }
   if (stateVal === 'finished') {
     clearAllQuizTimers();
     var leaderboard = snap.child('leaderboard').val() || [];
@@ -629,7 +680,7 @@ function renderQuizHostFromSession(snap) {
 }
 
 function setQuizHostView(view) {
-  ['lobby','question','reveal','voting','showcase','finished'].forEach(function(v) {
+  ['lobby','question','reveal','voting','showcase','contest','finished'].forEach(function(v) {
     document.getElementById('qh-' + v).classList.toggle('hidden', v !== view);
   });
   quiz.currentState = view;
@@ -825,6 +876,10 @@ document.getElementById('btn-quiz-begin').onclick = async function() {
 
 document.getElementById('btn-quiz-next').onclick = async function() {
   clearHostQuestionTimer();
+  if (quiz.currentState === 'contest') {
+    await advanceTshirtContest();
+    return;
+  }
   await showAnswerReveal();
 };
 
@@ -852,12 +907,18 @@ document.getElementById('btn-qh-next-start').onclick = async function() {
   var timeEach = parseInt(document.getElementById('qh-next-q-time').value, 10) || 60;
   var forceClass = document.getElementById('qh-next-force-class').checked;
   var shuffled = allQs.slice().sort(function() { return Math.random() - 0.5; });
-  var selectedQs = shuffled.slice(0, count).map(function(q) { return Object.assign({}, q, { duration: timeEach }); });
+  var selectedQs = shuffled.slice(0, count).map(function(q) {
+    if (isTshirtContestQuestion(q)) {
+      return Object.assign({}, q, { duration: Math.max(180, Math.min(300, timeEach || q.duration || 180)) });
+    }
+    return Object.assign({}, q, { duration: timeEach });
+  });
   selectedQs = selectedQs.map(function(q) {
     if (q.type !== 'generated') return q;
     var gen = BinaryLesson.genQuestion(q.mode) || genPyQuestion(q.mode);
     return gen ? Object.assign({}, gen, { duration: q.duration || 60 }) : q;
   });
+  if (!validateTshirtContestSelection(selectedQs)) return;
   await createHostedQuizLobby(lesson, selectedQs, forceClass);
 };
 
@@ -884,6 +945,10 @@ async function startNextQuestion() {
   }
 
   var q = quiz.questions[nextIdx];
+  if (isTshirtContestQuestion(q)) {
+    await startTshirtContestQuestion(nextIdx, q);
+    return;
+  }
   var now = Date.now();
   await quiz.sessionRef.update({
     state:           'question',
@@ -917,9 +982,10 @@ function renderHostQuestionView(qIdx, questionStart, duration) {
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
   var isPixelArt = q.type === 'pixel_art';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPixelArt;
+  var isTshirt = q.type === 'tshirt';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPixelArt && !isTshirt;
   var hostOptions = ['qh-opt-0','qh-opt-1','qh-opt-2','qh-opt-3'].map(function(id) { return document.getElementById(id); });
-  if (isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPixelArt) {
+  if (isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPixelArt || isTshirt) {
     var label = isWidget ? 'Interactive answer'
       : isTextInput ? 'Typed answer'
       : isScratch ? 'Scratch build'
@@ -928,6 +994,7 @@ function renderHostQuestionView(qIdx, questionStart, duration) {
       : isSpreadsheet ? 'Spreadsheet task'
       : isPyScratch ? 'PyScratch build'
       : isPixelArt ? 'Pixel Art drawing'
+      : isTshirt ? 'T-shirt design'
       : 'Code answer';
     hostOptions.forEach(function(el) {
       el.textContent = label;
@@ -972,6 +1039,7 @@ function clearAllQuizTimers() {
   clearHostQuestionTimer();
   clearRevealTimer();
   clearStudentTimer();
+  if (typeof clearHostTshirtContestProgressListener === 'function') clearHostTshirtContestProgressListener();
 }
 
 function startHostTimer(duration, qIdx, questionStart) {
@@ -1089,7 +1157,8 @@ async function renderHostRevealView(qIdx, revealStart) {
   var isSpreadsheet = q.type === 'spreadsheet_task';
   var isPyScratch = q.type === 'pyscratch_build';
   var isPixelArt = q.type === 'pixel_art';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPixelArt;
+  var isTshirt = q.type === 'tshirt';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPixelArt && !isTshirt;
   if (isTextInput || isWidget) {
     safeText(revealEl, 'Answer: ' + q.answer);
     revealEl.className = 'text-2xl font-bold rounded-xl px-8 py-4 mb-6 bg-green-600 font-mono';
@@ -1221,6 +1290,622 @@ async function renderHostRevealView(qIdx, revealStart) {
 }
 
 // ── Voting phase (canvas questions) ───────────────────────────
+
+// T-shirt contest: binary sprint -> topics -> topic votes -> drawing bracket.
+function isTshirtContestState(stateVal) {
+  return [
+    'tshirt_binary',
+    'tshirt_topics',
+    'tshirt_topic_vote',
+    'tshirt_draw',
+    'tshirt_bracket_vote'
+  ].indexOf(stateVal) !== -1;
+}
+
+function hostTshirtContestItemConfig(q) {
+  q = q || {};
+  var key = String(q.itemType || q.clothingType || q.garmentType || q.templateKind || 'tshirt').toLowerCase();
+  var items = {
+    tshirt: {
+      itemType: 'tshirt',
+      templateUrl: 'assets/byte-brawlers/tshirt.png',
+      fileSlug: 'tshirt',
+      itemLabel: 'T-shirt',
+      itemLabelLower: 'T-shirt',
+      itemPluralLabel: 'T-shirt designs',
+      itemDesignLabel: 'T-shirt design',
+      contestTitle: 'Byte Brawlers T-shirt Contest'
+    },
+    jeans: {
+      itemType: 'jeans',
+      templateUrl: 'assets/byte-brawlers/jeans.png',
+      fileSlug: 'jeans',
+      itemLabel: 'Jeans',
+      itemLabelLower: 'jeans',
+      itemPluralLabel: 'jeans designs',
+      itemDesignLabel: 'jeans design',
+      contestTitle: 'Byte Brawlers Jeans Contest'
+    },
+    baseballcap: {
+      itemType: 'baseballcap',
+      templateUrl: 'assets/byte-brawlers/baseballcap.png',
+      fileSlug: 'baseballcap',
+      itemLabel: 'Baseball Cap',
+      itemLabelLower: 'baseball cap',
+      itemPluralLabel: 'baseball cap designs',
+      itemDesignLabel: 'baseball cap design',
+      contestTitle: 'Byte Brawlers Baseball Cap Contest'
+    }
+  };
+  var item = items[key] || items.tshirt;
+  return {
+    itemType: item.itemType,
+    templateUrl: q.templateUrl || item.templateUrl,
+    fileSlug: q.fileSlug || item.fileSlug,
+    itemLabel: q.itemLabel || item.itemLabel,
+    itemLabelLower: q.itemLabelLower || item.itemLabelLower,
+    itemPluralLabel: q.itemPluralLabel || item.itemPluralLabel,
+    itemDesignLabel: q.itemDesignLabel || item.itemDesignLabel,
+    contestTitle: q.contestTitle || q.q || item.contestTitle
+  };
+}
+
+function tshirtContestConfig(q) {
+  q = q || {};
+  var item = hostTshirtContestItemConfig(q);
+  return {
+    binarySeconds: Number(q.binarySeconds) || 30,
+    topicSeconds: Number(q.topicSeconds) || 60,
+    topicVoteSeconds: Number(q.topicVoteSeconds) || 45,
+    drawSeconds: Math.max(180, Math.min(300, Number(q.duration) || 180)),
+    bracketVoteSeconds: Number(q.bracketVoteSeconds) || 45,
+    itemType: item.itemType,
+    templateUrl: item.templateUrl,
+    fileSlug: item.fileSlug,
+    itemLabel: item.itemLabel,
+    itemLabelLower: item.itemLabelLower,
+    itemPluralLabel: item.itemPluralLabel,
+    itemDesignLabel: item.itemDesignLabel,
+    contestTitle: item.contestTitle
+  };
+}
+
+function tshirtTopicSlots(correct) {
+  correct = Math.max(0, Number(correct) || 0);
+  return Math.max(0, Math.floor(Math.log(correct + 1) / Math.log(2)));
+}
+
+function tshirtActivePlayerCodes(players) {
+  players = players || {};
+  return Object.keys(players).filter(function(code) {
+    return players[code] && players[code].kicked !== true;
+  });
+}
+
+function tshirtArrayToFirebaseObj(arr) {
+  var obj = {};
+  (arr || []).forEach(function(item, i) { obj[i] = item; });
+  return obj;
+}
+
+function tshirtObjValues(obj) {
+  if (!obj) return [];
+  return Array.isArray(obj) ? obj.filter(function(x) { return x != null; }) : Object.keys(obj).map(function(k) { return obj[k]; }).filter(function(x) { return x != null; });
+}
+
+function tshirtSubmissionBlocked(submission) {
+  return !!(submission && submission.blocked === true);
+}
+
+function renderHostTshirtBlockedSquare(container) {
+  if (!container) return;
+  container.innerHTML = '<span style="font-weight:700;letter-spacing:0;color:#f8fafc">Blocked by teacher</span>';
+  container.style.background = '#000';
+  container.style.color = '#f8fafc';
+  container.style.display = 'flex';
+  container.style.alignItems = 'center';
+  container.style.justifyContent = 'center';
+  container.style.textAlign = 'center';
+  container.style.minHeight = container.style.minHeight || '220px';
+}
+
+function tshirtShuffle(arr) {
+  arr = (arr || []).slice();
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+
+function tshirtMakeBrackets(codes) {
+  var remaining = (codes || []).slice();
+  var brackets = [];
+  while (remaining.length > 0) {
+    var size = remaining.length === 3 ? 3 : Math.min(2, remaining.length);
+    var entrants = remaining.splice(0, size);
+    brackets.push({ id: 'b' + brackets.length, entrants: entrants, winner: null });
+  }
+  return brackets;
+}
+
+function tshirtFallbackTopics() {
+  return [
+    { key: 'fallback_0', text: 'Computing', score: 0, up: 0, down: 0 },
+    { key: 'fallback_1', text: 'Binary', score: 0, up: 0, down: 0 },
+    { key: 'fallback_2', text: 'JHNCC', score: 0, up: 0, down: 0 }
+  ];
+}
+
+async function startTshirtContestQuestion(qIdx, q) {
+  clearHostQuestionTimer();
+  clearRevealTimer();
+  var cfg = tshirtContestConfig(q);
+  var now = Date.now();
+  await quiz.sessionRef.child('tshirtContest').set({
+    qIdx: qIdx,
+    config: cfg,
+    roundIndex: -1,
+    createdAt: now
+  });
+  await quiz.sessionRef.update({
+    state: 'tshirt_binary',
+    questionIdx: qIdx,
+    questionStart: now,
+    questionDuration: cfg.binarySeconds,
+    answerRevealStart: null
+  });
+  renderHostTshirtContestView('tshirt_binary', await quiz.sessionRef.get());
+}
+
+function clearHostTshirtContestProgressListener() {
+  if (quiz._tshirtContestProgressRef && quiz._tshirtContestProgressListener) {
+    quiz._tshirtContestProgressRef.off('value', quiz._tshirtContestProgressListener);
+  }
+  quiz._tshirtContestProgressRef = null;
+  quiz._tshirtContestProgressListener = null;
+}
+
+function startHostTshirtContestTimer(duration, startedAt) {
+  clearHostQuestionTimer();
+  quiz.hostTimerToken++;
+  var timerToken = quiz.hostTimerToken;
+  var timerEl = document.getElementById('qhc-timer');
+  var barEl = document.getElementById('qhc-timer-bar');
+  var end = (startedAt || Date.now()) + duration * 1000;
+
+  function tick() {
+    if (timerToken !== quiz.hostTimerToken || quiz.currentState !== 'contest') return;
+    var remainingMs = Math.max(0, end - Date.now());
+    var remaining = Math.ceil(remainingMs / 1000);
+    if (timerEl) timerEl.textContent = remaining;
+    if (barEl) {
+      var pct = duration > 0 ? remainingMs / (duration * 1000) * 100 : 0;
+      barEl.style.width = Math.max(0, pct) + '%';
+      barEl.className = 'h-2 transition-all ' + (pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+    }
+    if (remaining <= 0) {
+      clearHostQuestionTimer();
+      advanceTshirtContest().catch(function(e) { console.warn('[T-shirt contest] auto-advance failed:', e); });
+    }
+  }
+  tick();
+  quiz.timerInterval = setInterval(tick, 500);
+}
+
+function renderHostTshirtContestView(stateVal, snap) {
+  clearRevealTimer();
+  clearHostTshirtContestProgressListener();
+  setQuizHostView('contest');
+
+  var qIdx = Number(snap.child('questionIdx').val());
+  var q = quiz.questions[qIdx] || {};
+  var cfg = snap.child('tshirtContest/config').val() || tshirtContestConfig(q);
+  var startedAt = snap.child('questionStart').val() || Date.now();
+  var duration = Number(snap.child('questionDuration').val()) || cfg.binarySeconds || 30;
+  var roundIndex = Number(snap.child('tshirtContest/roundIndex').val());
+  var titleEl = document.getElementById('qhc-title');
+  var subEl = document.getElementById('qhc-subtitle');
+  var bodyEl = document.getElementById('qhc-body');
+  var progressEl = document.getElementById('qhc-progress');
+  var btn = document.getElementById('btn-qh-contest-next');
+  if (!titleEl || !subEl || !bodyEl || !progressEl || !btn) return;
+
+  var item = hostTshirtContestItemConfig(cfg);
+  var title = item.contestTitle || 'Design Contest';
+  var subtitle = '';
+  var buttonText = 'Next';
+  if (stateVal === 'tshirt_binary') {
+    title = 'Binary Sprint';
+    subtitle = 'Students answer 4-bit binary to denary questions to earn topic slots.';
+    buttonText = 'End sprint';
+  } else if (stateVal === 'tshirt_topics') {
+    title = 'Topic Writing';
+    subtitle = 'Students submit the topics they earned during the sprint.';
+    buttonText = 'Start topic vote';
+  } else if (stateVal === 'tshirt_topic_vote') {
+    title = 'Topic Voting';
+    subtitle = 'Students upvote and downvote topics. Scores stay hidden.';
+    buttonText = 'Start drawing round';
+  } else if (stateVal === 'tshirt_draw') {
+    title = 'Drawing Round ' + (roundIndex + 1);
+    subtitle = 'Students in each bracket are drawing their ' + item.itemDesignLabel + '.';
+    buttonText = 'Start bracket vote';
+  } else if (stateVal === 'tshirt_bracket_vote') {
+    title = 'Bracket Voting';
+    subtitle = 'Students choose the best ' + item.itemLabelLower + ' in brackets they are not part of.';
+    buttonText = 'Resolve round';
+  }
+
+  titleEl.textContent = title;
+  subEl.textContent = subtitle;
+  btn.textContent = buttonText + ' ->';
+  btn.onclick = function() { advanceTshirtContest().catch(function(e) { alert(e.message || 'Could not advance contest.'); }); };
+  startHostTshirtContestTimer(duration, startedAt);
+
+  var round = snap.child('tshirtContest/rounds/' + roundIndex).val() || {};
+  var topic = round.topic || '';
+  bodyEl.innerHTML = '';
+  if (topic) {
+    var topicBox = document.createElement('div');
+    topicBox.className = 'rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-4 py-3 text-center mb-4';
+    topicBox.innerHTML =
+      '<div class="text-xs uppercase tracking-wide text-yellow-300 mb-1">Round topic</div>' +
+      '<div class="text-2xl font-bold text-yellow-100">' + escapeHtml(topic) + '</div>';
+    bodyEl.appendChild(topicBox);
+  }
+
+  var bracketWrap = document.createElement('div');
+  bracketWrap.className = 'grid gap-3 w-full max-w-3xl';
+  var brackets = tshirtObjValues(round.brackets);
+  if (brackets.length) {
+    brackets.forEach(function(bracket, i) {
+      var entrants = tshirtObjValues(bracket.entrants);
+      var row = document.createElement('div');
+      row.className = 'rounded-lg bg-gray-800 border border-gray-700 px-4 py-3';
+      row.innerHTML =
+        '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
+        '<div class="flex flex-wrap gap-2">' +
+        entrants.map(function(code) {
+          var winner = bracket.winner === code;
+          return '<span class="rounded-full px-3 py-1 text-sm ' + (winner ? 'bg-green-700 text-green-100' : 'bg-gray-700 text-gray-100') + '">' +
+            escapeHtml(studentName(code) || code) + (winner ? ' (winner)' : '') + '</span>';
+        }).join('') +
+        '</div>';
+      bracketWrap.appendChild(row);
+    });
+  }
+  bodyEl.appendChild(bracketWrap);
+
+  renderHostTshirtContestProgress(stateVal, roundIndex, progressEl);
+}
+
+function renderHostTshirtContestProgress(stateVal, roundIndex, progressEl) {
+  if (!quiz.sessionRef || !progressEl) return;
+  var path =
+    stateVal === 'tshirt_binary' ? 'tshirtContest/binary' :
+    stateVal === 'tshirt_topics' ? 'tshirtContest/topics' :
+    stateVal === 'tshirt_topic_vote' ? 'tshirtContest/topicVotes' :
+    stateVal === 'tshirt_draw' ? 'tshirtContest/submissions/' + roundIndex :
+    stateVal === 'tshirt_bracket_vote' ? 'tshirtContest/bracketVotes/' + roundIndex :
+    'tshirtContest';
+  var ref = quiz.sessionRef.child(path);
+  quiz._tshirtContestProgressRef = ref;
+  quiz._tshirtContestProgressListener = ref.on('value', function(snap) {
+    var val = snap.val() || {};
+    var players = quiz.hostPlayers || {};
+    var active = tshirtActivePlayerCodes(players);
+    if (stateVal === 'tshirt_binary') {
+      var rows = active.map(function(code) {
+        var rec = val[code] || {};
+        return { code: code, correct: Number(rec.correct) || 0, slots: Number(rec.slots) || 0 };
+      }).sort(function(a, b) { return b.correct - a.correct; });
+      progressEl.innerHTML =
+        '<div class="text-sm text-gray-400 mb-2">' + rows.filter(function(r) { return r.correct > 0; }).length + ' / ' + active.length + ' students have answered at least one.</div>' +
+        '<div class="grid gap-2">' + rows.map(function(r) {
+          return '<div class="flex items-center justify-between rounded bg-gray-800 px-3 py-2 text-sm">' +
+            '<span class="truncate">' + escapeHtml(studentName(r.code) || r.code) + '</span>' +
+            '<span class="text-yellow-300 font-bold">' + r.correct + ' correct, ' + r.slots + ' slot' + (r.slots === 1 ? '' : 's') + '</span>' +
+          '</div>';
+        }).join('') + '</div>';
+      return;
+    }
+    if (stateVal === 'tshirt_topics') {
+      var totalTopics = 0;
+      var studentCount = 0;
+      Object.keys(val).forEach(function(code) {
+        var count = Object.keys(val[code] || {}).length;
+        if (count) studentCount++;
+        totalTopics += count;
+      });
+      progressEl.innerHTML =
+        '<div class="text-yellow-300 font-bold">' + totalTopics + ' topic' + (totalTopics === 1 ? '' : 's') + ' submitted</div>' +
+        '<div class="text-sm text-gray-400">' + studentCount + ' / ' + active.length + ' students have submitted at least one topic.</div>';
+      return;
+    }
+    if (stateVal === 'tshirt_topic_vote') {
+      progressEl.innerHTML =
+        '<div class="text-yellow-300 font-bold">' + Object.keys(val).length + ' / ' + active.length + ' students have voted on topics.</div>';
+      return;
+    }
+    if (stateVal === 'tshirt_draw') {
+      progressEl.innerHTML =
+        '<div class="text-yellow-300 font-bold">' + Object.keys(val).length + ' design' + (Object.keys(val).length === 1 ? '' : 's') + ' submitted this round.</div>';
+      return;
+    }
+    if (stateVal === 'tshirt_bracket_vote') {
+      progressEl.innerHTML =
+        '<div class="text-yellow-300 font-bold">' + Object.keys(val).length + ' / ' + active.length + ' students have cast bracket votes.</div>';
+    }
+  });
+}
+
+async function advanceTshirtContest() {
+  if (!quiz.sessionRef || quiz._tshirtContestAdvancing) return;
+  quiz._tshirtContestAdvancing = true;
+  try {
+    var snap = await quiz.sessionRef.get();
+    if (!snap.exists()) return;
+    var stateVal = snap.child('state').val();
+    var qIdx = Number(snap.child('questionIdx').val());
+    var q = quiz.questions[qIdx] || {};
+    var cfg = snap.child('tshirtContest/config').val() || tshirtContestConfig(q);
+    if (stateVal === 'tshirt_binary') {
+      await startTshirtTopicWriting(cfg);
+    } else if (stateVal === 'tshirt_topics') {
+      await startTshirtTopicVotingOrRound(cfg);
+    } else if (stateVal === 'tshirt_topic_vote') {
+      await startTshirtFirstDrawingRound(cfg);
+    } else if (stateVal === 'tshirt_draw') {
+      await startTshirtBracketVoteOrResolve(cfg);
+    } else if (stateVal === 'tshirt_bracket_vote') {
+      await resolveTshirtRoundAndContinue(cfg);
+    }
+  } finally {
+    quiz._tshirtContestAdvancing = false;
+  }
+}
+
+async function startTshirtTopicWriting(cfg) {
+  var now = Date.now();
+  await quiz.sessionRef.update({
+    state: 'tshirt_topics',
+    questionStart: now,
+    questionDuration: cfg.topicSeconds || 60
+  });
+}
+
+async function startTshirtTopicVotingOrRound(cfg) {
+  var topicsSnap = await quiz.sessionRef.child('tshirtContest/topics').get();
+  var topicCount = 0;
+  if (topicsSnap.exists()) {
+    topicsSnap.forEach(function(studentSnap) {
+      studentSnap.forEach(function(topicSnap) {
+        if (String(topicSnap.child('text').val() || '').trim()) topicCount++;
+      });
+    });
+  }
+  if (!topicCount) {
+    await quiz.sessionRef.child('tshirtContest/topicRankings').set(tshirtArrayToFirebaseObj(tshirtFallbackTopics()));
+    await startTshirtFirstDrawingRound(cfg);
+    return;
+  }
+  var now = Date.now();
+  await quiz.sessionRef.update({
+    state: 'tshirt_topic_vote',
+    questionStart: now,
+    questionDuration: cfg.topicVoteSeconds || 45
+  });
+}
+
+async function rankTshirtTopics() {
+  var snaps = await Promise.all([
+    quiz.sessionRef.child('tshirtContest/topics').get(),
+    quiz.sessionRef.child('tshirtContest/topicVotes').get()
+  ]);
+  var topicSnap = snaps[0];
+  var votes = snaps[1].val() || {};
+  var topics = [];
+  if (topicSnap.exists()) {
+    topicSnap.forEach(function(studentSnap) {
+      studentSnap.forEach(function(child) {
+        var text = String(child.child('text').val() || '').trim().slice(0, 60);
+        if (!text) return;
+        var key = child.child('key').val() || (studentSnap.key + '_' + child.key);
+        topics.push({
+          key: key,
+          text: text,
+          submittedAt: Number(child.child('submittedAt').val()) || 0,
+          score: 0,
+          up: 0,
+          down: 0
+        });
+      });
+    });
+  }
+  var byKey = {};
+  topics.forEach(function(t) { byKey[t.key] = t; });
+  Object.keys(votes).forEach(function(voter) {
+    var voterVotes = votes[voter] || {};
+    Object.keys(voterVotes).forEach(function(topicKey) {
+      var t = byKey[topicKey];
+      if (!t) return;
+      var v = Number(voterVotes[topicKey]);
+      if (v > 0) { t.score++; t.up++; }
+      else if (v < 0) { t.score--; t.down++; }
+    });
+  });
+  topics.sort(function(a, b) {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.up !== a.up) return b.up - a.up;
+    return a.submittedAt - b.submittedAt;
+  });
+  if (!topics.length) topics = tshirtFallbackTopics();
+  await quiz.sessionRef.child('tshirtContest/topicRankings').set(tshirtArrayToFirebaseObj(topics));
+  return topics;
+}
+
+async function startTshirtFirstDrawingRound(cfg) {
+  var rankings = await rankTshirtTopics();
+  var playersSnap = await quiz.sessionRef.child('players').get();
+  var participants = tshirtShuffle(tshirtActivePlayerCodes(playersSnap.val() || {}));
+  await quiz.sessionRef.child('tshirtContest/participants').set(tshirtArrayToFirebaseObj(participants));
+  await startTshirtDrawingRound(0, participants, rankings, cfg);
+}
+
+async function startTshirtDrawingRound(roundIndex, participants, rankings, cfg) {
+  participants = (participants || []).filter(Boolean);
+  if (participants.length <= 1) {
+    await finishTshirtContest(participants[0] || null);
+    return;
+  }
+  if (!rankings) {
+    var rankSnap = await quiz.sessionRef.child('tshirtContest/topicRankings').get();
+    rankings = rankSnap.exists() ? tshirtObjValues(rankSnap.val()) : tshirtFallbackTopics();
+  }
+  var topic = (rankings[roundIndex] && rankings[roundIndex].text) ||
+              (rankings.length ? rankings[roundIndex % rankings.length].text : 'Computing');
+  var brackets = tshirtMakeBrackets(participants);
+  var bracketObj = {};
+  brackets.forEach(function(bracket) { bracketObj[bracket.id] = bracket; });
+  var now = Date.now();
+  await quiz.sessionRef.child('tshirtContest/rounds/' + roundIndex).set({
+    index: roundIndex,
+    topic: topic,
+    startedAt: now,
+    brackets: bracketObj
+  });
+  await quiz.sessionRef.update({
+    state: 'tshirt_draw',
+    questionStart: now,
+    questionDuration: cfg.drawSeconds || 180
+  });
+  await quiz.sessionRef.child('tshirtContest/roundIndex').set(roundIndex);
+}
+
+async function startTshirtBracketVoteOrResolve(cfg) {
+  var contestSnap = await quiz.sessionRef.child('tshirtContest').get();
+  var roundIndex = Number(contestSnap.child('roundIndex').val()) || 0;
+  var round = contestSnap.child('rounds/' + roundIndex).val() || {};
+  var brackets = tshirtObjValues(round.brackets);
+  var submissions = contestSnap.child('submissions/' + roundIndex).val() || {};
+  var playersSnap = await quiz.sessionRef.child('players').get();
+  var activeSet = {};
+  tshirtActivePlayerCodes(playersSnap.val() || {}).forEach(function(code) { activeSet[code] = true; });
+  var hasVoteableBracket = brackets.some(function(bracket) {
+    return tshirtObjValues(bracket.entrants).filter(function(code) {
+      return activeSet[code] && submissions[code] && submissions[code].fileId && !tshirtSubmissionBlocked(submissions[code]);
+    }).length >= 2;
+  });
+  if (!hasVoteableBracket) {
+    await resolveTshirtRoundAndContinue(cfg);
+    return;
+  }
+  var now = Date.now();
+  await quiz.sessionRef.update({
+    state: 'tshirt_bracket_vote',
+    questionStart: now,
+    questionDuration: cfg.bracketVoteSeconds || 45
+  });
+}
+
+async function resolveTshirtRoundAndContinue(cfg) {
+  var snaps = await Promise.all([
+    quiz.sessionRef.child('tshirtContest').get(),
+    quiz.sessionRef.child('players').get()
+  ]);
+  var contest = snaps[0].val() || {};
+  var roundIndex = Number(contest.roundIndex) || 0;
+  var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
+  var brackets = tshirtObjValues(round.brackets);
+  var submissions = contest.submissions && contest.submissions[roundIndex] ? contest.submissions[roundIndex] : {};
+  var votes = contest.bracketVotes && contest.bracketVotes[roundIndex] ? contest.bracketVotes[roundIndex] : {};
+  var activeSet = {};
+  tshirtActivePlayerCodes(snaps[1].val() || {}).forEach(function(code) { activeSet[code] = true; });
+
+  var winners = [];
+  var winnerWrites = [];
+  brackets.forEach(function(bracket) {
+    var entrants = tshirtObjValues(bracket.entrants);
+    var activeEntrants = entrants.filter(function(code) { return activeSet[code]; });
+    var submittedActive = entrants.filter(function(code) {
+      return activeSet[code] && submissions[code] && submissions[code].fileId && !tshirtSubmissionBlocked(submissions[code]);
+    });
+    var winner = null;
+    if (entrants.length === 1) {
+      winner = activeEntrants[0] || entrants[0];
+    } else if (activeEntrants.length === 1) {
+      winner = activeEntrants[0];
+    } else if (submittedActive.length === 1) {
+      winner = submittedActive[0];
+    } else if (submittedActive.length === 0) {
+      winner = activeEntrants[0] || entrants[0] || null;
+    } else {
+      var score = {};
+      submittedActive.forEach(function(code) { score[code] = 0; });
+      Object.keys(votes).forEach(function(voter) {
+        if (entrants.indexOf(voter) !== -1) return;
+        var selected = votes[voter] && votes[voter][bracket.id];
+        if (score[selected] != null) score[selected]++;
+      });
+      winner = submittedActive.slice().sort(function(a, b) {
+        if (score[b] !== score[a]) return score[b] - score[a];
+        var ta = Number(submissions[a] && submissions[a].submittedAt) || 0;
+        var tb = Number(submissions[b] && submissions[b].submittedAt) || 0;
+        if (ta !== tb) return ta - tb;
+        return entrants.indexOf(a) - entrants.indexOf(b);
+      })[0];
+    }
+    if (winner) winners.push(winner);
+    winnerWrites.push(quiz.sessionRef.child('tshirtContest/rounds/' + roundIndex + '/brackets/' + bracket.id + '/winner').set(winner || null));
+  });
+  await Promise.all(winnerWrites);
+  await quiz.sessionRef.child('tshirtContest/rounds/' + roundIndex + '/winners').set(tshirtArrayToFirebaseObj(winners));
+  if (winners.length <= 1) {
+    await finishTshirtContest(winners[0] || null);
+    return;
+  }
+  var rankSnap = await quiz.sessionRef.child('tshirtContest/topicRankings').get();
+  var rankings = rankSnap.exists() ? tshirtObjValues(rankSnap.val()) : tshirtFallbackTopics();
+  await startTshirtDrawingRound(roundIndex + 1, winners, rankings, cfg);
+}
+
+async function buildTshirtContestLeaderboard(champion) {
+  var contestSnap = await quiz.sessionRef.child('tshirtContest').get();
+  var contest = contestSnap.val() || {};
+  var wins = {};
+  tshirtObjValues(contest.participants).forEach(function(code) { if (code) wins[code] = 0; });
+  if (contest.rounds) {
+    Object.keys(contest.rounds).forEach(function(roundKey) {
+      var round = contest.rounds[roundKey] || {};
+      tshirtObjValues(round.brackets).forEach(function(bracket) {
+        tshirtObjValues(bracket.entrants).forEach(function(code) { if (code && wins[code] == null) wins[code] = 0; });
+        if (bracket.winner) wins[bracket.winner] = (wins[bracket.winner] || 0) + 1;
+      });
+    });
+  }
+  if (champion && wins[champion] == null) wins[champion] = 0;
+  return Object.keys(wins).map(function(code) {
+    var winCount = wins[code] || 0;
+    return {
+      code: code,
+      score: winCount,
+      champion: code === champion,
+      label: code === champion ? 'Champion' : (winCount + ' bracket win' + (winCount === 1 ? '' : 's'))
+    };
+  }).sort(function(a, b) {
+    if (a.champion !== b.champion) return a.champion ? -1 : 1;
+    if (b.score !== a.score) return b.score - a.score;
+    return String(studentName(a.code) || a.code).localeCompare(String(studentName(b.code) || b.code));
+  });
+}
+
+async function finishTshirtContest(champion) {
+  var leaderboard = await buildTshirtContestLeaderboard(champion);
+  await quiz.sessionRef.child('tshirtContest/champion').set(champion || null);
+  await quiz.sessionRef.child('tshirtContest/finalLeaderboard').set(tshirtArrayToFirebaseObj(leaderboard));
+  await endQuiz();
+}
 
 async function startVotingPhase(qIdx) {
   var q = quiz.questions[qIdx] || {};
@@ -1572,6 +2257,12 @@ function quizAnswerPoints(q, answerSnap) {
 }
 
 async function buildLeaderboard() {
+  if ((quiz.questions || []).some(isTshirtContestQuestion) && quiz.sessionRef) {
+    try {
+      var contestLbSnap = await quiz.sessionRef.child('tshirtContest/finalLeaderboard').get();
+      if (contestLbSnap.exists()) return tshirtObjValues(contestLbSnap.val());
+    } catch(_e) {}
+  }
   var scores = {};
   for (var qIdx = 0; qIdx < quiz.questions.length; qIdx++) {
     var q = quiz.questions[qIdx];
@@ -1600,12 +2291,13 @@ function renderHostLeaderboard(leaderboard) {
   var el = document.getElementById('qh-final-scores');
   el.innerHTML = '';
   var maxScore = quizMaxScore(quiz.questions);
+  var isContest = (quiz.questions || []).some(isTshirtContestQuestion);
   var medals = ['🥇','🥈','🥉'];
 
   // If any question has peer-submitted media, make rows clickable to preview work
   var hasMedia = (quiz.questions || []).some(function(q) {
     return isQuizShareQuestion(q);
-  });
+  }) || isContest;
 
   leaderboard.forEach(function(entry, i) {
     var row = document.createElement('div');
@@ -1615,17 +2307,195 @@ function renderHostLeaderboard(leaderboard) {
       '<span class="text-lg">' + (medals[i] || (i+1)+'.') + '</span>' +
       '<span class="font-mono text-gray-300 flex-1 text-left ml-2">' + escapeHtml(studentName(entry.code) || entry.code) + '</span>' +
       (hasMedia ? '<span class="text-gray-500 text-xs shrink-0 mr-2">👁 view</span>' : '') +
-      '<span class="font-bold text-yellow-400 text-lg shrink-0">' + entry.score + ' / ' + maxScore + '</span>';
+      '<span class="font-bold text-yellow-400 text-lg shrink-0">' + (isContest ? escapeHtml(entry.label || (entry.score + ' wins')) : (entry.score + ' / ' + maxScore)) + '</span>';
     if (hasMedia) {
       row.title = 'Click to view this student\'s submission';
       row.onclick = function() { showStudentWorkModal(entry.code); };
     }
     el.appendChild(row);
   });
+  if (isContest) appendHostTshirtContestSummary(el);
+}
+
+function appendHostTshirtContestSummary(el) {
+  if (!quiz.sessionRef || !el) return;
+  var holder = document.createElement('div');
+  holder.className = 'mt-6 w-full max-w-2xl text-left';
+  holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">Loading bracket results...</p>';
+  el.appendChild(holder);
+  quiz.sessionRef.child('tshirtContest/rounds').get().then(function(snap) {
+    var rounds = tshirtObjValues(snap.val()).sort(function(a, b) { return (a.index || 0) - (b.index || 0); });
+    if (!rounds.length) {
+      holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">No bracket results recorded.</p>';
+      return;
+    }
+    holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3>';
+    rounds.forEach(function(round) {
+      var section = document.createElement('div');
+      section.className = 'rounded-lg bg-gray-800 border border-gray-700 p-4 mb-3';
+      var brackets = tshirtObjValues(round.brackets);
+      section.innerHTML =
+        '<div class="font-bold text-yellow-300 mb-2">Round ' + ((round.index || 0) + 1) + ': ' + escapeHtml(round.topic || 'Computing') + '</div>' +
+        '<div class="space-y-2">' + brackets.map(function(bracket, idx) {
+          var entrants = tshirtObjValues(bracket.entrants).map(function(code) { return studentName(code) || code; }).join(' vs ');
+          var winner = bracket.winner ? (studentName(bracket.winner) || bracket.winner) : 'No winner';
+          return '<div class="flex items-center justify-between gap-3 text-sm bg-gray-900 rounded px-3 py-2">' +
+            '<span class="text-gray-300 truncate">Bracket ' + (idx + 1) + ': ' + escapeHtml(entrants) + '</span>' +
+            '<span class="text-green-300 font-bold shrink-0">' + escapeHtml(winner) + '</span>' +
+          '</div>';
+        }).join('') + '</div>';
+      holder.appendChild(section);
+    });
+  }).catch(function(e) {
+    holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-red-300 text-sm text-center">Could not load bracket results: ' + escapeHtml(e.message) + '</p>';
+  });
+}
+
+async function showHostTshirtContestWorkModal(code) {
+  var name = studentName(code) || code;
+  var initialItem = hostTshirtContestItemConfig((quiz.questions || []).find(isTshirtContestQuestion) || {});
+  var token = window.classroomState && window.classroomState.token;
+  if (!token) {
+    try { await getClassroomToken(); token = window.classroomState && window.classroomState.token; } catch(e) {}
+  }
+
+  var overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.9);' +
+    'display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:2rem 1rem';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'width:100%;max-width:760px';
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:1rem';
+  var title = document.createElement('h2');
+  title.style.cssText = 'color:#f1f5f9;font-size:1.25rem;font-weight:700;margin:0';
+  title.textContent = name + "'s " + initialItem.itemPluralLabel;
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText =
+    'background:#334155;color:#f1f5f9;border:none;border-radius:6px;' +
+    'padding:0.4rem 1rem;cursor:pointer;font-size:0.9rem;font-weight:600';
+  closeBtn.onclick = function() { document.body.removeChild(overlay); };
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  inner.appendChild(header);
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+
+  if (!token) {
+    var noToken = document.createElement('div');
+    noToken.style.cssText = 'background:#1e293b;border-radius:12px;padding:1.25rem;color:#f87171;text-align:center';
+    noToken.textContent = 'Drive is not connected, so the designs cannot be loaded.';
+    inner.appendChild(noToken);
+    return;
+  }
+
+  var contestSnap = await quiz.sessionRef.child('tshirtContest').get();
+  var contest = contestSnap.val() || {};
+  var item = hostTshirtContestItemConfig(contest.config || initialItem);
+  title.textContent = name + "'s " + item.itemPluralLabel;
+  var submissions = contest.submissions || {};
+  var rounds = tshirtObjValues(contest.rounds).sort(function(a, b) {
+    return (a.index || 0) - (b.index || 0);
+  });
+
+  var shown = 0;
+  rounds.forEach(function(round) {
+    var roundIndex = Number(round.index) || 0;
+    var bracket = tshirtObjValues(round.brackets).find(function(b) {
+      return tshirtObjValues(b.entrants).indexOf(code) !== -1;
+    });
+    var sub = submissions[roundIndex] && submissions[roundIndex][code];
+    if (!bracket && !sub) return;
+    shown++;
+
+    var section = document.createElement('div');
+    section.style.cssText = 'background:#1e293b;border-radius:12px;padding:1.25rem;margin-bottom:1.25rem;border:1px solid #334155';
+    var entrants = bracket ? tshirtObjValues(bracket.entrants).map(function(uid) { return studentName(uid) || uid; }).join(' vs ') : 'No bracket recorded';
+    var status = bracket && bracket.winner
+      ? (bracket.winner === code ? 'Won this bracket' : 'Winner: ' + (studentName(bracket.winner) || bracket.winner))
+      : 'No result recorded';
+    var blocked = tshirtSubmissionBlocked(sub);
+    section.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:0.75rem">' +
+        '<div>' +
+          '<div style="color:#fbbf24;font-weight:700">Round ' + (roundIndex + 1) + ': ' + escapeHtml(round.topic || 'Computing') + '</div>' +
+          '<div style="color:#94a3b8;font-size:0.78rem;margin-top:0.2rem">' + escapeHtml(entrants) + '</div>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.45rem;flex-shrink:0">' +
+          '<div style="color:' + (bracket && bracket.winner === code ? '#4ade80' : '#cbd5e1') + ';font-size:0.78rem;font-weight:700;text-align:right">' + escapeHtml(status) + '</div>' +
+          (sub && sub.fileId ? '<button type="button" class="tsc-contest-block-btn" style="background:' + (blocked ? '#334155' : '#7f1d1d') + ';color:#f8fafc;border:1px solid ' + (blocked ? '#64748b' : '#ef4444') + ';border-radius:6px;padding:0.3rem 0.65rem;font-size:0.75rem;font-weight:700;cursor:pointer">' + (blocked ? 'Unblock image' : 'Block image') + '</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="tsc-contest-shirt-img" style="min-height:220px;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:0.85rem">Loading design...</div>';
+    inner.appendChild(section);
+
+    var imgWrap = section.querySelector('.tsc-contest-shirt-img');
+    var blockBtn = section.querySelector('.tsc-contest-block-btn');
+    function refreshHostDesignImage() {
+      imgWrap.innerHTML = '';
+      imgWrap.style.cssText = 'min-height:220px;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:0.85rem';
+      if (!sub || !sub.fileId) {
+        imgWrap.textContent = 'No design submitted for this round.';
+        return;
+      }
+      if (tshirtSubmissionBlocked(sub)) {
+        renderHostTshirtBlockedSquare(imgWrap);
+        return;
+      }
+      imgWrap.textContent = 'Loading design...';
+      window.driveFetchFileAsDataUrl(sub.fileId, token).then(function(dataUrl) {
+        if (tshirtSubmissionBlocked(sub)) return;
+        imgWrap.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = dataUrl;
+        img.style.cssText = 'display:block;width:100%;max-width:420px;margin:0 auto;background:#334155;border-radius:8px;padding:6px;box-sizing:border-box';
+        imgWrap.appendChild(img);
+      }).catch(function(e) {
+        if (!tshirtSubmissionBlocked(sub)) imgWrap.textContent = 'Could not load design: ' + (e.message || 'Drive error');
+      });
+    }
+    if (blockBtn) {
+      blockBtn.onclick = function() {
+        var nextBlocked = !tshirtSubmissionBlocked(sub);
+        blockBtn.disabled = true;
+        quiz.sessionRef.child('tshirtContest/submissions/' + roundIndex + '/' + code).update({
+          blocked: nextBlocked,
+          blockedAt: nextBlocked ? Date.now() : null
+        }).then(function() {
+          sub.blocked = nextBlocked;
+          if (nextBlocked) sub.blockedAt = Date.now(); else delete sub.blockedAt;
+          blockBtn.textContent = nextBlocked ? 'Unblock image' : 'Block image';
+          blockBtn.style.background = nextBlocked ? '#334155' : '#7f1d1d';
+          blockBtn.style.borderColor = nextBlocked ? '#64748b' : '#ef4444';
+          blockBtn.disabled = false;
+          refreshHostDesignImage();
+        }).catch(function(e) {
+          alert('Could not update moderation state: ' + (e.message || e));
+          blockBtn.disabled = false;
+        });
+      };
+    }
+    refreshHostDesignImage();
+  });
+
+  if (!shown) {
+    var empty = document.createElement('div');
+    empty.style.cssText = 'background:#1e293b;border-radius:12px;padding:1.25rem;color:#94a3b8;text-align:center';
+    empty.textContent = 'No ' + item.itemPluralLabel + ' were recorded for this student.';
+    inner.appendChild(empty);
+  }
 }
 
 async function showStudentWorkModal(code) {
   var name = studentName(code) || code;
+  var isContest = (quiz.questions || []).some(isTshirtContestQuestion);
+  if (isContest) {
+    await showHostTshirtContestWorkModal(code);
+    return;
+  }
 
   // Find questions with peer-submitted media
   var mediaQs = (quiz.questions || []).map(function(q, i) {
@@ -1711,6 +2581,7 @@ async function showStudentWorkModal(code) {
           }
           var filename =
             qType === 'pixel_art'       ? code + '-pixel-art.png' :
+            qType === 'tshirt'          ? code + '-tshirt.png' :
             qType === 'pyscratch_share' ? code + '.sb3' :
             code + '.png'; // canvas
           var file = await window.driveFindLatestFileByName(folderId, filename, token);
@@ -1755,6 +2626,15 @@ async function showStudentWorkModal(code) {
             paImg.onerror = function() { contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not display pixel art.</p>'; };
             contentEl.innerHTML = '';
             contentEl.appendChild(paImg);
+          } else if (qType === 'tshirt') {
+            var tUrl = URL.createObjectURL(blob);
+            var tImg = document.createElement('img');
+            tImg.src = tUrl;
+            tImg.style.cssText = 'display:block;width:100%;max-width:420px;margin:0 auto;background:#334155;border-radius:8px;padding:6px;box-sizing:border-box';
+            tImg.onload = function() { URL.revokeObjectURL(tUrl); };
+            tImg.onerror = function() { contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not display design.</p>'; };
+            contentEl.innerHTML = '';
+            contentEl.appendChild(tImg);
           }
         } catch(e) {
           contentEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem">Could not load: ' + escapeHtml(e.message) + '</p>';

@@ -1261,6 +1261,195 @@
           starter: null, target: null, newLines: [], requires: []
         }
       ]
+    },
+    {
+      id: 'functions',
+      title: 'Functions',
+      emoji: '🧩',
+      desc: 'Wrap code you use again and again into a named function, then call it whenever you need it — and pass it a value to change what it does.',
+      steps: [
+        {
+          title: 'Write a function',
+          text: 'A <strong>function</strong> is a named block of code you can reuse. Define one called <code>hop</code> that makes the sprite jump up and come back down. <code>def</code> starts the function; everything indented under it is its body.',
+          starter: '',
+          target: 'def hop():\n    for i in range(10):\n        change_y(6)\n        wait(0.02)\n    for i in range(10):\n        change_y(-6)\n        wait(0.02)',
+          newLines: ['def hop():', '    for i in range(10):', '        change_y(6)', '        wait(0.02)', '    for i in range(10):', '        change_y(-6)', '        wait(0.02)'],
+          requires: ['def hop():', 'change_y(6)', 'change_y(-6)'],
+          suppressErrors: ['struct']
+        },
+        {
+          title: 'Call your function',
+          text: 'Defining a function does not run it — you have to <strong>call</strong> it by writing its name with brackets. Add a <code>game_start()</code> loop that calls <code>hop()</code> whenever space is pressed.',
+          starter: 'def hop():\n    for i in range(10):\n        change_y(6)\n        wait(0.02)\n    for i in range(10):\n        change_y(-6)\n        wait(0.02)',
+          target: 'def hop():\n    for i in range(10):\n        change_y(6)\n        wait(0.02)\n    for i in range(10):\n        change_y(-6)\n        wait(0.02)\n\ndef game_start():\n    while True:\n        if key_pressed("space"):\n            hop()',
+          newLines: ['def game_start():', '    while True:', '        if key_pressed("space"):', '            hop()'],
+          requires: ['def game_start():', 'while True:', 'key_pressed("space")', '            hop()']
+        },
+        {
+          title: 'Reuse it — no copy-paste',
+          text: 'The magic of functions: one definition, <strong>many calls</strong>. Instead of copying the jump code again, just call <code>hop()</code> from another key too. Add an up-arrow that also hops.',
+          starter: 'def hop():\n    for i in range(10):\n        change_y(6)\n        wait(0.02)\n    for i in range(10):\n        change_y(-6)\n        wait(0.02)\n\ndef game_start():\n    while True:\n        if key_pressed("space"):\n            hop()',
+          target: 'def hop():\n    for i in range(10):\n        change_y(6)\n        wait(0.02)\n    for i in range(10):\n        change_y(-6)\n        wait(0.02)\n\ndef game_start():\n    while True:\n        if key_pressed("space"):\n            hop()\n        if key_pressed("up"):\n            hop()',
+          newLines: ['        if key_pressed("up"):', '            hop()'],
+          requires: [{ req: '            hop()', count: 2, label: 'call hop() from both keys' }, 'key_pressed("up")']
+        },
+        {
+          title: 'Give it a parameter',
+          text: 'A <strong>parameter</strong> lets a function do something different each time. Change <code>hop</code> to take a <code>size</code>, then call <code>hop(10)</code> for a small jump and <code>hop(20)</code> for a big one.',
+          starter: 'def hop():\n    for i in range(10):\n        change_y(6)\n        wait(0.02)\n    for i in range(10):\n        change_y(-6)\n        wait(0.02)\n\ndef game_start():\n    while True:\n        if key_pressed("space"):\n            hop()\n        if key_pressed("up"):\n            hop()',
+          target: 'def hop(size):\n    for i in range(size):\n        change_y(6)\n        wait(0.02)\n    for i in range(size):\n        change_y(-6)\n        wait(0.02)\n\ndef game_start():\n    while True:\n        if key_pressed("space"):\n            hop(10)\n        if key_pressed("up"):\n            hop(20)',
+          newLines: ['def hop(size):', '    for i in range(size):', '            hop(10)', '            hop(20)'],
+          requires: ['def hop(size):', 'range(size)', 'hop(10)', 'hop(20)']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong>. Press <strong>space</strong> for a small hop and <strong>up</strong> for a big one — same function, two different jumps.<br><br><strong>Challenge:</strong> Add a second parameter so <code>hop(size, speed)</code> also controls how fast the jump plays. Then write a brand-new function <code>spin()</code> and call it too.',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+    {
+      id: 'lists',
+      title: 'Lists',
+      emoji: '📋',
+      desc: 'Store many values in one place with a list, loop through them, and grow the list while your program runs.',
+      steps: [
+        {
+          title: 'Make a list',
+          text: 'A <strong>list</strong> holds many values in order, inside square brackets. Create <code>game_start()</code> and make a list of three x-positions for the sprite to patrol between.',
+          starter: '',
+          target: 'def game_start():\n    points = [-150, 0, 150]',
+          newLines: ['def game_start():', '    points = [-150, 0, 150]'],
+          requires: ['def game_start():', 'points = [-150, 0, 150]'],
+          suppressErrors: ['struct']
+        },
+        {
+          title: 'Loop through the list',
+          text: 'A <code>for</code> loop can walk through <strong>every item</strong> in a list. Add a <code>while True:</code> loop that visits each point in turn — <code>point</code> becomes each value in the list, one at a time.',
+          starter: 'def game_start():\n    points = [-150, 0, 150]',
+          target: 'def game_start():\n    points = [-150, 0, 150]\n    while True:\n        for point in points:\n            set_x(point)\n            wait(0.5)',
+          newLines: ['    while True:', '        for point in points:', '            set_x(point)', '            wait(0.5)'],
+          requires: ['while True:', 'for point in points:', 'set_x(point)', 'wait(0.5)']
+        },
+        {
+          title: 'Grow the list',
+          text: 'Lists can change size while the program runs. Use <code>.append()</code> to add a fourth stop to the patrol before the loop starts.',
+          starter: 'def game_start():\n    points = [-150, 0, 150]\n    while True:\n        for point in points:\n            set_x(point)\n            wait(0.5)',
+          target: 'def game_start():\n    points = [-150, 0, 150]\n    points.append(220)\n    while True:\n        for point in points:\n            set_x(point)\n            wait(0.5)',
+          newLines: ['    points.append(220)'],
+          requires: ['points.append(220)']
+        },
+        {
+          title: 'How long is the list?',
+          text: '<code>len()</code> tells you how many items a list has. Say the number of patrol stops before the loop. <code>str()</code> turns the number into text so <code>say()</code> can show it.',
+          starter: 'def game_start():\n    points = [-150, 0, 150]\n    points.append(220)\n    while True:\n        for point in points:\n            set_x(point)\n            wait(0.5)',
+          target: 'def game_start():\n    points = [-150, 0, 150]\n    points.append(220)\n    say(str(len(points)))\n    while True:\n        for point in points:\n            set_x(point)\n            wait(0.5)',
+          newLines: ['    say(str(len(points)))'],
+          requires: ['len(points)']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong>. The sprite briefly shows how many stops there are (4), then patrols between them forever.<br><br><strong>Challenge:</strong> Read a single item by its <em>index</em> — <code>points[0]</code> is the first, <code>points[1]</code> the second. Then make a second list of y-positions and patrol in both directions.',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+    {
+      id: 'messages',
+      title: 'Messages & Events',
+      emoji: '📣',
+      desc: 'Split a trigger from its reaction. One part of your code broadcasts a message; a separate handler reacts — the same way sprites and clones respond to events.',
+      steps: [
+        {
+          title: 'Broadcast a message',
+          text: 'A <strong>broadcast</strong> is an announcement any code can listen for. Make <code>game_start()</code> broadcast <code>"cheer"</code> when space is pressed. The short <code>wait</code> stops it firing every single frame.',
+          starter: '',
+          target: 'def game_start():\n    while True:\n        if key_pressed("space"):\n            broadcast("cheer")\n            wait(0.3)',
+          newLines: ['def game_start():', '    while True:', '        if key_pressed("space"):', '            broadcast("cheer")', '            wait(0.3)'],
+          requires: ['def game_start():', 'key_pressed("space")', 'broadcast("cheer")'],
+          suppressErrors: ['struct']
+        },
+        {
+          title: 'React to the message',
+          text: 'Add a <strong>separate</strong> handler that runs whenever a message arrives. Notice <code>game_start()</code> never calls this code directly — it just announces <code>"cheer"</code> and the handler responds on its own.',
+          starter: 'def game_start():\n    while True:\n        if key_pressed("space"):\n            broadcast("cheer")\n            wait(0.3)',
+          target: 'def game_start():\n    while True:\n        if key_pressed("space"):\n            broadcast("cheer")\n            wait(0.3)\n\ndef when_message_received(message):\n    if message == "cheer":\n        say("Woohoo!")\n        next_costume()',
+          newLines: ['def when_message_received(message):', '    if message == "cheer":', '        say("Woohoo!")', '        next_costume()'],
+          requires: ['def when_message_received(message):', 'message == "cheer"', 'say("Woohoo!")']
+        },
+        {
+          title: 'A second message',
+          text: 'One handler can react to many messages. Broadcast <code>"vanish"</code> on the up-arrow, then handle it with <code>elif</code> — the sprite hides for a moment, then reappears.',
+          starter: 'def game_start():\n    while True:\n        if key_pressed("space"):\n            broadcast("cheer")\n            wait(0.3)\n\ndef when_message_received(message):\n    if message == "cheer":\n        say("Woohoo!")\n        next_costume()',
+          target: 'def game_start():\n    while True:\n        if key_pressed("space"):\n            broadcast("cheer")\n            wait(0.3)\n        if key_pressed("up"):\n            broadcast("vanish")\n            wait(0.3)\n\ndef when_message_received(message):\n    if message == "cheer":\n        say("Woohoo!")\n        next_costume()\n    elif message == "vanish":\n        hide()\n        wait(0.5)\n        show()',
+          newLines: ['        if key_pressed("up"):', '            broadcast("vanish")', '    elif message == "vanish":', '        hide()', '        wait(0.5)', '        show()'],
+          requires: ['broadcast("vanish")', 'message == "vanish"', 'hide()', 'show()']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong>. Press <strong>space</strong> to cheer and <strong>up</strong> to vanish — the reactions live in a totally separate handler from the key checks.<br><br><strong>Challenge:</strong> Add a <em>second sprite</em>, give it its own <code>when_message_received(message)</code>, and make it react to <code>"cheer"</code> too. One broadcast, many sprites responding — that\'s how whole games are coordinated.',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+    {
+      id: 'debug-refactor',
+      title: 'Debug & Refactor',
+      emoji: '🔧',
+      desc: 'Real programming is fixing code that does the wrong thing, then tidying it up. Hunt down two bugs, then refactor the repetition into one clean function.',
+      steps: [
+        {
+          title: 'Bug 1: wrong way!',
+          text: 'This mover is broken. Run it and press the <strong>right</strong> arrow — the sprite goes the <em>wrong way</em>. Find the line for the right key and fix it so <code>change_x</code> is <strong>positive</strong>.',
+          starter: 'def game_start():\n    while True:\n        if key_pressed("right"):\n            change_x(-5)\n        if key_pressed("left"):\n            change_x(-5)\n        if key_pressed("up"):\n            change_y(-5)\n        if key_pressed("down"):\n            change_y(-5)',
+          target: 'def game_start():\n    while True:\n        if key_pressed("right"):\n            change_x(5)\n        if key_pressed("left"):\n            change_x(-5)\n        if key_pressed("up"):\n            change_y(-5)\n        if key_pressed("down"):\n            change_y(-5)',
+          newLines: ['            change_x(5)'],
+          requires: ['change_x(5)'],
+          behaviorCheck: {
+            hint: 'Hold the right arrow — the sprite should now move RIGHT. The right-key line should be change_x(5).',
+            setupMs: 400,
+            scenarios: [
+              { label: 'right key moves right', holdKey: 'right', durationMs: 400, checks: [{ type: 'xChanged', dir: '+' }] }
+            ]
+          }
+        },
+        {
+          title: 'Bug 2: up is down',
+          text: 'Now press the <strong>up</strong> arrow — the sprite drops instead of rising. Fix the up-key line so <code>change_y</code> is <strong>positive</strong> (positive y is up).',
+          starter: 'def game_start():\n    while True:\n        if key_pressed("right"):\n            change_x(5)\n        if key_pressed("left"):\n            change_x(-5)\n        if key_pressed("up"):\n            change_y(-5)\n        if key_pressed("down"):\n            change_y(-5)',
+          target: 'def game_start():\n    while True:\n        if key_pressed("right"):\n            change_x(5)\n        if key_pressed("left"):\n            change_x(-5)\n        if key_pressed("up"):\n            change_y(5)\n        if key_pressed("down"):\n            change_y(-5)',
+          newLines: ['            change_y(5)'],
+          requires: ['change_y(5)'],
+          behaviorCheck: {
+            hint: 'Hold the up arrow — the sprite should now move UP. The up-key line should be change_y(5).',
+            setupMs: 400,
+            scenarios: [
+              { label: 'up key moves up', holdKey: 'up', durationMs: 400, checks: [{ type: 'yChanged', dir: '+' }] }
+            ]
+          }
+        },
+        {
+          title: 'Refactor: one function',
+          text: 'All four blocks repeat the same idea: move by some amount. That is a sign to <strong>refactor</strong>. Write a <code>move(dx, dy)</code> function once, then call it from each key. Less code means fewer places for bugs to hide.',
+          starter: 'def game_start():\n    while True:\n        if key_pressed("right"):\n            change_x(5)\n        if key_pressed("left"):\n            change_x(-5)\n        if key_pressed("up"):\n            change_y(5)\n        if key_pressed("down"):\n            change_y(-5)',
+          target: 'def move(dx, dy):\n    change_x(dx)\n    change_y(dy)\n\ndef game_start():\n    while True:\n        if key_pressed("right"):\n            move(5, 0)\n        if key_pressed("left"):\n            move(-5, 0)\n        if key_pressed("up"):\n            move(0, 5)\n        if key_pressed("down"):\n            move(0, -5)',
+          newLines: ['def move(dx, dy):', '    change_x(dx)', '    change_y(dy)', '            move(5, 0)', '            move(-5, 0)', '            move(0, 5)', '            move(0, -5)'],
+          requires: ['def move(dx, dy):', 'change_x(dx)', 'change_y(dy)', 'move(5, 0)', 'move(-5, 0)', 'move(0, 5)', 'move(0, -5)'],
+          behaviorCheck: {
+            hint: 'Both should still work — right moves right, up moves up — but now through your move() function.',
+            setupMs: 400,
+            scenarios: [
+              { label: 'right key moves right', holdKey: 'right', durationMs: 400, checks: [{ type: 'xChanged', dir: '+' }] },
+              { label: 'up key moves up', holdKey: 'up', durationMs: 400, checks: [{ type: 'yChanged', dir: '+' }] }
+            ]
+          }
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong>. All four arrows work, and the logic lives in one tidy <code>move()</code> function.<br><br><strong>Challenge:</strong> Add a <code>speed</code> parameter — <code>move(dx, dy, speed)</code> — and make a "run" key that moves faster. Notice you only change the function <em>once</em>.',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
     }
   ];
 
@@ -6929,13 +7118,18 @@
             try {
               var proj = JSON.parse(jsonStr);
               (proj.targets || []).forEach(function (t) {
-                if (!t.isStage) {
-                  if (S.spriteCode[t.name] && S.spriteCode[t.name].length) {
-                    t.pyscratch = S.spriteCode[t.name];
-                  }
-                  // Snapshots are now stored as separate full SB3 blobs in IndexedDB
-                  // and no longer embedded in project.json.
+                if (t.isStage) return;
+                // Embed EVERY sprite's Python, not just the ones opened this
+                // session. Un-visited sprites keep their code only in localStorage
+                // (S.spriteCode is a lazy in-memory cache), so pull it straight
+                // from storage when it isn't loaded — otherwise a full-project
+                // snapshot / tutorial-resume SB3 would silently drop their code.
+                var code = S.spriteCode[t.name];
+                if (!code) {
+                  try { var raw = localStorage.getItem(storeKey(t.name)); if (raw) code = JSON.parse(raw); } catch (e) {}
                 }
+                if (code && code.length) t.pyscratch = code;
+                // Snapshots are stored as separate full SB3 blobs in IndexedDB.
               });
               return JSON.stringify(proj);
             } catch(e) {

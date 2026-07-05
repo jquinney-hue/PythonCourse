@@ -947,6 +947,25 @@
     </button>
   </div>
 
+  <!-- T-shirt contest state -->
+  <div id="qh-contest" class="hidden flex-1 min-h-0 flex flex-col">
+    <div class="flex items-center justify-between px-6 py-3 bg-gray-800 text-sm text-gray-400">
+      <span id="qhc-title" class="text-white font-bold text-lg"></span>
+      <div class="flex items-center gap-3">
+        <span>&#x23F1; <span id="qhc-timer" class="font-mono font-bold text-white text-lg"></span>s</span>
+        <button id="btn-qh-contest-next" class="jhncc-primary px-4 py-1.5 rounded text-sm">Next &#x2192;</button>
+      </div>
+    </div>
+    <div class="h-2 bg-gray-700"><div id="qhc-timer-bar" class="h-2 bg-green-500 transition-all" style="width:100%"></div></div>
+    <div class="flex-1 min-h-0 overflow-y-auto px-6 py-8">
+      <div class="max-w-4xl mx-auto">
+        <p id="qhc-subtitle" class="text-gray-400 text-center mb-6"></p>
+        <div id="qhc-body" class="mb-6"></div>
+        <div id="qhc-progress" class="w-full max-w-3xl mx-auto"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Finished state -->
   <div id="qh-finished" class="hidden flex-1 min-h-0 overflow-y-auto px-6 py-8">
     <div class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 max-w-6xl mx-auto">
@@ -1181,6 +1200,15 @@
               <div id="pa-calc-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- T-shirt design question (Byte Brawlers) -->
+      <div id="qs-tshirt-answer" class="hidden w-full" style="max-width:100%">
+        <div id="qs-tshirt-canvas"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+          <button id="btn-tshirt-submit" class="jhncc-primary" style="padding:5px 16px;border-radius:5px;font-size:0.85rem;font-weight:600">Submit Design</button>
+          <span id="tshirt-feedback" style="font-size:0.78rem;color:#94a3b8"></span>
         </div>
       </div>
 
@@ -1461,16 +1489,17 @@
 <script src="assets/js/app-core.js?v=20260624"></script>
 <script src="assets/js/auth-module.js?v=20260624"></script>
 <script src="assets/js/admin-module.js?v=20260624"></script>
-<script src="assets/js/quiz-state.js?v=20260624"></script>
+<script src="assets/js/quiz-state.js?v=20260705a"></script>
 <script src="assets/js/assessment-module.js?v=20260624"></script>
 <script src="assets/js/assessment-scratch-module.js?v=20260624"></script>
 <script src="assets/js/assessment-results-module.js?v=20260624"></script>
 <script src="assets/js/fileshare-drive-module.js?v=20260701a"></script>
-<script src="assets/js/quiz-host-module.js?v=20260625"></script>
-<script src="assets/js/quiz-student-module.js?v=20260625"></script>
+<script src="assets/js/quiz-host-module.js?v=20260705e"></script>
+<script src="assets/js/quiz-student-module.js?v=20260705e"></script>
 <script src="assets/js/scratch-pybot-module.js?v=20260625"></script>
-<script src="assets/js/pixel-art-module.js?v=20260624"></script>
-<script src="assets/js/quiz-answer-module.js?v=20260625"></script>
+<script src="assets/js/pixel-art-module.js?v=20260705a"></script>
+<script src="assets/js/tshirt-designer-module.js?v=20260705c"></script>
+<script src="assets/js/quiz-answer-module.js?v=20260705a"></script>
 <script src="assets/js/binary-mining-module.js?v=20260701b"></script>
 <script src="assets/js/binary-mine-3d-module.js?v=20260703i"></script>
 </body>

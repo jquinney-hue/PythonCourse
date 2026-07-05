@@ -1,0 +1,98 @@
+{
+  "id": "year7-pyscratch-functions",
+  "title": "L3: Functions",
+  "description": "Turn code you repeat into reusable functions — define them, call them, and pass in values with parameters.",
+  "steps": [
+    {
+      "id": "editor",
+      "title": "Functions in PyScratch",
+      "autoComplete": true,
+      "css": ".ps-wrap{margin:0.75rem 0;border:1px solid #e2e8f0;border-radius:0.5rem;overflow:hidden}.ps-wrap.ps-fullscreen{position:fixed!important;inset:0!important;z-index:9999!important;margin:0!important;border-radius:0!important;border:none!important;background:#111827}.ps-frame{display:block;border:none;transform-origin:top left}.ps-bar{display:flex;align-items:center;justify-content:flex-end;padding:0.4rem 0.6rem;background:#f8fafc;border-top:1px solid #e2e8f0}.ps-fs-btn{background:none;border:1px solid #cbd5e1;border-radius:0.3rem;cursor:pointer;padding:0.15rem 0.5rem;font-size:1rem;color:#64748b;line-height:1}",
+      "content": "<h2 class='text-xl font-bold mb-2 text-gray-800'>🧩 Functions</h2><p class='text-gray-700 mb-1'>A <strong>function</strong> is a named block of code you can reuse. Instead of copying the same lines over and over, you write them once and <strong>call</strong> them whenever you need them.</p><p class='text-gray-600 text-sm mb-3'>Click <strong>Tutorials → Functions</strong> in the editor and work through it, then try the challenges at the bottom of this lesson.</p><div class='ps-wrap'><iframe id='ps-frame' class='ps-frame' src='./scratch/editor.html?pyscratch=1' allow='microphone; camera'></iframe><div class='ps-bar'><button id='ps-fs-btn' class='ps-fs-btn' title='Full screen'>&#x26F6;</button></div></div>",
+      "js": "(function(){var NW=1100,NH=650;function sf(){var f=document.getElementById('ps-frame');if(!f)return;var w=f.parentElement,bar=w.querySelector('.ps-bar'),bH=bar?bar.offsetHeight:36,fs=w.classList.contains('ps-fullscreen'),aW=fs?window.innerWidth:w.clientWidth,sc=fs?Math.min(aW/NW,(window.innerHeight-bH)/NH):aW/NW;f.style.width=NW+'px';f.style.height=NH+'px';f.style.transform='scale('+sc+')';f.style.marginBottom=Math.round(NH*(sc-1))+'px';f.style.marginLeft=fs?Math.max(0,Math.round((aW-NW*sc)/2))+'px':'0';}function tfs(){var f=document.getElementById('ps-frame'),w=f.parentElement,b=document.getElementById('ps-fs-btn'),fs=w.classList.toggle('ps-fullscreen');b.textContent=fs?'✕':'⛶';if(fs){window._psSY=window.scrollY;document.body.style.overflow='hidden';}else{document.body.style.overflow='';window.scrollTo(0,window._psSY||0);}sf();}sf();if(window._psR)window.removeEventListener('resize',window._psR);window._psR=sf;window.addEventListener('resize',sf);if(window._psK)document.removeEventListener('keydown',window._psK);window._psK=function(e){if(e.key==='Escape'){var f=document.getElementById('ps-frame');if(f&&f.parentElement.classList.contains('ps-fullscreen'))tfs();}};document.addEventListener('keydown',window._psK);document.getElementById('ps-fs-btn').onclick=tfs;})()"
+    }
+  ],
+  "quizQuestions": [
+    {
+      "type": "pyscratch_build",
+      "q": "In the PyScratch editor, define a function called wave() that makes the sprite say \"Hi!\". You only need to define it — you don't have to call it yet.",
+      "requires": ["def wave():", "say(\"Hi!\")"],
+      "sampleAnswer": "def wave():\n    say(\"Hi!\")",
+      "duration": 90
+    },
+    {
+      "type": "pyscratch_build",
+      "q": "Define wave() (which says \"Hi!\"), then write a game_start() function that calls wave().",
+      "requires": ["def wave():", "def game_start():", "wave()"],
+      "sampleAnswer": "def wave():\n    say(\"Hi!\")\n\ndef game_start():\n    wave()",
+      "duration": 120
+    },
+    {
+      "type": "pyscratch_build",
+      "q": "Write a function jump(height) that takes a parameter and moves the sprite up by height using change_y. Then call it with jump(50) inside game_start().",
+      "requires": ["def jump(height):", "change_y(height)", "jump(50)"],
+      "sampleAnswer": "def jump(height):\n    change_y(height)\n\ndef game_start():\n    jump(50)",
+      "duration": 130
+    },
+    {
+      "type": "mcq",
+      "q": "What does the keyword 'def' do?",
+      "options": [
+        "Runs a function immediately",
+        "Defines (creates) a new function",
+        "Deletes a function",
+        "Repeats a block of code"
+      ],
+      "answer": 1,
+      "duration": 25
+    },
+    {
+      "type": "mcq",
+      "q": "You have defined 'def hop():'. How do you actually run it?",
+      "options": [
+        "def hop",
+        "run hop",
+        "hop()",
+        "call hop"
+      ],
+      "answer": 2,
+      "duration": 25
+    },
+    {
+      "type": "mcq",
+      "q": "What is the main advantage of putting code in a function?",
+      "options": [
+        "It makes the program run faster automatically",
+        "You can reuse it by calling it many times, instead of copying the code",
+        "It hides the code from other people",
+        "Functions are required or Python won't run"
+      ],
+      "answer": 1,
+      "duration": 35
+    },
+    {
+      "type": "mcq",
+      "q": "In 'def hop(size):', what is 'size'?",
+      "options": [
+        "A parameter — a value you pass in to change what the function does",
+        "The name of the function",
+        "A variable that can never change",
+        "A comment"
+      ],
+      "answer": 0,
+      "duration": 35
+    },
+    {
+      "type": "mcq",
+      "q": "A function is defined as 'def hop(size):' and moves the sprite up by 'size'. Which call makes the BIGGEST jump?",
+      "options": [
+        "hop(5)",
+        "hop(20)",
+        "hop(0)",
+        "hop()"
+      ],
+      "answer": 1,
+      "duration": 30
+    }
+  ]
+}

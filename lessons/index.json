@@ -61,6 +61,18 @@
               "title": "L2: Game Showcase",
               "file": "lessons/pyscratch-share-lesson.json",
               "order": 2
+            },
+            {
+              "id": "year7-pyscratch-functions",
+              "title": "L3: Functions",
+              "file": "lessons/year7-pyscratch-functions.json",
+              "order": 3
+            },
+            {
+              "id": "year7-pyscratch-lists",
+              "title": "L4: Lists",
+              "file": "lessons/year7-pyscratch-lists.json",
+              "order": 4
             }
           ]
         }
@@ -169,6 +181,12 @@
               "title": "L4: Binary Mine 3D",
               "file": "lessons/year8-binary-mine-3d.json",
               "order": 4
+            },
+            {
+              "id": "year8-tshirt-contest",
+              "title": "L5: Clothing Design Contest",
+              "file": "lessons/year8-tshirt-contest.json",
+              "order": 5
             }
           ]
         }

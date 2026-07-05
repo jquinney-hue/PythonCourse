@@ -1,0 +1,66 @@
+{
+  "id": "year8-tshirt-contest",
+  "title": "L5: Clothing Design Contest",
+  "description": "Answer 4-bit binary questions to earn topic ideas, then design and vote on tournament clothing designs.",
+  "steps": [
+    {
+      "id": "contest-flow",
+      "title": "Contest Flow",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Clothing design contest</h2><p class='text-gray-700 mb-3'>This quiz runs as a class tournament. First, you answer 4-bit binary to denary questions to earn topic slots. Then the class submits and votes on topics. Each drawing round uses one of the top voted topics.</p><ul class='list-disc pl-5 text-gray-700 space-y-1'><li>1 correct answer unlocks 1 topic slot.</li><li>3 correct answers unlock 2 topic slots.</li><li>7 correct answers unlock 3 topic slots.</li><li>15 correct answers unlock 4 topic slots.</li></ul><p class='text-gray-600 text-sm mt-3'>Your teacher chooses T-shirt, jeans, or baseball cap from Host a Quiz. The drawing round length defaults to 3 minutes.</p>"
+    }
+  ],
+  "quizQuestions": [
+    {
+      "type": "tshirt_contest",
+      "q": "Byte Brawlers T-shirt Contest",
+      "itemType": "tshirt",
+      "templateUrl": "assets/byte-brawlers/tshirt.png",
+      "fileSlug": "tshirt",
+      "itemLabel": "T-shirt",
+      "itemLabelLower": "T-shirt",
+      "itemPluralLabel": "T-shirt designs",
+      "itemDesignLabel": "T-shirt design",
+      "contestTitle": "Byte Brawlers T-shirt Contest",
+      "duration": 180,
+      "binarySeconds": 30,
+      "topicSeconds": 60,
+      "topicVoteSeconds": 45,
+      "bracketVoteSeconds": 45
+    },
+    {
+      "type": "tshirt_contest",
+      "q": "Byte Brawlers Jeans Contest",
+      "itemType": "jeans",
+      "templateUrl": "assets/byte-brawlers/jeans.png",
+      "fileSlug": "jeans",
+      "itemLabel": "Jeans",
+      "itemLabelLower": "jeans",
+      "itemPluralLabel": "jeans designs",
+      "itemDesignLabel": "jeans design",
+      "contestTitle": "Byte Brawlers Jeans Contest",
+      "duration": 180,
+      "binarySeconds": 30,
+      "topicSeconds": 60,
+      "topicVoteSeconds": 45,
+      "bracketVoteSeconds": 45
+    },
+    {
+      "type": "tshirt_contest",
+      "q": "Byte Brawlers Baseball Cap Contest",
+      "itemType": "baseballcap",
+      "templateUrl": "assets/byte-brawlers/baseballcap.png",
+      "fileSlug": "baseballcap",
+      "itemLabel": "Baseball Cap",
+      "itemLabelLower": "baseball cap",
+      "itemPluralLabel": "baseball cap designs",
+      "itemDesignLabel": "baseball cap design",
+      "contestTitle": "Byte Brawlers Baseball Cap Contest",
+      "duration": 180,
+      "binarySeconds": 30,
+      "topicSeconds": 60,
+      "topicVoteSeconds": 45,
+      "bracketVoteSeconds": 45
+    }
+  ]
+}

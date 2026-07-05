@@ -169,7 +169,7 @@ function showStudentScreen(lobbyCode, questions, opts) {
   quiz.forced = !!opts.forced;
   quiz.displaced = false;
   // Does this quiz need Google Drive? (submission or voting with file-based types)
-  var DRIVE_Q_TYPES = { canvas: 1, pixel_art: 1, blockbench_share: 1, pyscratch_share: 1 };
+  var DRIVE_Q_TYPES = { canvas: 1, pixel_art: 1, blockbench_share: 1, pyscratch_share: 1, tshirt: 1, tshirt_contest: 1 };
   var needsDrive = Array.isArray(questions) && questions.some(function(q) {
     return q && DRIVE_Q_TYPES[q.type];
   });
@@ -195,6 +195,11 @@ function showStudentScreen(lobbyCode, questions, opts) {
   }
 
   var sessionRef = state.db.ref('quizSessions/' + lobbyCode);
+  if (tshirtContestHasContest(questions)) {
+    startStudentTshirtContestCacheSync(sessionRef, lobbyCode, questions);
+  } else {
+    tshirtContestPruneCaches(null);
+  }
 
   // If the same student opens the quiz in a newer tab, that newer tab owns the
   // session. The old tab stops listening and shows a disconnected message.
@@ -245,6 +250,7 @@ function showStudentScreen(lobbyCode, questions, opts) {
     if (qzState === 'lobby') {
       quiz.currentStudentQuestionKey = null;
       quiz.currentStudentRevealKey = null;
+      quiz.currentStudentContestKey = null;
       setStudentView('lobby');
     } else if (qzState === 'question') {
       // Fetch only the small fields we need — not the full session
@@ -304,14 +310,37 @@ function showStudentScreen(lobbyCode, questions, opts) {
         quiz.currentStudentShowcaseKey = String(qIdx);
         renderStudentShowcase(qIdx);
       }
+    } else if (typeof isTshirtContestState === 'function' && isTshirtContestState(qzState)) {
+      quiz.currentStudentQuestionKey = null;
+      quiz.currentStudentRevealKey = null;
+      quiz.currentStudentVotingKey = null;
+      quiz.currentStudentShowcaseKey = null;
+      Promise.all([
+        sessionRef.child('questionStart').get(),
+        sessionRef.child('questionDuration').get(),
+        sessionRef.child('tshirtContest/roundIndex').get()
+      ]).then(function(snaps) {
+        var questionStart = snaps[0].val() || 0;
+        var duration = snaps[1].val() || 30;
+        var roundIndex = snaps[2].val();
+        var contestKey = [qzState, qIdx, questionStart, roundIndex].join(':');
+        if (quiz.currentStudentContestKey !== contestKey) {
+          quiz.currentStudentContestKey = contestKey;
+          renderStudentTshirtContest(qzState, qIdx, questionStart, duration);
+        }
+      });
     } else if (qzState === 'finished') {
       quiz.currentStudentQuestionKey = null;
       quiz.currentStudentRevealKey = null;
+      quiz.currentStudentContestKey = null;
       quiz.forced = false;
       updateForcedQuizChrome();
       setStudentView('finished');
-      document.getElementById('qs-final-score').textContent =
-        'You scored ' + quiz.myScore + ' / ' + quizMaxScore(quiz.questions);
+      var isContestQuiz = (quiz.questions || []).some(function(q) { return q && q.type === 'tshirt_contest'; });
+      var contestItem = studentTshirtContestCurrentItem();
+      document.getElementById('qs-final-score').textContent = isContestQuiz
+        ? contestItem.itemLabel + ' contest complete!'
+        : ('You scored ' + quiz.myScore + ' / ' + quizMaxScore(quiz.questions));
       sessionRef.child('leaderboard').get().then(function(lb) {
         if (lb.exists()) renderStudentLeaderboard(lb.val());
       });
@@ -834,6 +863,623 @@ async function submitStudentPyScratchShare(qIdx, submitBtn, feedbackEl) {
   }
 }
 
+function tshirtContestSlots(correct) {
+  correct = Math.max(0, Number(correct) || 0);
+  return Math.max(0, Math.floor(Math.log(correct + 1) / Math.log(2)));
+}
+
+function tshirtContestValues(obj) {
+  if (!obj) return [];
+  return Array.isArray(obj) ? obj.filter(function(x) { return x != null; }) : Object.keys(obj).map(function(k) { return obj[k]; }).filter(function(x) { return x != null; });
+}
+
+function tshirtContestSubmissionBlocked(submission) {
+  return !!(submission && submission.blocked === true);
+}
+
+function studentTshirtContestItemConfig(q) {
+  q = q || {};
+  var key = String(q.itemType || q.clothingType || q.garmentType || q.templateKind || 'tshirt').toLowerCase();
+  var items = {
+    tshirt: {
+      itemType: 'tshirt',
+      templateUrl: 'assets/byte-brawlers/tshirt.png',
+      fileSlug: 'tshirt',
+      itemLabel: 'T-shirt',
+      itemLabelLower: 'T-shirt',
+      itemPluralLabel: 'T-shirt designs',
+      itemDesignLabel: 'T-shirt design',
+      contestTitle: 'Byte Brawlers T-shirt Contest'
+    },
+    jeans: {
+      itemType: 'jeans',
+      templateUrl: 'assets/byte-brawlers/jeans.png',
+      fileSlug: 'jeans',
+      itemLabel: 'Jeans',
+      itemLabelLower: 'jeans',
+      itemPluralLabel: 'jeans designs',
+      itemDesignLabel: 'jeans design',
+      contestTitle: 'Byte Brawlers Jeans Contest'
+    },
+    baseballcap: {
+      itemType: 'baseballcap',
+      templateUrl: 'assets/byte-brawlers/baseballcap.png',
+      fileSlug: 'baseballcap',
+      itemLabel: 'Baseball Cap',
+      itemLabelLower: 'baseball cap',
+      itemPluralLabel: 'baseball cap designs',
+      itemDesignLabel: 'baseball cap design',
+      contestTitle: 'Byte Brawlers Baseball Cap Contest'
+    }
+  };
+  var item = items[key] || items.tshirt;
+  return {
+    itemType: item.itemType,
+    templateUrl: q.templateUrl || item.templateUrl,
+    fileSlug: q.fileSlug || item.fileSlug,
+    itemLabel: q.itemLabel || item.itemLabel,
+    itemLabelLower: q.itemLabelLower || item.itemLabelLower,
+    itemPluralLabel: q.itemPluralLabel || item.itemPluralLabel,
+    itemDesignLabel: q.itemDesignLabel || item.itemDesignLabel,
+    contestTitle: q.contestTitle || q.q || item.contestTitle
+  };
+}
+
+function studentTshirtContestItemForQuestion(qIdx, contest) {
+  if (contest && contest.config) return studentTshirtContestItemConfig(contest.config);
+  return studentTshirtContestItemConfig((quiz.questions && quiz.questions[qIdx]) || {});
+}
+
+function studentTshirtContestCurrentItem() {
+  var q = (quiz.questions || []).find(function(item) { return item && item.type === 'tshirt_contest'; }) || {};
+  return studentTshirtContestItemConfig(q);
+}
+
+var TSHIRT_CONTEST_CACHE_PREFIX = 'pylearn_tshirt_contest_';
+
+function tshirtContestHasContest(questions) {
+  return Array.isArray(questions) && questions.some(function(q) { return q && q.type === 'tshirt_contest'; });
+}
+
+function tshirtContestCacheKey(lobbyCode) {
+  return TSHIRT_CONTEST_CACHE_PREFIX + String(lobbyCode || '').toUpperCase();
+}
+
+function tshirtContestPruneCaches(activeLobbyCode) {
+  try {
+    if (!window.localStorage) return;
+    var keepKey = activeLobbyCode ? tshirtContestCacheKey(activeLobbyCode) : '';
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+      var key = localStorage.key(i);
+      if (key && key.indexOf(TSHIRT_CONTEST_CACHE_PREFIX) === 0 && key !== keepKey) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch(e) {}
+}
+
+function tshirtContestSaveCache(lobbyCode, contest) {
+  try {
+    if (!window.localStorage || !lobbyCode || !contest) return;
+    localStorage.setItem(tshirtContestCacheKey(lobbyCode), JSON.stringify({
+      savedAt: Date.now(),
+      lobbyCode: String(lobbyCode).toUpperCase(),
+      contest: tshirtContestBuildCacheContest(contest)
+    }));
+  } catch(e) {}
+}
+
+function tshirtContestLoadCache(lobbyCode) {
+  try {
+    if (!window.localStorage || !lobbyCode) return null;
+    var raw = localStorage.getItem(tshirtContestCacheKey(lobbyCode));
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    return parsed && parsed.contest ? parsed.contest : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+function tshirtContestBuildCacheContest(contest) {
+  contest = contest || {};
+  var cleanSubmissions = {};
+  Object.keys(contest.submissions || {}).forEach(function(roundKey) {
+    cleanSubmissions[roundKey] = {};
+    Object.keys(contest.submissions[roundKey] || {}).forEach(function(code) {
+      var sub = contest.submissions[roundKey][code] || {};
+      if (!sub.fileId) return;
+      cleanSubmissions[roundKey][code] = {
+        fileId: sub.fileId,
+        submittedAt: sub.submittedAt || null,
+        blocked: sub.blocked === true,
+        blockedAt: sub.blockedAt || null
+      };
+    });
+  });
+  return {
+    config: contest.config || null,
+    roundIndex: contest.roundIndex || 0,
+    rounds: contest.rounds || null,
+    submissions: cleanSubmissions,
+    champion: contest.champion || null,
+    finalLeaderboard: contest.finalLeaderboard || null
+  };
+}
+
+function startStudentTshirtContestCacheSync(sessionRef, lobbyCode, questions) {
+  if (!sessionRef || !tshirtContestHasContest(questions)) return;
+  if (quiz.studentTshirtContestCacheOff) {
+    try { quiz.studentTshirtContestCacheOff(); } catch(e) {}
+    quiz.studentTshirtContestCacheOff = null;
+  }
+  tshirtContestPruneCaches(lobbyCode);
+  var contestRef = sessionRef.child('tshirtContest');
+  var contestListener = contestRef.on('value', function(snap) {
+    var contest = snap.val();
+    if (contest) tshirtContestSaveCache(lobbyCode, contest);
+  });
+  quiz.studentTshirtContestCacheOff = function() {
+    contestRef.off('value', contestListener);
+    quiz.studentTshirtContestCacheOff = null;
+  };
+}
+
+async function getStudentTshirtContestData() {
+  if (quiz.sessionRef) {
+    try {
+      var snap = await quiz.sessionRef.child('tshirtContest').get();
+      if (snap.exists()) {
+        var liveContest = snap.val() || {};
+        tshirtContestSaveCache(quiz.lobbyCode, liveContest);
+        return liveContest;
+      }
+    } catch(e) {}
+  }
+  return tshirtContestLoadCache(quiz.lobbyCode) || {};
+}
+
+function renderStudentTshirtBlockedSquare(container) {
+  if (!container) return;
+  container.innerHTML = '<span style="font-weight:700;letter-spacing:0;color:#f8fafc">Blocked by teacher</span>';
+  container.style.background = '#000';
+  container.style.color = '#f8fafc';
+  container.style.display = 'flex';
+  container.style.alignItems = 'center';
+  container.style.justifyContent = 'center';
+  container.style.textAlign = 'center';
+}
+
+function tshirtContestHideQuestionPanels() {
+  [
+    'qs-answer-grid','qs-code-answer','qs-text-answer','qs-widget-answer','qs-scratch-answer',
+    'qs-pybot-answer','qs-blockbench-answer','qs-spreadsheet-answer','qs-pyscratch-answer',
+    'qs-canvas-answer','qs-pixel-art-answer','qs-tshirt-answer'
+  ].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  var answered = document.getElementById('qs-answered-msg');
+  if (answered) answered.classList.add('hidden');
+  var visual = document.getElementById('qs-q-visual');
+  if (visual) { visual.innerHTML = ''; visual.classList.add('hidden'); }
+}
+
+function startStudentTshirtContestTimer(questionStart, duration) {
+  clearStudentTimer();
+  var timerEnd = (questionStart || Date.now()) + (duration || 30) * 1000;
+  var key = quiz.currentStudentContestKey;
+  function tick() {
+    if (quiz.currentStudentContestKey !== key) return;
+    var rem = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
+    var timer = document.getElementById('qs-timer');
+    if (timer) timer.textContent = rem;
+    var bar = document.getElementById('qs-timer-bar');
+    if (bar) {
+      var pct = duration > 0 ? ((timerEnd - Date.now()) / (duration * 1000)) * 100 : 0;
+      bar.style.width = Math.max(0, pct) + '%';
+      bar.className = 'h-1.5 transition-all ' + (pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+    }
+    if (rem <= 0) {
+      clearStudentTimer();
+      document.querySelectorAll('[data-tshirt-live]').forEach(function(el) {
+        el.disabled = true;
+        el.classList.add('opacity-50');
+      });
+    }
+  }
+  tick();
+  quiz.studentTimerInterval = setInterval(tick, 500);
+}
+
+function setupStudentTshirtContestQuestion(title, progress, questionStart, duration) {
+  setStudentView('question');
+  tshirtContestHideQuestionPanels();
+  document.getElementById('qs-q-progress').textContent = progress || 'Design Contest';
+  document.getElementById('qs-q-text').textContent = title || '';
+  startStudentTshirtContestTimer(questionStart, duration);
+}
+
+function renderStudentTshirtContest(stateVal, qIdx, questionStart, duration) {
+  if (stateVal === 'tshirt_binary') {
+    renderStudentTshirtBinarySprint(qIdx, questionStart, duration);
+  } else if (stateVal === 'tshirt_topics') {
+    renderStudentTshirtTopics(qIdx, questionStart, duration);
+  } else if (stateVal === 'tshirt_topic_vote') {
+    renderStudentTshirtTopicVote(qIdx, questionStart, duration);
+  } else if (stateVal === 'tshirt_draw') {
+    renderStudentTshirtDraw(qIdx, questionStart, duration);
+  } else if (stateVal === 'tshirt_bracket_vote') {
+    renderStudentTshirtBracketVote(qIdx, questionStart, duration);
+  }
+}
+
+function renderStudentTshirtBinarySprint(qIdx, questionStart, duration) {
+  setupStudentTshirtContestQuestion('Binary sprint: convert as many 4-bit numbers as you can.', 'Topic slots', questionStart, duration);
+  var wrap = document.getElementById('qs-widget-answer');
+  var box = document.getElementById('qs-widget-container');
+  wrap.classList.remove('hidden');
+  box.innerHTML =
+    '<div class="text-center">' +
+      '<div class="text-sm text-gray-400 mb-2">Each correct answer helps unlock topic slots: 1, 3, 7, 15...</div>' +
+      '<div id="tsc-binary-prompt" class="text-5xl font-mono font-bold text-yellow-300 my-5"></div>' +
+      '<div id="tsc-binary-grid" class="grid grid-cols-4 gap-2 max-w-md mx-auto"></div>' +
+      '<div id="tsc-binary-status" class="mt-4 text-sm text-gray-300"></div>' +
+    '</div>';
+  var promptEl = document.getElementById('tsc-binary-prompt');
+  var grid = document.getElementById('tsc-binary-grid');
+  var status = document.getElementById('tsc-binary-status');
+  var correct = 0;
+  var target = 0;
+
+  function bits(n) { return ('0000' + Number(n).toString(2)).slice(-4); }
+  function saveProgress() {
+    var slots = tshirtContestSlots(correct);
+    if (status) status.textContent = correct + ' correct = ' + slots + ' topic slot' + (slots === 1 ? '' : 's');
+    quiz.sessionRef.child('tshirtContest/binary/' + state.uid).set({
+      correct: correct,
+      slots: slots,
+      updatedAt: Date.now()
+    }).catch(function(e) { console.warn('[T-shirt contest] binary save failed:', e.message); });
+  }
+  function nextQuestion() {
+    target = Math.floor(Math.random() * 16);
+    promptEl.textContent = bits(target);
+  }
+  function buildButtons() {
+    grid.innerHTML = '';
+    for (var i = 0; i < 16; i++) {
+      (function(n) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.tshirtLive = '1';
+        btn.className = 'rounded-lg bg-gray-700 hover:bg-gray-600 active:scale-95 px-4 py-3 text-xl font-bold text-white';
+        btn.textContent = n;
+        btn.onclick = function() {
+          if ((questionStart || Date.now()) + duration * 1000 <= Date.now()) return;
+          if (n === target) {
+            correct++;
+            saveProgress();
+            nextQuestion();
+          } else {
+            status.textContent = 'Not quite. ' + bits(target) + ' is ' + target + '.';
+            status.style.color = '#f87171';
+            setTimeout(function() { status.style.color = '#cbd5e1'; saveProgress(); }, 650);
+            nextQuestion();
+          }
+        };
+        grid.appendChild(btn);
+      })(i);
+    }
+  }
+  quiz.sessionRef.child('tshirtContest/binary/' + state.uid).get().then(function(snap) {
+    if (snap.exists()) correct = Number(snap.child('correct').val()) || 0;
+    saveProgress();
+    nextQuestion();
+    buildButtons();
+  });
+}
+
+function renderStudentTshirtTopics(qIdx, questionStart, duration) {
+  var item = studentTshirtContestItemForQuestion(qIdx);
+  setupStudentTshirtContestQuestion('Write your ' + item.itemLabelLower + ' topics.', 'Topic writing', questionStart, duration);
+  var wrap = document.getElementById('qs-widget-answer');
+  var box = document.getElementById('qs-widget-container');
+  wrap.classList.remove('hidden');
+  box.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading your topic slots...</p>';
+  Promise.all([
+    quiz.sessionRef.child('tshirtContest/binary/' + state.uid).get(),
+    quiz.sessionRef.child('tshirtContest/topics/' + state.uid).get()
+  ]).then(function(snaps) {
+    var slots = Number(snaps[0].child('slots').val()) || 0;
+    var existing = snaps[1].val() || {};
+    if (slots <= 0) {
+      box.innerHTML = '<div class="text-center text-gray-300">You did not unlock a topic slot this time. Wait for the voting stage.</div>';
+      return;
+    }
+    var html =
+      '<div class="max-w-lg mx-auto">' +
+        '<p class="text-gray-400 text-sm text-center mb-4">You unlocked <strong class="text-yellow-300">' + slots + '</strong> topic slot' + (slots === 1 ? '' : 's') + '.</p>' +
+        '<div class="space-y-2">';
+    for (var i = 0; i < slots; i++) {
+      var old = existing['slot' + i] && existing['slot' + i].text ? existing['slot' + i].text : '';
+      html += '<input data-tshirt-live="1" class="tsc-topic-input w-full rounded-lg bg-gray-800 border border-gray-600 px-4 py-3 text-white focus:outline-none focus:border-yellow-400" maxlength="60" value="' + escapeHtml(old) + '" placeholder="Topic ' + (i + 1) + '" />';
+    }
+    html +=
+        '</div>' +
+        '<button id="btn-tsc-save-topics" data-tshirt-live="1" class="jhncc-primary w-full mt-4 py-3 rounded-lg font-bold">Submit topics</button>' +
+        '<div id="tsc-topic-feedback" class="text-sm text-gray-400 text-center mt-3"></div>' +
+      '</div>';
+    box.innerHTML = html;
+    document.getElementById('btn-tsc-save-topics').onclick = async function() {
+      var btn = this;
+      var fb = document.getElementById('tsc-topic-feedback');
+      var obj = {};
+      var count = 0;
+      document.querySelectorAll('.tsc-topic-input').forEach(function(input, idx) {
+        var text = String(input.value || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+        if (!text) return;
+        var key = String(state.uid || 'student').replace(/[.#$/[\]]/g, '_') + '_slot' + idx;
+        obj['slot' + idx] = { key: key, text: text, submittedAt: Date.now() };
+        count++;
+      });
+      btn.disabled = true;
+      try {
+        await quiz.sessionRef.child('tshirtContest/topics/' + state.uid).set(obj);
+        fb.textContent = count + ' topic' + (count === 1 ? '' : 's') + ' submitted.';
+        fb.style.color = '#4ade80';
+        btn.textContent = 'Submitted';
+      } catch(e) {
+        fb.textContent = 'Could not submit topics: ' + e.message;
+        fb.style.color = '#f87171';
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
+function renderStudentTshirtTopicVote(qIdx, questionStart, duration) {
+  setStudentView('voting');
+  startStudentTshirtContestTimer(questionStart, duration);
+  var voting = document.getElementById('qs-voting');
+  var h2 = voting.querySelector('h2');
+  var p = voting.querySelector('p');
+  if (h2) h2.textContent = 'Vote on topics';
+  if (p) p.textContent = 'Use up or down votes. The scores are hidden.';
+  var cardEl = document.getElementById('qs-voting-card');
+  cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading topics...</p>';
+  Promise.all([
+    quiz.sessionRef.child('tshirtContest/topics').get(),
+    quiz.sessionRef.child('tshirtContest/topicVotes/' + state.uid).get()
+  ]).then(function(snaps) {
+    var topics = [];
+    snaps[0].forEach(function(studentSnap) {
+      studentSnap.forEach(function(topicSnap) {
+        var text = String(topicSnap.child('text').val() || '').trim();
+        var key = topicSnap.child('key').val() || (studentSnap.key + '_' + topicSnap.key);
+        if (text) topics.push({ key: key, text: text });
+      });
+    });
+    var votes = snaps[1].val() || {};
+    if (!topics.length) {
+      cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">No topics were submitted. A default topic will be used.</p>';
+      return;
+    }
+    topics.sort(function(a, b) { return a.text.localeCompare(b.text); });
+    cardEl.innerHTML = '<div class="space-y-2">' + topics.map(function(t) {
+      var v = Number(votes[t.key]) || 0;
+      return '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 flex items-center gap-3">' +
+        '<div class="flex-1 min-w-0 font-semibold text-white truncate">' + escapeHtml(t.text) + '</div>' +
+        '<button data-tshirt-live="1" data-topic-key="' + escapeHtml(t.key) + '" data-vote="1" class="tsc-topic-vote rounded px-3 py-2 font-bold ' + (v > 0 ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-200') + '">Up</button>' +
+        '<button data-tshirt-live="1" data-topic-key="' + escapeHtml(t.key) + '" data-vote="-1" class="tsc-topic-vote rounded px-3 py-2 font-bold ' + (v < 0 ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-200') + '">Down</button>' +
+      '</div>';
+    }).join('') + '</div>';
+    cardEl.querySelectorAll('.tsc-topic-vote').forEach(function(btn) {
+      btn.onclick = function() {
+        var key = btn.dataset.topicKey;
+        var vote = Number(btn.dataset.vote);
+        if (Number(votes[key]) === vote) vote = 0;
+        votes[key] = vote;
+        var ref = quiz.sessionRef.child('tshirtContest/topicVotes/' + state.uid + '/' + key);
+        (vote === 0 ? ref.remove() : ref.set(vote)).catch(function(e) { console.warn('[T-shirt contest] topic vote failed:', e.message); });
+        renderStudentTshirtTopicVote(qIdx, questionStart, duration);
+      };
+    });
+  });
+}
+
+function renderStudentTshirtDraw(qIdx, questionStart, duration) {
+  var drawItem = studentTshirtContestItemForQuestion(qIdx);
+  setupStudentTshirtContestQuestion('Draw your ' + drawItem.itemDesignLabel + '.', 'Drawing round', questionStart, duration);
+  Promise.all([
+    quiz.sessionRef.child('tshirtContest/roundIndex').get(),
+    quiz.sessionRef.child('tshirtContest').get()
+  ]).then(function(snaps) {
+    var roundIndex = Number(snaps[0].val()) || 0;
+    var contest = snaps[1].val() || {};
+    var item = studentTshirtContestItemForQuestion(qIdx, contest);
+    var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
+    var brackets = tshirtContestValues(round.brackets);
+    var myBracket = null;
+    brackets.forEach(function(b) {
+      if (tshirtContestValues(b.entrants).indexOf(state.uid) !== -1) myBracket = b;
+    });
+    var already = contest.submissions && contest.submissions[roundIndex] && contest.submissions[roundIndex][state.uid];
+    if (!myBracket) {
+      var waitWrap = document.getElementById('qs-widget-answer');
+      var waitBox = document.getElementById('qs-widget-container');
+      waitWrap.classList.remove('hidden');
+      waitBox.innerHTML =
+        '<div class="text-center text-gray-300">' +
+          '<div class="text-xl font-bold text-yellow-300 mb-2">' + escapeHtml(round.topic || 'Computing') + '</div>' +
+          '<p>You are not drawing in this round. You will vote when submissions are ready.</p>' +
+        '</div>';
+      return;
+    }
+    document.getElementById('qs-tshirt-answer').classList.remove('hidden');
+    document.getElementById('qs-q-text').textContent = 'Topic: ' + (round.topic || 'Computing');
+    var container = document.getElementById('qs-tshirt-canvas');
+    var btn = document.getElementById('btn-tshirt-submit');
+    var fb = document.getElementById('tshirt-feedback');
+    if (quiz._tshirtContestDesigner && quiz._tshirtContestDesigner.destroy) {
+      try { quiz._tshirtContestDesigner.destroy(); } catch(_e) {}
+    }
+    container.innerHTML = '';
+    if (already) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Submitted'; }
+      if (fb) { fb.textContent = 'Design submitted. Wait for voting.'; fb.style.color = '#4ade80'; }
+      container.innerHTML = '<p class="text-green-300 text-center py-8">Your design is submitted for this round.</p>';
+      return;
+    }
+    quiz._tshirtContestDesigner = window.initTshirtDesigner(container, { templateUrl: item.templateUrl });
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Submit Design';
+      btn.onclick = function() { submitStudentTshirtContestDesign(roundIndex, btn, fb, item); };
+    }
+    if (fb) { fb.textContent = ''; fb.style.color = '#94a3b8'; }
+  });
+}
+
+async function submitStudentTshirtContestDesign(roundIndex, submitBtn, feedbackEl, item) {
+  item = studentTshirtContestItemConfig(item || {});
+  function fb(msg, col) { if (feedbackEl) { feedbackEl.textContent = msg; feedbackEl.style.color = col || '#94a3b8'; } }
+  var inst = quiz._tshirtContestDesigner;
+  if (!inst) { fb('Designer not ready.', '#f87171'); return; }
+  if (inst.isEmpty()) { fb('Draw something on the ' + item.itemLabelLower + ' first.', '#f87171'); return; }
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting...';
+  var token, folderId;
+  try {
+    token = await window.driveEnsureStudentToken(feedbackEl);
+    folderId = await window.driveLookupStudentFolder(quiz.sessionRef);
+    if (!folderId) throw new Error('No Drive folder found. Ask your teacher to connect Google Drive before starting.');
+  } catch(e) {
+    fb(e.message, '#f87171');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Design';
+    return;
+  }
+  fb('Creating image...');
+  var blob;
+  try {
+    blob = await new Promise(function(resolve, reject) {
+      inst.toBlob(function(b) { b ? resolve(b) : reject(new Error('could not render')); }, 'image/png');
+    });
+  } catch(e2) {
+    fb('Could not create image: ' + e2.message, '#f87171');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Design';
+    return;
+  }
+  fb('Uploading...');
+  var filename = String(state.uid || 'student') + '-' + item.fileSlug + '-round-' + (roundIndex + 1) + '.png';
+  try {
+    var result = await Promise.race([
+      window.driveUploadFile(folderId, filename, blob, 'image/png', token),
+      new Promise(function(_, reject) { setTimeout(function() { reject(new Error('Upload timed out. Tap Submit again.')); }, 45000); })
+    ]);
+    await quiz.sessionRef.child('tshirtContest/submissions/' + roundIndex + '/' + state.uid).set({
+      fileId: result.id,
+      submittedAt: Date.now(),
+      blocked: false
+    });
+    fb('Design submitted.', '#4ade80');
+    submitBtn.textContent = 'Submitted';
+    if (inst.destroy) inst.destroy();
+  } catch(e3) {
+    fb(e3.message, '#f87171');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Design';
+  }
+}
+
+function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
+  setStudentView('voting');
+  startStudentTshirtContestTimer(questionStart, duration);
+  var voting = document.getElementById('qs-voting');
+  var h2 = voting.querySelector('h2');
+  var p = voting.querySelector('p');
+  if (h2) h2.textContent = 'Choose the best design';
+  if (p) p.textContent = 'You do not vote on your own bracket.';
+  var cardEl = document.getElementById('qs-voting-card');
+  cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading brackets...</p>';
+  quiz.sessionRef.child('tshirtContest').get().then(async function(snap) {
+    var contest = snap.val() || {};
+    var item = studentTshirtContestItemForQuestion(qIdx, contest);
+    if (h2) h2.textContent = 'Choose the best ' + item.itemLabelLower;
+    var roundIndex = Number(contest.roundIndex) || 0;
+    var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
+    var submissions = contest.submissions && contest.submissions[roundIndex] ? contest.submissions[roundIndex] : {};
+    var myVotes = contest.bracketVotes && contest.bracketVotes[roundIndex] && contest.bracketVotes[roundIndex][state.uid] ? contest.bracketVotes[roundIndex][state.uid] : {};
+    var brackets = tshirtContestValues(round.brackets).filter(function(bracket) {
+      return tshirtContestValues(bracket.entrants).indexOf(state.uid) === -1;
+    });
+    var voteable = brackets.map(function(bracket) {
+      var entries = tshirtContestValues(bracket.entrants).filter(function(code) {
+        return submissions[code] && submissions[code].fileId;
+      }).map(function(code) {
+        return { code: code, fileId: submissions[code].fileId, blocked: tshirtContestSubmissionBlocked(submissions[code]) };
+      });
+      return { bracket: bracket, entries: entries };
+    }).filter(function(item) {
+      return item.entries.filter(function(entry) { return !entry.blocked; }).length >= 2;
+    });
+    if (!voteable.length) {
+      cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">No brackets for you to vote on this round. Waiting for results...</p>';
+      return;
+    }
+    var token;
+    try {
+      token = await window.driveEnsureStudentToken(cardEl);
+    } catch(e) {
+      cardEl.innerHTML = '<p class="text-red-400 text-sm text-center">Google Drive access is needed to view designs.</p>';
+      return;
+    }
+    cardEl.innerHTML = '<div class="space-y-4">' + voteable.map(function(item, idx) {
+      return '<div class="tsc-bracket-card rounded-xl bg-gray-800 border border-gray-700 overflow-hidden" data-bracket-id="' + escapeHtml(item.bracket.id) + '">' +
+        '<div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">' +
+          '<span class="font-bold text-white">Bracket ' + (idx + 1) + '</span>' +
+          '<span class="text-xs text-gray-400">' + escapeHtml(round.topic || 'Computing') + '</span>' +
+        '</div>' +
+        '<div class="grid gap-3 p-3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">' +
+          item.entries.map(function(entry) {
+            var selected = !entry.blocked && myVotes[item.bracket.id] === entry.code;
+            return '<button data-tshirt-live="1" class="tsc-shirt-choice rounded-lg border ' + (selected ? 'border-yellow-400 bg-yellow-900/30' : 'border-gray-700 bg-gray-900') + ' p-2 text-left ' + (entry.blocked ? 'opacity-80 cursor-not-allowed' : 'hover:border-yellow-300') + '" data-bracket-id="' + escapeHtml(item.bracket.id) + '" data-code="' + escapeHtml(entry.code) + '" data-file-id="' + escapeHtml(entry.fileId) + '" data-blocked="' + (entry.blocked ? '1' : '0') + '"' + (entry.blocked ? ' disabled' : '') + '>' +
+              '<div class="tsc-shirt-img rounded bg-gray-700 mb-2 flex items-center justify-center text-xs text-gray-400" style="aspect-ratio:1">' + (entry.blocked ? 'Blocked by teacher' : 'Loading...') + '</div>' +
+              '<div class="font-semibold text-sm text-white truncate">' + escapeHtml(studentName(entry.code) || entry.code) + '</div>' +
+            '</button>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+    cardEl.querySelectorAll('.tsc-shirt-choice').forEach(function(btn) {
+      var imgBox = btn.querySelector('.tsc-shirt-img');
+      if (btn.dataset.blocked === '1') {
+        renderStudentTshirtBlockedSquare(imgBox);
+        return;
+      }
+      window.driveFetchFileAsDataUrl(btn.dataset.fileId, token).then(function(dataUrl) {
+        imgBox.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = dataUrl;
+        img.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#334155;border-radius:6px';
+        imgBox.appendChild(img);
+      }).catch(function() { imgBox.textContent = 'Could not load'; });
+      btn.onclick = function() {
+        if (btn.dataset.blocked === '1') return;
+        var bracketId = btn.dataset.bracketId;
+        var code = btn.dataset.code;
+        quiz.sessionRef.child('tshirtContest/bracketVotes/' + roundIndex + '/' + state.uid + '/' + bracketId).set(code).then(function() {
+          renderStudentTshirtBracketVote(qIdx, questionStart, duration);
+        }).catch(function(e) {
+          console.warn('[T-shirt contest] bracket vote failed:', e.message);
+        });
+      };
+    });
+  });
+}
+
 function renderStudentQuestion(qIdx, questionStart, duration) {
   setStudentView('question');
   var q = quiz.questions[qIdx];
@@ -865,8 +1511,9 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   var isPyScratchShare = q.type === 'pyscratch_share';
   var isCanvas = q.type === 'canvas';
   var isPixelArt = q.type === 'pixel_art';
-  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPyScratchShare && !isCanvas && !isPixelArt;
-  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPyScratchShare || isCanvas || isPixelArt);
+  var isTshirt = q.type === 'tshirt';
+  var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPyScratchShare && !isCanvas && !isPixelArt && !isTshirt;
+  document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPyScratchShare || isCanvas || isPixelArt || isTshirt);
   document.getElementById('qs-code-answer').classList.toggle('hidden', !isCodeQuestion);
   document.getElementById('qs-text-answer').classList.toggle('hidden', !isTextInput);
   document.getElementById('qs-widget-answer').classList.toggle('hidden', !isWidget);
@@ -877,6 +1524,7 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   document.getElementById('qs-pyscratch-answer').classList.toggle('hidden', !isPyScratch && !isPyScratchShare);
   document.getElementById('qs-canvas-answer').classList.toggle('hidden', !isCanvas);
   document.getElementById('qs-pixel-art-answer').classList.toggle('hidden', !isPixelArt);
+  document.getElementById('qs-tshirt-answer').classList.toggle('hidden', !isTshirt);
   if (!isScratch) resetScratchQuizFrame();
   if (!isBlockbench) resetBlockbenchQuizFrame();
   if (!isPyScratch && !isPyScratchShare) resetPyScratchQuizFrame();
@@ -1059,6 +1707,8 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
     initCanvasQuestion(qIdx, q);
   } else if (isPixelArt) {
     if (typeof window.initPixelArtQuestion === 'function') window.initPixelArtQuestion(qIdx);
+  } else if (isTshirt) {
+    if (typeof window.initTshirtQuestion === 'function') window.initTshirtQuestion(qIdx);
   } else if (isSpreadsheet) {
     renderQuizSpreadsheetTask(qIdx, q);
   } else {
@@ -1134,6 +1784,13 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
 function renderStudentVoting(qIdx) {
   setStudentView('voting');
   clearStudentTimer();
+  var votingView = document.getElementById('qs-voting');
+  if (votingView) {
+    var vh = votingView.querySelector('h2');
+    var vp = votingView.querySelector('p');
+    if (vh) vh.textContent = 'Rate the submissions';
+    if (vp) vp.textContent = 'You have 20 seconds to rate each one.';
+  }
   var cardEl = document.getElementById('qs-voting-card');
   cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading submissions…</p>';
 
@@ -1374,7 +2031,9 @@ function processVotingItems(qIdx, items, index, token, cardEl) {
     var img = document.createElement('img');
     img.src = dataUrl;
     var isPixelArtVote = votingQType === 'pixel_art';
-    img.style.cssText = 'display:block;width:100%;aspect-ratio:' + (isPixelArtVote ? '1' : '17/10') + ';object-fit:' + (isPixelArtVote ? 'contain' : 'cover') + ';' + (isPixelArtVote ? 'image-rendering:pixelated;background:#000;' : '');
+    var isTshirtVote = votingQType === 'tshirt';
+    var containV = isPixelArtVote || isTshirtVote;
+    img.style.cssText = 'display:block;width:100%;aspect-ratio:' + (containV ? '1' : '17/10') + ';object-fit:' + (containV ? 'contain' : 'cover') + ';' + (isPixelArtVote ? 'image-rendering:pixelated;background:#000;' : (isTshirtVote ? 'background:#334155;' : ''));
     imgWrap.appendChild(img);
   }).catch(function() {
     if (imgWrap) imgWrap.textContent = 'Could not load image';
@@ -1441,7 +2100,9 @@ async function renderStudentShowcase(qIdx) {
           var img = document.createElement('img');
           img.src = dataUrl;
           var isPAShowcase = showcaseQType === 'pixel_art';
-          img.style.cssText = 'display:block;width:100%;aspect-ratio:' + (isPAShowcase ? '1' : '17/10') + ';object-fit:' + (isPAShowcase ? 'contain' : 'cover') + ';' + (isPAShowcase ? 'image-rendering:pixelated;background:#000;' : '');
+          var isTshirtShowcase = showcaseQType === 'tshirt';
+          var containS = isPAShowcase || isTshirtShowcase;
+          img.style.cssText = 'display:block;width:100%;aspect-ratio:' + (containS ? '1' : '17/10') + ';object-fit:' + (containS ? 'contain' : 'cover') + ';' + (isPAShowcase ? 'image-rendering:pixelated;background:#000;' : (isTshirtShowcase ? 'background:#334155;' : ''));
           ph.appendChild(img);
         }).catch(function() { ph.textContent = 'Could not load image'; });
       })(imgPlaceholder, item.fileId, token);
@@ -1455,12 +2116,13 @@ function renderStudentLeaderboard(lb) {
   quiz._lastStudentLeaderboard = Array.isArray(lb) ? lb : Object.values(lb);
   var el = document.getElementById('qs-final-score');
   var total = quizMaxScore(quiz.questions);
+  var isContest = (quiz.questions || []).some(function(q) { return q && q.type === 'tshirt_contest'; });
   var medals = ['🥇','🥈','🥉'];
   var lbArr = quiz._lastStudentLeaderboard;
 
   var hasMedia = (quiz.questions || []).some(function(q) {
-    return q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share' || q.type === 'pixel_art';
-  });
+    return q.type === 'canvas' || q.type === 'pyscratch_share' || q.type === 'blockbench_share' || q.type === 'pixel_art' || q.type === 'tshirt';
+  }) || isContest;
 
   el.innerHTML = '';
   var container = document.createElement('div');
@@ -1477,7 +2139,7 @@ function renderStudentLeaderboard(lb) {
       '<span class="font-mono flex-1 text-sm text-left ' + (isMe ? 'text-yellow-300 font-bold' : 'text-gray-300') + '">' +
       escapeHtml(studentName(entry.code) || entry.code) + (isMe ? ' (you)' : '') + '</span>' +
       (hasMedia ? '<span class="text-gray-500 text-xs shrink-0">🖼</span>' : '') +
-      '<span class="font-bold text-yellow-400 text-right shrink-0">' + entry.score + '/' + total + '</span>';
+      '<span class="font-bold text-yellow-400 text-right shrink-0">' + (isContest ? escapeHtml(entry.label || (entry.score + ' wins')) : (entry.score + '/' + total)) + '</span>';
 
     if (hasMedia) {
       row.title = 'Click to view their submission';
@@ -1487,15 +2149,153 @@ function renderStudentLeaderboard(lb) {
   });
 
   el.appendChild(container);
+  if (isContest) appendStudentTshirtContestSummary(el);
+}
+
+function appendStudentTshirtContestSummary(el) {
+  if (!el || (!quiz.sessionRef && !quiz.lobbyCode)) return;
+  var holder = document.createElement('div');
+  holder.className = 'mt-6 w-full max-w-xl mx-auto text-left';
+  holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">Loading bracket results...</p>';
+  el.appendChild(holder);
+  getStudentTshirtContestData().then(function(contest) {
+    var rounds = tshirtContestValues(contest.rounds).sort(function(a, b) { return (a.index || 0) - (b.index || 0); });
+    if (!rounds.length) {
+      holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">No bracket results recorded.</p>';
+      return;
+    }
+    holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3>';
+    rounds.forEach(function(round) {
+      var section = document.createElement('div');
+      section.className = 'rounded-lg bg-white/10 border border-white/10 p-4 mb-3';
+      var brackets = tshirtContestValues(round.brackets);
+      section.innerHTML =
+        '<div class="font-bold text-yellow-300 mb-2">Round ' + ((round.index || 0) + 1) + ': ' + escapeHtml(round.topic || 'Computing') + '</div>' +
+        '<div class="space-y-2">' + brackets.map(function(bracket, idx) {
+          var entrants = tshirtContestValues(bracket.entrants).map(function(code) { return studentName(code) || code; }).join(' vs ');
+          var winner = bracket.winner ? (studentName(bracket.winner) || bracket.winner) : 'No winner';
+          return '<div class="flex items-center justify-between gap-3 text-sm bg-black/20 rounded px-3 py-2">' +
+            '<span class="text-gray-300 truncate">Bracket ' + (idx + 1) + ': ' + escapeHtml(entrants) + '</span>' +
+            '<span class="text-green-300 font-bold shrink-0">' + escapeHtml(winner) + '</span>' +
+          '</div>';
+        }).join('') + '</div>';
+      holder.appendChild(section);
+    });
+  }).catch(function(e) {
+    holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-red-300 text-sm text-center">Could not load bracket results: ' + escapeHtml(e.message) + '</p>';
+  });
+}
+
+async function showStudentTshirtContestWorkForCode(code) {
+  var name = studentName(code) || code;
+  var initialItem = studentTshirtContestCurrentItem();
+  var token = null;
+  try {
+    token = await window.driveEnsureStudentToken(null);
+  } catch(e) {
+    alert('Google Drive access is required to view designs. Please sign in again.');
+    return;
+  }
+
+  var contest = await getStudentTshirtContestData();
+  var item = studentTshirtContestItemConfig(contest.config || initialItem);
+  var submissions = contest.submissions || {};
+  var rounds = tshirtContestValues(contest.rounds).sort(function(a, b) {
+    return (a.index || 0) - (b.index || 0);
+  });
+
+  var overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);' +
+    'display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:2rem 1rem';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'width:100%;max-width:760px';
+
+  var header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:1rem';
+  var titleEl = document.createElement('h2');
+  titleEl.style.cssText = 'color:#f1f5f9;font-size:1.25rem;font-weight:700;margin:0';
+  titleEl.textContent = name + "'s " + item.itemPluralLabel;
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText =
+    'background:#334155;color:#f1f5f9;border:none;border-radius:6px;' +
+    'padding:0.4rem 1rem;cursor:pointer;font-size:0.9rem;font-weight:600';
+  closeBtn.onclick = function() { document.body.removeChild(overlay); };
+  header.appendChild(titleEl);
+  header.appendChild(closeBtn);
+  inner.appendChild(header);
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+
+  var shown = 0;
+  rounds.forEach(function(round) {
+    var roundIndex = Number(round.index) || 0;
+    var bracket = tshirtContestValues(round.brackets).find(function(b) {
+      return tshirtContestValues(b.entrants).indexOf(code) !== -1;
+    });
+    var sub = submissions[roundIndex] && submissions[roundIndex][code];
+    if (!bracket && !sub) return;
+    shown++;
+
+    var section = document.createElement('div');
+    section.style.cssText = 'background:#1e293b;border-radius:12px;padding:1.25rem;margin-bottom:1.25rem;border:1px solid #334155';
+    var entrants = bracket ? tshirtContestValues(bracket.entrants).map(function(uid) { return studentName(uid) || uid; }).join(' vs ') : 'No bracket recorded';
+    var status = bracket && bracket.winner
+      ? (bracket.winner === code ? 'Won this bracket' : 'Winner: ' + (studentName(bracket.winner) || bracket.winner))
+      : 'No result recorded';
+    section.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:0.75rem">' +
+        '<div>' +
+          '<div style="color:#fbbf24;font-weight:700">Round ' + (roundIndex + 1) + ': ' + escapeHtml(round.topic || 'Computing') + '</div>' +
+          '<div style="color:#94a3b8;font-size:0.78rem;margin-top:0.2rem">' + escapeHtml(entrants) + '</div>' +
+        '</div>' +
+        '<div style="color:' + (bracket && bracket.winner === code ? '#4ade80' : '#cbd5e1') + ';font-size:0.78rem;font-weight:700;text-align:right;flex-shrink:0">' + escapeHtml(status) + '</div>' +
+      '</div>' +
+      '<div class="tsc-contest-shirt-img" style="min-height:220px;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:0.85rem">Loading design...</div>';
+    inner.appendChild(section);
+
+    var imgWrap = section.querySelector('.tsc-contest-shirt-img');
+    if (!sub || !sub.fileId) {
+      imgWrap.textContent = 'No design submitted for this round.';
+      return;
+    }
+    if (tshirtContestSubmissionBlocked(sub)) {
+      renderStudentTshirtBlockedSquare(imgWrap);
+      return;
+    }
+    window.driveFetchFileAsDataUrl(sub.fileId, token).then(function(dataUrl) {
+      imgWrap.innerHTML = '';
+      var img = document.createElement('img');
+      img.src = dataUrl;
+      img.style.cssText = 'display:block;width:100%;max-width:420px;margin:0 auto;background:#334155;border-radius:8px;padding:6px;box-sizing:border-box';
+      imgWrap.appendChild(img);
+    }).catch(function(e) {
+      imgWrap.textContent = 'Could not load design: ' + (e.message || 'Drive error');
+    });
+  });
+
+  if (!shown) {
+    var empty = document.createElement('div');
+    empty.style.cssText = 'background:#1e293b;border-radius:12px;padding:1.25rem;color:#94a3b8;text-align:center';
+    empty.textContent = 'No ' + item.itemPluralLabel + ' were recorded for this student.';
+    inner.appendChild(empty);
+  }
 }
 
 async function showStudentWorkForCode(code) {
   var name = studentName(code) || code;
+  var isContest = (quiz.questions || []).some(function(q) { return q && q.type === 'tshirt_contest'; });
+  if (isContest) {
+    await showStudentTshirtContestWorkForCode(code);
+    return;
+  }
 
   var mediaQs = (quiz.questions || []).map(function(q, i) {
     return { q: q, idx: i };
   }).filter(function(item) {
-    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share' || item.q.type === 'blockbench_share' || item.q.type === 'pixel_art';
+    return item.q.type === 'canvas' || item.q.type === 'pyscratch_share' || item.q.type === 'blockbench_share' || item.q.type === 'pixel_art' || item.q.type === 'tshirt';
   });
   if (!mediaQs.length) return;
 
@@ -1574,6 +2374,7 @@ async function showStudentWorkForCode(code) {
         // filename rather than reading the fileId from Firebase (which may be gone).
         var filename =
           qType === 'pixel_art'    ? code + '-pixel-art.png' :
+          qType === 'tshirt'       ? code + '-tshirt.png' :
           qType === 'pyscratch_share' ? code + '.sb3' :
           code + '.png'; // canvas
         window.driveFindLatestFileByName(folderId, filename, token).then(function(file) {
@@ -1606,6 +2407,11 @@ async function showStudentWorkForCode(code) {
               img.src = dataUrl;
               img.style.cssText = 'display:block;width:100%;max-width:512px;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;border-radius:8px';
               contentEl.appendChild(img);
+            } else if (qType === 'tshirt') {
+              var timg = document.createElement('img');
+              timg.src = dataUrl;
+              timg.style.cssText = 'display:block;width:100%;max-width:420px;margin:0 auto;background:#334155;border-radius:8px;padding:6px;box-sizing:border-box';
+              contentEl.appendChild(timg);
             }
           });
         }).catch(function(e) {
