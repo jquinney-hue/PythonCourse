@@ -264,7 +264,9 @@ async function loadApp() {
   // Fetch firebase config and lesson index in parallel
   var results = await Promise.all([
     fetch('config/firebase.json', NOCACHE).then(function(r) { return r.json(); }),
-    fetch('lessons/index.json', NOCACHE).then(function(r) { return r.json(); }),
+    // Cache-bust the lesson index with a unique URL each load so a newly added
+    // lesson (e.g. binary L5) is never masked by a stale browser/CDN copy.
+    fetch('lessons/index.json?v=' + Date.now(), NOCACHE).then(function(r) { return r.json(); }),
   ]);
   state.config      = results[0];  // { firebase }
   state.lessonIndex = results[1];  // { yearGroups: [...] }
