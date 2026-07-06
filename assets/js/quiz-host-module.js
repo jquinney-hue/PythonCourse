@@ -1324,7 +1324,8 @@ function isTshirtContestState(stateVal) {
     'tshirt_topics',
     'tshirt_topic_vote',
     'tshirt_draw',
-    'tshirt_bracket_vote'
+    'tshirt_bracket_vote',
+    'tshirt_round_results'
   ].indexOf(stateVal) !== -1;
 }
 
@@ -1561,13 +1562,31 @@ function renderHostTshirtContestView(stateVal, snap) {
     title = 'Bracket Voting';
     subtitle = 'Students choose the best ' + item.itemLabelLower + ' in brackets they are not part of.';
     buttonText = 'Resolve round';
+  } else if (stateVal === 'tshirt_round_results') {
+    var pendingAdvance = snap.child('tshirtContest/pendingRoundAdvance').val() || {};
+    title = 'Round ' + (roundIndex + 1) + ' Results';
+    subtitle = pendingAdvance.type === 'finish'
+      ? 'The final bracket is resolved. Show the leaderboard when everyone has seen the result.'
+      : 'These bracket winners move into the next drawing round.';
+    buttonText = pendingAdvance.type === 'finish' ? 'Show final leaderboard' : 'Start next round';
   }
 
   titleEl.textContent = title;
   subEl.textContent = subtitle;
   btn.textContent = buttonText + ' ->';
   btn.onclick = function() { advanceTshirtContest().catch(function(e) { alert(e.message || 'Could not advance contest.'); }); };
-  startHostTshirtContestTimer(duration, startedAt);
+  if (stateVal === 'tshirt_round_results') {
+    clearHostQuestionTimer();
+    var timerEl = document.getElementById('qhc-timer');
+    var barEl = document.getElementById('qhc-timer-bar');
+    if (timerEl) timerEl.textContent = '--';
+    if (barEl) {
+      barEl.style.width = '100%';
+      barEl.className = 'h-2 transition-all bg-gray-600';
+    }
+  } else {
+    startHostTshirtContestTimer(duration, startedAt);
+  }
 
   var round = snap.child('tshirtContest/rounds/' + roundIndex).val() || {};
   var topic = round.topic || '';
@@ -1585,21 +1604,43 @@ function renderHostTshirtContestView(stateVal, snap) {
   bracketWrap.className = 'grid gap-3 w-full max-w-3xl';
   var brackets = tshirtObjValues(round.brackets);
   if (brackets.length) {
+    if (stateVal === 'tshirt_round_results') {
+      var resultHeading = document.createElement('div');
+      resultHeading.className = 'text-center text-sm font-semibold text-green-300 mb-1';
+      resultHeading.textContent = 'Bracket winners';
+      bracketWrap.appendChild(resultHeading);
+    }
     brackets.forEach(function(bracket, i) {
       var entrants = tshirtObjValues(bracket.entrants);
       var row = document.createElement('div');
       row.className = 'rounded-lg bg-gray-800 border border-gray-700 px-4 py-3';
-      row.innerHTML =
-        '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
-        '<div class="flex flex-wrap gap-2">' +
-        entrants.map(function(code) {
-          var winner = bracket.winner === code;
-          return '<span class="rounded-full px-3 py-1 text-sm ' + (winner ? 'bg-green-700 text-green-100' : 'bg-gray-700 text-gray-100') + '">' +
-            escapeHtml(studentName(code) || code) + (winner ? ' (winner)' : '') + '</span>';
-        }).join('') +
-        '</div>';
+      if (stateVal === 'tshirt_round_results') {
+        var winnerName = bracket.winner ? (studentName(bracket.winner) || bracket.winner) : 'No winner';
+        row.innerHTML =
+          '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">' +
+            '<div class="min-w-0">' +
+              '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
+              '<div class="text-sm text-gray-300 truncate">' + escapeHtml(entrants.map(function(code) { return studentName(code) || code; }).join(' vs ')) + '</div>' +
+            '</div>' +
+            '<div class="rounded-lg bg-green-700/30 border border-green-500/40 px-3 py-2 text-green-100 font-bold shrink-0">' +
+              escapeHtml(winnerName) +
+            '</div>' +
+          '</div>';
+      } else {
+        row.innerHTML =
+          '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
+          '<div class="flex flex-wrap gap-2">' +
+          entrants.map(function(code) {
+            var winner = bracket.winner === code;
+            return '<span class="rounded-full px-3 py-1 text-sm ' + (winner ? 'bg-green-700 text-green-100' : 'bg-gray-700 text-gray-100') + '">' +
+              escapeHtml(studentName(code) || code) + (winner ? ' (winner)' : '') + '</span>';
+          }).join('') +
+          '</div>';
+      }
       bracketWrap.appendChild(row);
     });
+  } else if (stateVal === 'tshirt_round_results') {
+    bracketWrap.innerHTML = '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 text-center text-gray-300">No bracket results were recorded for this round.</div>';
   }
   bodyEl.appendChild(bracketWrap);
 
@@ -1608,6 +1649,10 @@ function renderHostTshirtContestView(stateVal, snap) {
 
 function renderHostTshirtContestProgress(stateVal, roundIndex, progressEl) {
   if (!quiz.sessionRef || !progressEl) return;
+  if (stateVal === 'tshirt_round_results') {
+    progressEl.innerHTML = '<div class="text-green-300 font-bold">Review the winners, then continue when the class is ready.</div>';
+    return;
+  }
   var path =
     stateVal === 'tshirt_binary' ? 'tshirtContest/binary' :
     stateVal === 'tshirt_topics' ? 'tshirtContest/topics' :
@@ -1686,6 +1731,8 @@ async function advanceTshirtContest() {
       await startTshirtBracketVoteOrResolve(cfg);
     } else if (stateVal === 'tshirt_bracket_vote') {
       await resolveTshirtRoundAndContinue(cfg);
+    } else if (stateVal === 'tshirt_round_results') {
+      await continueTshirtContestAfterRoundResults(cfg);
     }
   } finally {
     quiz._tshirtContestAdvancing = false;
@@ -1887,13 +1934,61 @@ async function resolveTshirtRoundAndContinue(cfg) {
   });
   await Promise.all(winnerWrites);
   await quiz.sessionRef.child('tshirtContest/rounds/' + roundIndex + '/winners').set(tshirtArrayToFirebaseObj(winners));
+  var now = Date.now();
   if (winners.length <= 1) {
-    await finishTshirtContest(winners[0] || null);
+    await quiz.sessionRef.child('tshirtContest/pendingRoundAdvance').set({
+      type: 'finish',
+      champion: winners[0] || null,
+      roundIndex: roundIndex,
+      createdAt: now
+    });
+  } else {
+    await quiz.sessionRef.child('tshirtContest/pendingRoundAdvance').set({
+      type: 'draw',
+      roundIndex: roundIndex,
+      nextRoundIndex: roundIndex + 1,
+      participants: tshirtArrayToFirebaseObj(winners),
+      createdAt: now
+    });
+  }
+  await quiz.sessionRef.update({
+    state: 'tshirt_round_results',
+    questionStart: now,
+    questionDuration: 0
+  });
+}
+
+async function continueTshirtContestAfterRoundResults(cfg) {
+  var contestSnap = await quiz.sessionRef.child('tshirtContest').get();
+  var contest = contestSnap.val() || {};
+  var pending = contest.pendingRoundAdvance || {};
+  var participants = tshirtObjValues(pending.participants);
+  if (pending.type === 'finish') {
+    await quiz.sessionRef.child('tshirtContest/pendingRoundAdvance').remove();
+    await finishTshirtContest(pending.champion || null);
     return;
   }
-  var rankSnap = await quiz.sessionRef.child('tshirtContest/topicRankings').get();
-  var rankings = rankSnap.exists() ? tshirtObjValues(rankSnap.val()) : tshirtFallbackTopics();
-  await startTshirtDrawingRound(roundIndex + 1, winners, rankings, cfg);
+  if (pending.type === 'draw' && participants.length) {
+    var nextRoundIndex = Number(pending.nextRoundIndex);
+    if (!Number.isFinite(nextRoundIndex)) nextRoundIndex = (Number(pending.roundIndex) || 0) + 1;
+    var rankSnap = await quiz.sessionRef.child('tshirtContest/topicRankings').get();
+    var rankings = rankSnap.exists() ? tshirtObjValues(rankSnap.val()) : tshirtFallbackTopics();
+    await quiz.sessionRef.child('tshirtContest/pendingRoundAdvance').remove();
+    await startTshirtDrawingRound(nextRoundIndex, participants, rankings, cfg);
+    return;
+  }
+
+  var roundIndex = Number(contest.roundIndex) || 0;
+  var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
+  var winners = tshirtObjValues(round.winners);
+  await quiz.sessionRef.child('tshirtContest/pendingRoundAdvance').remove();
+  if (winners.length <= 1) {
+    await finishTshirtContest(winners[0] || null);
+  } else {
+    var fallbackRankSnap = await quiz.sessionRef.child('tshirtContest/topicRankings').get();
+    var fallbackRankings = fallbackRankSnap.exists() ? tshirtObjValues(fallbackRankSnap.val()) : tshirtFallbackTopics();
+    await startTshirtDrawingRound(roundIndex + 1, winners, fallbackRankings, cfg);
+  }
 }
 
 async function buildTshirtContestLeaderboard(champion) {

@@ -1246,6 +1246,8 @@ function renderStudentTshirtContest(stateVal, qIdx, questionStart, duration) {
     renderStudentTshirtDraw(qIdx, questionStart, duration);
   } else if (stateVal === 'tshirt_bracket_vote') {
     renderStudentTshirtBracketVote(qIdx, questionStart, duration);
+  } else if (stateVal === 'tshirt_round_results') {
+    renderStudentTshirtRoundResults(qIdx);
   }
 }
 
@@ -1640,6 +1642,125 @@ function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
         });
       };
     });
+  });
+}
+
+function renderStudentTshirtRoundResults(qIdx) {
+  setStudentView('voting');
+  clearStudentTimer();
+  if (quiz._tshirtContestDesigner && quiz._tshirtContestDesigner.destroy) {
+    try { quiz._tshirtContestDesigner.destroy(); } catch(_e) {}
+    quiz._tshirtContestDesigner = null;
+  }
+  var timer = document.getElementById('qs-timer');
+  var bar = document.getElementById('qs-timer-bar');
+  if (timer) timer.textContent = '--';
+  if (bar) {
+    bar.style.width = '100%';
+    bar.className = 'h-1.5 transition-all bg-gray-500';
+  }
+  var voting = document.getElementById('qs-voting');
+  var h2 = voting.querySelector('h2');
+  var p = voting.querySelector('p');
+  if (h2) h2.textContent = 'Round results';
+  if (p) p.textContent = 'The winners are shown below. Wait for your teacher to start the next round.';
+  var cardEl = document.getElementById('qs-voting-card');
+  cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading round results...</p>';
+  quiz.sessionRef.child('tshirtContest').get().then(async function(snap) {
+    var contest = snap.val() || {};
+    var item = studentTshirtContestItemForQuestion(qIdx, contest);
+    var roundIndex = Number(contest.roundIndex) || 0;
+    var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
+    var brackets = tshirtContestValues(round.brackets);
+    var pending = contest.pendingRoundAdvance || {};
+    var submissions = contest.submissions && contest.submissions[roundIndex] ? contest.submissions[roundIndex] : {};
+    if (h2) h2.textContent = 'Round ' + (roundIndex + 1) + ' results';
+    if (p) {
+      p.textContent = pending.type === 'finish'
+        ? 'The final result is ready. Wait for your teacher to show the leaderboard.'
+        : 'The winners below move into the next ' + item.itemLabelLower + ' drawing round.';
+    }
+    if (!brackets.length) {
+      cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">No bracket results were recorded for this round.</p>';
+      return;
+    }
+    var myBracket = brackets.find(function(bracket) {
+      return tshirtContestValues(bracket.entrants).indexOf(state.uid) !== -1;
+    });
+    var myWinner = myBracket && myBracket.winner === state.uid;
+    var myLost = myBracket && myBracket.winner && myBracket.winner !== state.uid;
+    var status = myWinner
+      ? (pending.type === 'finish' ? 'You won the contest.' : 'You passed to the next round.')
+      : myLost
+        ? 'You were eliminated. Your bracket winner was ' + (studentName(myBracket.winner) || myBracket.winner) + '.'
+        : myBracket
+          ? 'Your bracket has been resolved.'
+          : 'You were judging this round.';
+    var token = null;
+    try {
+      token = await window.driveEnsureStudentToken(cardEl);
+    } catch(_e) {}
+    cardEl.innerHTML =
+      '<div class="rounded-xl bg-gray-800 border border-gray-700 p-4 mb-4 text-center">' +
+        '<div class="text-xs uppercase tracking-wide text-yellow-300 mb-1">Round topic</div>' +
+        '<div class="text-2xl font-bold text-yellow-100 mb-2">' + escapeHtml(round.topic || 'Computing') + '</div>' +
+        '<div class="text-sm font-semibold ' + (myWinner ? 'text-green-300' : myLost ? 'text-red-300' : 'text-gray-300') + '">' + escapeHtml(status) + '</div>' +
+      '</div>' +
+      '<div class="space-y-3">' + brackets.map(function(bracket, idx) {
+        var entrants = tshirtContestValues(bracket.entrants);
+        var winnerName = bracket.winner ? (studentName(bracket.winner) || bracket.winner) : 'No winner';
+        var winnerSubmission = bracket.winner && submissions[bracket.winner];
+        var winnerBlocked = tshirtContestSubmissionBlocked(winnerSubmission);
+        var winnerFileId = winnerSubmission && winnerSubmission.fileId && !winnerBlocked ? winnerSubmission.fileId : '';
+        var entrantNames = entrants.map(function(code) {
+          var isMe = code === state.uid;
+          return '<span class="rounded-full px-3 py-1 text-sm ' + (bracket.winner === code ? 'bg-green-700 text-green-100' : isMe ? 'bg-yellow-700/50 text-yellow-100' : 'bg-gray-700 text-gray-100') + '">' +
+            escapeHtml(studentName(code) || code) + (isMe ? ' (you)' : '') + (bracket.winner === code ? ' (winner)' : '') +
+          '</span>';
+        }).join('');
+        return '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-3">' +
+          '<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px] sm:items-center">' +
+            '<div class="min-w-0">' +
+              '<div class="text-xs text-gray-500 mb-2">Bracket ' + (idx + 1) + '</div>' +
+              '<div class="flex flex-wrap gap-2">' + entrantNames + '</div>' +
+              '<div class="mt-3 rounded-lg bg-green-700/30 border border-green-500/40 px-3 py-2 text-green-100 font-bold">' +
+                'Winner: ' + escapeHtml(winnerName) +
+              '</div>' +
+            '</div>' +
+            '<div>' +
+              '<div class="tsc-round-winner-img rounded-lg bg-gray-900 border border-gray-700 flex items-center justify-center text-xs text-gray-400 overflow-hidden" ' +
+                'style="aspect-ratio:1" data-file-id="' + escapeHtml(winnerFileId) + '" data-blocked="' + (winnerBlocked ? '1' : '0') + '">' +
+                (bracket.winner ? (winnerBlocked ? 'Blocked by teacher' : (winnerFileId ? 'Loading design...' : 'No design submitted')) : 'No winner') +
+              '</div>' +
+              '<div class="text-xs text-gray-400 mt-2 text-center">Drawn by ' + escapeHtml(winnerName) + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    cardEl.querySelectorAll('.tsc-round-winner-img').forEach(function(box) {
+      if (box.dataset.blocked === '1') {
+        renderStudentTshirtBlockedSquare(box);
+        return;
+      }
+      var fileId = box.dataset.fileId;
+      if (!fileId) return;
+      if (!token) {
+        box.textContent = 'Sign in to Drive to view design';
+        return;
+      }
+      window.driveFetchFileAsDataUrl(fileId, token).then(function(dataUrl) {
+        box.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = 'Winning ' + item.itemDesignLabel;
+        img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#334155';
+        box.appendChild(img);
+      }).catch(function() {
+        box.textContent = 'Could not load design';
+      });
+    });
+  }).catch(function(e) {
+    cardEl.innerHTML = '<p class="text-red-400 text-sm text-center">Could not load round results: ' + escapeHtml(e.message) + '</p>';
   });
 }
 
