@@ -140,6 +140,15 @@ function setStudentView(view) {
   ['lobby','kicked','question','reveal','voting','showcase','finished'].forEach(function(v) {
     document.getElementById('qs-' + v).classList.toggle('hidden', v !== view);
   });
+  if (view !== 'question') setStudentQuestionWorkMode(null);
+}
+
+function setStudentQuestionWorkMode(mode) {
+  var question = document.getElementById('qs-question');
+  if (!question) return;
+  question.classList.remove('qs-design-work', 'qs-tshirt-work', 'qs-blockbench-work');
+  if (mode === 'tshirt') question.classList.add('qs-design-work', 'qs-tshirt-work');
+  if (mode === 'blockbench') question.classList.add('qs-design-work', 'qs-blockbench-work');
 }
 
 function updateForcedQuizChrome() {
@@ -1263,6 +1272,7 @@ function startStudentTshirtContestTimer(questionStart, duration) {
 
 function setupStudentTshirtContestQuestion(title, progress, questionStart, duration) {
   setStudentView('question');
+  setStudentQuestionWorkMode(null);
   tshirtContestHideQuestionPanels();
   document.getElementById('qs-q-progress').textContent = progress || 'Design Contest';
   document.getElementById('qs-q-text').textContent = title || '';
@@ -1464,6 +1474,7 @@ function renderStudentTshirtDraw(qIdx, questionStart, duration) {
   var renderToken = nextStudentTshirtContestRenderToken();
   var drawItem = studentTshirtContestItemForQuestion(qIdx);
   setupStudentTshirtContestQuestion('Draw your ' + drawItem.itemDesignLabel + '.', 'Drawing round', questionStart, duration);
+  setStudentQuestionWorkMode('tshirt');
   Promise.all([
     quiz.sessionRef.child('tshirtContest/roundIndex').get(),
     quiz.sessionRef.child('tshirtContest').get()
@@ -1554,6 +1565,7 @@ function studentTshirtWinnerChoicesSoFar(contest, currentRoundIndex) {
 
 function renderStudentTshirtFreeDraw(round, item, contest, roundIndex) {
   var renderToken = nextStudentTshirtContestRenderToken();
+  setStudentQuestionWorkMode('tshirt');
   item = studentTshirtContestItemConfig(item || {});
   document.getElementById('qs-tshirt-answer').classList.remove('hidden');
   document.getElementById('qs-q-text').textContent = 'Draw the rest of the picture';
@@ -2216,6 +2228,7 @@ function renderStudentBlockbenchDraw(qIdx, questionStart, duration) {
     });
     var already = contest.submissions && contest.submissions[roundIndex] && contest.submissions[roundIndex][state.uid];
     if (!myBracket || already) {
+      setStudentQuestionWorkMode(null);
       resetBlockbenchQuizFrame();
       var waitWrap = document.getElementById('qs-widget-answer');
       var waitBox = document.getElementById('qs-widget-container');
@@ -2229,6 +2242,7 @@ function renderStudentBlockbenchDraw(qIdx, questionStart, duration) {
         '</div>';
       return;
     }
+    setStudentQuestionWorkMode('blockbench');
     document.getElementById('qs-blockbench-answer').classList.remove('hidden');
     document.getElementById('qs-q-text').textContent = 'Topic: ' + (round.topic || 'Game asset');
     var frame = document.getElementById('qs-blockbench-frame');
@@ -2451,6 +2465,7 @@ function renderStudentQuestion(qIdx, questionStart, duration) {
   var isPixelArt = q.type === 'pixel_art';
   var isTshirt = q.type === 'tshirt';
   var isCodeQuestion = q.type && q.type !== 'mcq' && q.type !== 'scratch_mcq' && !isTextInput && !isWidget && !isScratch && !isPyBot && !isBlockbench && !isSpreadsheet && !isPyScratch && !isPyScratchShare && !isCanvas && !isPixelArt && !isTshirt;
+  setStudentQuestionWorkMode(isTshirt ? 'tshirt' : isBlockbench ? 'blockbench' : null);
   document.getElementById('qs-answer-grid').classList.toggle('hidden', isCodeQuestion || isTextInput || isWidget || isScratch || isPyBot || isBlockbench || isSpreadsheet || isPyScratch || isPyScratchShare || isCanvas || isPixelArt || isTshirt);
   document.getElementById('qs-code-answer').classList.toggle('hidden', !isCodeQuestion);
   document.getElementById('qs-text-answer').classList.toggle('hidden', !isTextInput);

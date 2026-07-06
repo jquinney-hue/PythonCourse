@@ -111,6 +111,31 @@
     #qs-pyscratch-wrap.qs-pyscratch-fullscreen { position:fixed!important; inset:0!important; z-index:9999!important; border-radius:0!important; border:none!important; background:#111827; display:flex; flex-direction:column; }
     #qs-pyscratch-wrap.qs-pyscratch-fullscreen #qs-pyscratch-scroll { flex:1; overflow:auto; max-height:none!important; }
     #btn-qs-pyscratch-fs:hover { background:#334155; color:#e2e8f0; }
+    #qs-question { min-height: 0; }
+    #qs-question-body { min-height: 0; }
+    #qs-question.qs-design-work #qs-question-body { justify-content: flex-start; overflow: hidden; padding: 0.6rem 1rem 0.5rem; }
+    #qs-question.qs-design-work #qs-q-text { font-size: 1rem; line-height: 1.25; margin-bottom: 0.45rem; max-width: min(100%, 64rem); }
+    #qs-question.qs-tshirt-work #qs-tshirt-answer:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: min(100%, 76rem); }
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas > .tsd-root,
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas #tsc-free-draw-canvas,
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas #tsc-free-draw-canvas > .tsd-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-cols { flex: 1; min-height: 0; height: 100%; flex-wrap: nowrap; }
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-left { min-width: 0; }
+    #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-side { max-height: none; height: 100%; width: clamp(168px, 20vw, 212px); }
+    #qs-question.qs-tshirt-work #qs-tshirt-submitbar { flex-shrink: 0; margin-top: 0.45rem!important; min-height: 2.35rem; }
+    #qs-question.qs-blockbench-work #qs-blockbench-answer:not(.hidden) { flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: min(100%, 82rem); }
+    #qs-question.qs-blockbench-work #qs-blockbench-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #qs-question.qs-blockbench-work #qs-blockbench-scroll { flex: 1; min-height: 0; }
+    #qs-question.qs-blockbench-work .qs-blockbench-checkbar { flex-shrink: 0; min-height: 2.75rem; }
+    @media (max-width: 760px) {
+      #qs-question.qs-design-work #qs-question-body { padding-left: 0.45rem; padding-right: 0.45rem; }
+      #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-cols { gap: 6px; }
+      #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-side { width: 154px; gap: 5px; }
+      #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-tbtn { padding: 4px 7px; font-size: 0.72rem; }
+      #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-sizewrap input { width: 54px; }
+      #qs-question.qs-tshirt-work #qs-tshirt-canvas .tsd-card { padding: 6px; }
+    }
     .ex-input,
     .ex-textarea {
       display: block;
@@ -1054,7 +1079,7 @@
       <span>&#x23F1; <span id="qs-timer" class="font-mono font-bold text-white text-lg"></span>s</span>
     </div>
     <div class="h-1.5 bg-gray-700"><div id="qs-timer-bar" class="h-1.5 bg-green-500 transition-all" style="width:100%"></div></div>
-    <div class="flex-1 flex flex-col items-center justify-center px-6 pb-4">
+    <div id="qs-question-body" class="flex-1 flex flex-col items-center justify-center px-6 pb-4">
       <div id="qs-q-text" class="text-xl font-bold text-center mb-4 max-w-2xl leading-snug"></div>
       <div id="qs-q-visual" class="hidden ex-box w-full max-w-xl overflow-x-auto mb-4"></div>
       <div id="qs-answered-msg" class="hidden text-green-400 font-semibold text-lg mb-4">&#x2713; Answer submitted!</div>
@@ -1206,7 +1231,7 @@
       <!-- T-shirt design question (Byte Brawlers) -->
       <div id="qs-tshirt-answer" class="hidden w-full" style="max-width:100%">
         <div id="qs-tshirt-canvas"></div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <div id="qs-tshirt-submitbar" style="display:flex;align-items:center;gap:10px;margin-top:8px">
           <button id="btn-tshirt-submit" class="jhncc-primary" style="padding:5px 16px;border-radius:5px;font-size:0.85rem;font-weight:600">Submit Design</button>
           <span id="tshirt-feedback" style="font-size:0.78rem;color:#94a3b8"></span>
         </div>
@@ -1495,8 +1520,8 @@
 <script src="assets/js/assessment-results-module.js?v=20260624"></script>
 <script src="assets/js/fileshare-drive-module.js?v=20260701a"></script>
 <script src="assets/js/quiz-host-module.js?v=20260706f"></script>
-<script src="assets/js/quiz-student-module.js?v=20260706i"></script>
-<script src="assets/js/scratch-pybot-module.js?v=20260706b"></script>
+<script src="assets/js/quiz-student-module.js?v=20260706j"></script>
+<script src="assets/js/scratch-pybot-module.js?v=20260706c"></script>
 <script src="assets/js/pixel-art-module.js?v=20260706b"></script>
 <script src="assets/js/tshirt-designer-module.js?v=20260706c"></script>
 <script src="assets/js/quiz-answer-module.js?v=20260706b"></script>

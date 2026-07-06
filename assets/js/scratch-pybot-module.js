@@ -172,13 +172,12 @@ function scaleBlockbenchQuizFrame() {
   var NW = 1280, NH = 720;
   var checkBarEl = wrap.querySelector('.qs-blockbench-checkbar');
   var checkBarH  = checkBarEl ? checkBarEl.offsetHeight : 44;
-  var headerEl   = document.querySelector('#quiz-student-screen > div:first-child');
-  var qTextEl    = document.getElementById('qs-q-text');
-  var headerH    = headerEl ? headerEl.offsetHeight : 44;
-  var qTextH     = qTextEl  ? qTextEl.offsetHeight + 16 : 80;
-  var availH     = Math.max(200, window.innerHeight - headerH - 42 - qTextH - checkBarH - 16);
-  var availW     = Math.max(320, window.innerWidth - 48);
+  var wrapRect   = wrap.getBoundingClientRect();
+  var parentW    = wrap.parentElement ? wrap.parentElement.clientWidth : 0;
+  var availW     = Math.max(320, parentW || (window.innerWidth - 48));
+  var availH     = Math.max(220, window.innerHeight - wrapRect.top - checkBarH - 8);
   var scale      = Math.min(1, availW / NW, availH / NH);
+  var scaledH    = Math.max(220, Math.round(NH * scale));
 
   frame.style.width           = NW + 'px';
   frame.style.height          = NH + 'px';
@@ -187,6 +186,8 @@ function scaleBlockbenchQuizFrame() {
   frame.style.marginBottom    = Math.round(NH * (scale - 1)) + 'px';
   frame.style.marginLeft      = Math.max(0, Math.round((availW - NW * scale) / 2)) + 'px';
   scroll.style.overflow       = 'hidden';
+  scroll.style.height         = scaledH + 'px';
+  scroll.style.maxHeight      = scaledH + 'px';
 }
 
 function toggleQsBlockbenchFullscreen() {
