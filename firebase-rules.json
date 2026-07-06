@@ -116,6 +116,37 @@
               ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $voterCode"
             }
           }
+        },
+        "tshirtContest": {
+          "binary": {
+            "$studentCode": {
+              ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $studentCode"
+            }
+          },
+          "topics": {
+            "$studentCode": {
+              ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $studentCode"
+            }
+          },
+          "topicVotes": {
+            "$voterCode": {
+              ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $voterCode"
+            }
+          },
+          "submissions": {
+            "$roundIndex": {
+              "$studentCode": {
+                ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $studentCode"
+              }
+            }
+          },
+          "bracketVotes": {
+            "$roundIndex": {
+              "$voterCode": {
+                ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $voterCode"
+              }
+            }
+          }
         }
       }
     },

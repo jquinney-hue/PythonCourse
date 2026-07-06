@@ -462,4 +462,217 @@
       fb('❌ Could not save: ' + e.message, '#f87171'); submitBtn.disabled = false; submitBtn.textContent = 'Submit Design';
     }
   };
+
+  function contestTopicSlots(correct) {
+    correct = Math.max(0, Number(correct) || 0);
+    return Math.max(0, Math.floor(Math.log(correct + 1) / Math.log(2)));
+  }
+
+  function contestBits(n) {
+    return ('0000' + Number(n).toString(2)).slice(-4);
+  }
+
+  var _tshirtBinaryPracticeStop = null;
+
+  window.initTshirtContestBinaryPractice = function (containerId) {
+    var wrap = (typeof containerId === 'string') ? document.getElementById(containerId) : containerId;
+    if (!wrap) return;
+    if (_tshirtBinaryPracticeStop) {
+      try { _tshirtBinaryPracticeStop(); } catch (e) {}
+      _tshirtBinaryPracticeStop = null;
+    }
+    var duration = 30;
+    var active = false;
+    var correct = 0;
+    var target = 0;
+    var endAt = 0;
+    var timer = null;
+
+    _tshirtBinaryPracticeStop = function () {
+      active = false;
+      if (timer) { clearInterval(timer); timer = null; }
+    };
+
+    wrap.innerHTML =
+      '<div class="rounded-xl border border-slate-700 bg-slate-900 text-slate-100 p-4">' +
+        '<div class="flex flex-wrap items-center justify-between gap-3 mb-4">' +
+          '<div>' +
+            '<div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Practice Mode</div>' +
+            '<h3 class="text-lg font-bold text-white">30 second binary sprint</h3>' +
+          '</div>' +
+          '<button id="tsc-practice-start" type="button" class="jhncc-primary rounded px-4 py-2 font-bold">Start</button>' +
+        '</div>' +
+        '<div class="grid gap-4 md:grid-cols-[1fr_220px]">' +
+          '<div class="rounded-lg bg-slate-950 border border-slate-800 p-4 text-center">' +
+            '<div class="text-sm text-slate-400 mb-2">Convert this 4-bit binary number to denary.</div>' +
+            '<div id="tsc-practice-prompt" class="text-5xl font-mono font-bold text-yellow-300 my-5">----</div>' +
+            '<div id="tsc-practice-grid" class="grid grid-cols-4 gap-2 max-w-md mx-auto"></div>' +
+            '<div id="tsc-practice-feedback" class="mt-4 text-sm text-slate-300 min-h-[1.5rem]"></div>' +
+          '</div>' +
+          '<div class="rounded-lg bg-slate-950 border border-slate-800 p-4">' +
+            '<div class="flex items-center justify-between text-sm mb-2"><span class="text-slate-400">Time</span><span id="tsc-practice-time" class="font-bold text-yellow-300">30</span></div>' +
+            '<div class="h-2 rounded-full bg-slate-800 overflow-hidden mb-4"><div id="tsc-practice-bar" class="h-full bg-green-500 rounded-full" style="width:100%"></div></div>' +
+            '<div class="text-sm text-slate-400">Correct</div>' +
+            '<div id="tsc-practice-correct" class="text-3xl font-bold text-white mb-3">0</div>' +
+            '<div class="text-sm text-slate-400">Topic slots earned</div>' +
+            '<div id="tsc-practice-slots" class="text-3xl font-bold text-yellow-300 mb-3">0</div>' +
+            '<div id="tsc-practice-summary" class="text-sm text-slate-300"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var promptEl = document.getElementById('tsc-practice-prompt');
+    var gridEl = document.getElementById('tsc-practice-grid');
+    var feedbackEl = document.getElementById('tsc-practice-feedback');
+    var timeEl = document.getElementById('tsc-practice-time');
+    var barEl = document.getElementById('tsc-practice-bar');
+    var correctEl = document.getElementById('tsc-practice-correct');
+    var slotsEl = document.getElementById('tsc-practice-slots');
+    var summaryEl = document.getElementById('tsc-practice-summary');
+    var startBtn = document.getElementById('tsc-practice-start');
+
+    function setStats() {
+      var slots = contestTopicSlots(correct);
+      if (correctEl) correctEl.textContent = String(correct);
+      if (slotsEl) slotsEl.textContent = String(slots);
+    }
+
+    function nextQuestion() {
+      target = Math.floor(Math.random() * 16);
+      if (promptEl) promptEl.textContent = contestBits(target);
+    }
+
+    function endPractice() {
+      if (!document.body.contains(wrap)) {
+        if (_tshirtBinaryPracticeStop) _tshirtBinaryPracticeStop();
+        return;
+      }
+      active = false;
+      if (timer) { clearInterval(timer); timer = null; }
+      var slots = contestTopicSlots(correct);
+      if (startBtn) startBtn.textContent = 'Try again';
+      if (feedbackEl) {
+        feedbackEl.textContent = 'Time is up.';
+        feedbackEl.style.color = '#fbbf24';
+      }
+      if (summaryEl) {
+        summaryEl.textContent = 'You answered ' + correct + ' correctly, which would unlock ' + slots + ' topic slot' + (slots === 1 ? '' : 's') + ' in the class contest.';
+      }
+      if (typeof window.__markStepComplete === 'function') window.__markStepComplete();
+    }
+
+    function tick() {
+      if (!document.body.contains(wrap)) {
+        if (_tshirtBinaryPracticeStop) _tshirtBinaryPracticeStop();
+        return;
+      }
+      var remainingMs = Math.max(0, endAt - Date.now());
+      var remaining = Math.ceil(remainingMs / 1000);
+      if (timeEl) timeEl.textContent = String(remaining);
+      if (barEl) {
+        var pct = remainingMs / (duration * 1000) * 100;
+        barEl.style.width = Math.max(0, pct) + '%';
+        barEl.className = 'h-full rounded-full ' + (pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+      }
+      if (remainingMs <= 0) endPractice();
+    }
+
+    function startPractice() {
+      active = true;
+      correct = 0;
+      endAt = Date.now() + duration * 1000;
+      if (startBtn) startBtn.textContent = 'Restart';
+      if (summaryEl) summaryEl.textContent = '';
+      if (feedbackEl) {
+        feedbackEl.textContent = 'Go.';
+        feedbackEl.style.color = '#cbd5e1';
+      }
+      setStats();
+      nextQuestion();
+      if (timer) clearInterval(timer);
+      tick();
+      timer = setInterval(tick, 200);
+    }
+
+    for (var i = 0; i < 16; i++) {
+      (function(n) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 px-4 py-3 text-xl font-bold text-white';
+        btn.textContent = String(n);
+        btn.onclick = function() {
+          if (!active) return;
+          if (n === target) {
+            correct++;
+            setStats();
+            if (feedbackEl) {
+              feedbackEl.textContent = 'Correct: ' + contestBits(target) + ' is ' + target + '.';
+              feedbackEl.style.color = '#4ade80';
+            }
+            nextQuestion();
+          } else {
+            if (feedbackEl) {
+              feedbackEl.textContent = 'Not quite. ' + contestBits(target) + ' is ' + target + '.';
+              feedbackEl.style.color = '#f87171';
+            }
+            nextQuestion();
+          }
+        };
+        gridEl.appendChild(btn);
+      })(i);
+    }
+
+    setStats();
+    if (startBtn) startBtn.onclick = startPractice;
+  };
+
+  var _tshirtPracticeInstance = null;
+
+  window.initTshirtContestDrawingPractice = function (containerId) {
+    var wrap = (typeof containerId === 'string') ? document.getElementById(containerId) : containerId;
+    if (!wrap) return;
+    var options = [
+      { value: 'tshirt', label: 'T-shirt', template: 'assets/byte-brawlers/tshirt.png' },
+      { value: 'jeans', label: 'Jeans', template: 'assets/byte-brawlers/jeans.png' },
+      { value: 'baseballcap', label: 'Baseball cap', template: 'assets/byte-brawlers/baseballcap.png' }
+    ];
+
+    wrap.innerHTML =
+      '<div class="rounded-xl border border-slate-700 bg-slate-900 text-slate-100 p-4">' +
+        '<div class="flex flex-wrap items-center justify-between gap-3 mb-4">' +
+          '<div>' +
+            '<div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Practice Mode</div>' +
+            '<h3 class="text-lg font-bold text-white">Free draw practice</h3>' +
+          '</div>' +
+          '<label class="text-sm text-slate-300 flex items-center gap-2">Clothing' +
+            '<select id="tsc-practice-clothing" class="rounded bg-slate-800 border border-slate-600 px-3 py-2 text-white">' +
+              options.map(function(opt) { return '<option value="' + opt.value + '">' + opt.label + '</option>'; }).join('') +
+            '</select>' +
+          '</label>' +
+        '</div>' +
+        '<div id="tsc-practice-designer"></div>' +
+      '</div>';
+
+    var select = document.getElementById('tsc-practice-clothing');
+    var mount = document.getElementById('tsc-practice-designer');
+
+    function selectedOption() {
+      var value = select ? select.value : 'tshirt';
+      return options.find(function(opt) { return opt.value === value; }) || options[0];
+    }
+
+    function mountDesigner() {
+      if (_tshirtPracticeInstance && _tshirtPracticeInstance.destroy) {
+        try { _tshirtPracticeInstance.destroy(); } catch (e) {}
+      }
+      if (!mount) return;
+      mount.innerHTML = '';
+      var opt = selectedOption();
+      _tshirtPracticeInstance = window.initTshirtDesigner(mount, { templateUrl: opt.template });
+      if (typeof window.__markStepComplete === 'function') window.__markStepComplete();
+    }
+
+    if (select) select.onchange = mountDesigner;
+    mountDesigner();
+  };
 })();

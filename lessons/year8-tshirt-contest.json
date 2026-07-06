@@ -1,13 +1,21 @@
 {
   "id": "year8-tshirt-contest",
-  "title": "L5: Clothing Design Contest",
-  "description": "Answer 4-bit binary questions to earn topic ideas, then design and vote on tournament clothing designs.",
+  "title": "L5: Byte Brawlers Practice",
+  "description": "Practise the binary sprint and clothing drawing tools before the class design contest.",
   "steps": [
     {
-      "id": "contest-flow",
-      "title": "Contest Flow",
+      "id": "binary-sprint-practice",
+      "title": "Binary Sprint",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Practice Mode: binary sprint</h2><p class='text-gray-700 mb-3'>In the class contest, this sprint decides how many topic ideas you can submit. You will have 30 seconds to convert as many 4-bit binary numbers into denary as possible.</p><ul class='list-disc pl-5 text-gray-700 space-y-1 mb-4'><li>1 correct answer unlocks 1 topic slot.</li><li>3 correct answers unlock 2 topic slots.</li><li>7 correct answers unlock 3 topic slots.</li><li>15 correct answers unlock 4 topic slots.</li></ul><div id='y8bb-binary-practice'></div>",
+      "js": "if (window.initTshirtContestBinaryPractice) { initTshirtContestBinaryPractice('y8bb-binary-practice'); } else { document.getElementById('y8bb-binary-practice').innerHTML = '<p class=\"text-red-400\">Practice mode not available - refresh the page.</p>'; }"
+    },
+    {
+      "id": "drawing-practice",
+      "title": "Free Draw",
       "autoComplete": true,
-      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Clothing design contest</h2><p class='text-gray-700 mb-3'>This quiz runs as a class tournament. First, you answer 4-bit binary to denary questions to earn topic slots. Then the class submits and votes on topics. Each drawing round uses one of the top voted topics.</p><ul class='list-disc pl-5 text-gray-700 space-y-1'><li>1 correct answer unlocks 1 topic slot.</li><li>3 correct answers unlock 2 topic slots.</li><li>7 correct answers unlock 3 topic slots.</li><li>15 correct answers unlock 4 topic slots.</li></ul><p class='text-gray-600 text-sm mt-3'>Your teacher chooses T-shirt, jeans, or baseball cap from Host a Quiz. The drawing round length defaults to 3 minutes.</p>"
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Practice Mode: free draw</h2><p class='text-gray-700 mb-3'>Choose a clothing template, then practise drawing on it. This is the same canvas used in the contest: type a 4-bit binary code to select a colour, then use the brush, line, fill, eraser, and calculator tools.</p><div id='y8bb-drawing-practice'></div>",
+      "js": "if (window.initTshirtContestDrawingPractice) { initTshirtContestDrawingPractice('y8bb-drawing-practice'); } else { document.getElementById('y8bb-drawing-practice').innerHTML = '<p class=\"text-red-400\">Drawing practice not available - refresh the page.</p>'; }"
     }
   ],
   "quizQuestions": [
