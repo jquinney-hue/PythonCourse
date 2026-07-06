@@ -1443,6 +1443,8 @@ function renderStudentTshirtDraw(qIdx, questionStart, duration) {
     });
     var already = contest.submissions && contest.submissions[roundIndex] && contest.submissions[roundIndex][state.uid];
     if (!myBracket) {
+      renderStudentTshirtFreeDraw(round, item);
+      return;
       var waitWrap = document.getElementById('qs-widget-answer');
       var waitBox = document.getElementById('qs-widget-container');
       waitWrap.classList.remove('hidden');
@@ -1476,6 +1478,35 @@ function renderStudentTshirtDraw(qIdx, questionStart, duration) {
     }
     if (fb) { fb.textContent = ''; fb.style.color = '#94a3b8'; }
   });
+}
+
+function renderStudentTshirtFreeDraw(round, item) {
+  item = studentTshirtContestItemConfig(item || {});
+  document.getElementById('qs-tshirt-answer').classList.remove('hidden');
+  document.getElementById('qs-q-text').textContent = 'Free draw: ' + (round.topic || 'Computing');
+  var container = document.getElementById('qs-tshirt-canvas');
+  var btn = document.getElementById('btn-tshirt-submit');
+  var fb = document.getElementById('tshirt-feedback');
+  if (quiz._tshirtContestDesigner && quiz._tshirtContestDesigner.destroy) {
+    try { quiz._tshirtContestDesigner.destroy(); } catch(_e) {}
+  }
+  container.innerHTML =
+    '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 mb-3 text-center">' +
+      '<div class="text-yellow-300 font-bold mb-1">Free draw mode</div>' +
+      '<div class="text-sm text-gray-300">You have been eliminated from the bracket, but you can keep experimenting while this round finishes.</div>' +
+    '</div>' +
+    '<div id="tsc-free-draw-canvas"></div>';
+  var mount = document.getElementById('tsc-free-draw-canvas');
+  quiz._tshirtContestDesigner = window.initTshirtDesigner(mount, { templateUrl: item.templateUrl });
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Free draw only';
+    btn.onclick = null;
+  }
+  if (fb) {
+    fb.textContent = 'This drawing is just for practice and will not be submitted.';
+    fb.style.color = '#94a3b8';
+  }
 }
 
 async function submitStudentTshirtContestDesign(roundIndex, submitBtn, feedbackEl, item) {
@@ -1645,6 +1676,28 @@ function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
   });
 }
 
+function ensureStudentTshirtRevealStyles() {
+  if (document.getElementById('tsc-round-reveal-style')) return;
+  var style = document.createElement('style');
+  style.id = 'tsc-round-reveal-style';
+  style.textContent =
+    '@keyframes tscRevealIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}' +
+    '@keyframes tscRevealLoserExit{0%{opacity:1;transform:scale(1);filter:none}38%{opacity:1;transform:scale(1.08) rotate(1deg);filter:brightness(1.35)}100%{opacity:0;transform:scale(.28) rotate(-10deg);filter:blur(5px) brightness(1.8)}}' +
+    '@keyframes tscRevealBurst{0%{opacity:0;transform:translate(-50%,-50%) scale(.2)}42%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.55)}}' +
+    '@keyframes tscRevealWinnerGlow{0%{transform:translateY(0) scale(1);box-shadow:none}100%{transform:translateY(-4px) scale(1.04);box-shadow:0 0 0 2px rgba(74,222,128,.75),0 18px 36px rgba(34,197,94,.22)}}' +
+    '@keyframes tscRevealSpotlight{from{opacity:0;transform:translateY(18px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}' +
+    '.tsc-reveal-stage{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}' +
+    '.tsc-reveal-card{position:relative;overflow:hidden;border-radius:12px;border:1px solid #334155;background:#111827;padding:10px;opacity:0;animation:tscRevealIn .45s ease-out forwards}' +
+    '.tsc-reveal-card.tsc-loser{animation:tscRevealIn .45s ease-out forwards,tscRevealLoserExit .78s cubic-bezier(.52,-.05,.68,.56) 1.8s forwards}' +
+    '.tsc-reveal-card.tsc-loser::after{content:"";position:absolute;left:50%;top:50%;width:160px;height:160px;border-radius:50%;pointer-events:none;opacity:0;background:radial-gradient(circle,#fff7ad 0 8%,#fb923c 9% 22%,#ef4444 23% 38%,transparent 39%),radial-gradient(circle at 25% 30%,#fde68a 0 8%,transparent 9%),radial-gradient(circle at 72% 36%,#f97316 0 9%,transparent 10%),radial-gradient(circle at 52% 74%,#ef4444 0 9%,transparent 10%);animation:tscRevealBurst .72s ease-out 1.72s forwards}' +
+    '.tsc-reveal-card.tsc-winner{animation:tscRevealIn .45s ease-out forwards,tscRevealWinnerGlow .7s ease-out 2.15s forwards}' +
+    '.tsc-reveal-img{aspect-ratio:1;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:.75rem;overflow:hidden}' +
+    '.tsc-reveal-spotlight{opacity:0;animation:tscRevealSpotlight .65s ease-out 2.75s forwards}' +
+    '.tsc-reveal-spotlight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}' +
+    '@media (prefers-reduced-motion:reduce){.tsc-reveal-card,.tsc-reveal-card.tsc-loser,.tsc-reveal-card.tsc-winner,.tsc-reveal-spotlight{animation:none;opacity:1}.tsc-reveal-card.tsc-loser{opacity:.42}.tsc-reveal-card.tsc-loser::after{display:none}}';
+  document.head.appendChild(style);
+}
+
 function renderStudentTshirtRoundResults(qIdx) {
   setStudentView('voting');
   clearStudentTimer();
@@ -1700,11 +1753,59 @@ function renderStudentTshirtRoundResults(qIdx) {
     try {
       token = await window.driveEnsureStudentToken(cardEl);
     } catch(_e) {}
+    ensureStudentTshirtRevealStyles();
+    var roundWinners = brackets.map(function(bracket) { return bracket.winner; }).filter(Boolean);
+    var isFinalReveal = pending.type === 'finish' && roundWinners.length <= 1;
+    var winnerLabel = isFinalReveal ? 'Champion' : 'Through to the next round';
     cardEl.innerHTML =
       '<div class="rounded-xl bg-gray-800 border border-gray-700 p-4 mb-4 text-center">' +
         '<div class="text-xs uppercase tracking-wide text-yellow-300 mb-1">Round topic</div>' +
         '<div class="text-2xl font-bold text-yellow-100 mb-2">' + escapeHtml(round.topic || 'Computing') + '</div>' +
         '<div class="text-sm font-semibold ' + (myWinner ? 'text-green-300' : myLost ? 'text-red-300' : 'text-gray-300') + '">' + escapeHtml(status) + '</div>' +
+      '</div>' +
+      '<div class="rounded-xl bg-gray-950 border border-gray-700 p-4 mb-4">' +
+        '<div class="text-center mb-4">' +
+          '<div class="text-xs uppercase tracking-wide text-red-300 mb-1">Elimination reveal</div>' +
+          '<div class="text-sm text-gray-300">Watch the eliminated competitors drop out, then see who advances.</div>' +
+        '</div>' +
+        '<div class="space-y-4">' + brackets.map(function(bracket, idx) {
+          var entrants = tshirtContestValues(bracket.entrants);
+          return '<div class="rounded-lg bg-gray-900 border border-gray-800 p-3">' +
+            '<div class="text-xs text-gray-500 mb-3">Bracket ' + (idx + 1) + '</div>' +
+            '<div class="tsc-reveal-stage">' + entrants.map(function(code) {
+              var sub = submissions[code];
+              var blocked = tshirtContestSubmissionBlocked(sub);
+              var fileId = sub && sub.fileId && !blocked ? sub.fileId : '';
+              var isWinner = bracket.winner === code;
+              var isMe = code === state.uid;
+              return '<div class="tsc-reveal-card ' + (isWinner ? 'tsc-winner' : 'tsc-loser') + '">' +
+                '<div class="tsc-reveal-img" data-file-id="' + escapeHtml(fileId) + '" data-blocked="' + (blocked ? '1' : '0') + '">' +
+                  (blocked ? 'Blocked by teacher' : (fileId ? 'Loading design...' : 'No design submitted')) +
+                '</div>' +
+                '<div class="mt-2 font-semibold text-sm text-white truncate">' + escapeHtml(studentName(code) || code) + (isMe ? ' (you)' : '') + '</div>' +
+                '<div class="text-xs ' + (isWinner ? 'text-green-300' : 'text-red-300') + '">' + (isWinner ? 'Advances' : 'Eliminated') + '</div>' +
+              '</div>';
+            }).join('') + '</div>' +
+          '</div>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="tsc-reveal-spotlight rounded-xl bg-green-950/40 border border-green-500/40 p-4 mb-4">' +
+        '<div class="text-center mb-4">' +
+          '<div class="text-xs uppercase tracking-wide text-green-300 mb-1">' + winnerLabel + '</div>' +
+          '<div class="text-2xl font-bold text-green-100">' + (isFinalReveal ? 'Final winner' : (roundWinners.length + ' bracket winner' + (roundWinners.length === 1 ? '' : 's'))) + '</div>' +
+        '</div>' +
+        '<div class="tsc-reveal-spotlight-grid">' + roundWinners.map(function(code) {
+          var sub = submissions[code];
+          var blocked = tshirtContestSubmissionBlocked(sub);
+          var fileId = sub && sub.fileId && !blocked ? sub.fileId : '';
+          return '<div class="rounded-xl bg-gray-900 border border-green-500/40 p-3 text-center">' +
+            '<div class="tsc-reveal-img" data-file-id="' + escapeHtml(fileId) + '" data-blocked="' + (blocked ? '1' : '0') + '">' +
+              (blocked ? 'Blocked by teacher' : (fileId ? 'Loading design...' : 'No design submitted')) +
+            '</div>' +
+            '<div class="mt-3 text-lg font-bold text-green-100 truncate">' + escapeHtml(studentName(code) || code) + (code === state.uid ? ' (you)' : '') + '</div>' +
+            '<div class="text-xs text-gray-400">Drawn by ' + escapeHtml(studentName(code) || code) + '</div>' +
+          '</div>';
+        }).join('') + '</div>' +
       '</div>' +
       '<div class="space-y-3">' + brackets.map(function(bracket, idx) {
         var entrants = tshirtContestValues(bracket.entrants);
@@ -1737,7 +1838,7 @@ function renderStudentTshirtRoundResults(qIdx) {
           '</div>' +
         '</div>';
       }).join('') + '</div>';
-    cardEl.querySelectorAll('.tsc-round-winner-img').forEach(function(box) {
+    cardEl.querySelectorAll('.tsc-round-winner-img, .tsc-reveal-img').forEach(function(box) {
       if (box.dataset.blocked === '1') {
         renderStudentTshirtBlockedSquare(box);
         return;
