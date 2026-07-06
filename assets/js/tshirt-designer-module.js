@@ -55,7 +55,6 @@
     document.head.appendChild(s);
   }
 
-  function d2b(n) { return ('0000' + n.toString(2)).slice(-4); }
   function hexToRgb(hex) {
     hex = String(hex).replace('#', '');
     if (hex.length === 3) hex = hex.replace(/(.)/g, '$1$1');
@@ -123,7 +122,7 @@
               '<button id="tsd-bit-bs" class="tsd-bitbtn" style="color:#94a3b8;font-size:0.85rem">&#x232B;</button>' +
             '</div>' +
           '</div>' +
-          '<div><div class="tsd-lbl">Colours (binary index)</div>' +
+          '<div><div class="tsd-lbl">Colour Numbers</div>' +
             '<div id="tsd-palette" style="display:flex;flex-direction:column;gap:1px"></div></div>' +
           '<div class="tsd-card">' +
             '<div class="tsd-lbl">Calculator</div>' +
@@ -193,7 +192,7 @@
         if (lb) lb.textContent = 'No colour selected';
       } else {
         if (sw) { sw.style.background = colors()[colorIdx]; sw.style.border = '2px solid rgba(255,255,255,0.2)'; }
-        if (lb) lb.textContent = d2b(colorIdx) + ' = ' + colorIdx;
+        if (lb) lb.textContent = String(colorIdx);
       }
     }
     function renderPalette() {
@@ -207,7 +206,7 @@
         sw.style.cssText = 'width:20px;height:20px;border-radius:3px;flex-shrink:0;border:1px solid rgba(255,255,255,0.15);background:' + cols[i];
         var lb = document.createElement('span');
         lb.style.cssText = 'font-family:monospace;font-size:0.72rem;color:' + (selRow ? '#93c5fd' : '#64748b');
-        lb.textContent = d2b(i) + ' = ' + i;
+        lb.textContent = String(i);
         row.appendChild(sw); row.appendChild(lb); c.appendChild(row);
       }
     }

@@ -238,6 +238,10 @@ function waitForBlockbenchQuizReady(qIdx, loadKey, attempt) {
       submitBtn.textContent = 'Submit Model';
       submitBtn.onclick = function() { submitStudentBlockbenchShare(qIdx); };
       if (fb) fb.textContent = 'Build your model in Blockbench, then submit it for voting.';
+    } else if (q.type === 'blockbench_contest') {
+      submitBtn.textContent = 'Submit Model';
+      submitBtn.onclick = function() { submitStudentBlockbenchContestModel(qIdx); };
+      if (fb) fb.textContent = 'Build your model in Blockbench, then submit it for the bracket.';
     } else {
       submitBtn.textContent = 'Check & Submit';
       submitBtn.onclick = function() { submitStudentBlockbenchAnswer(qIdx); };

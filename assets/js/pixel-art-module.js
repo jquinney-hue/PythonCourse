@@ -107,7 +107,6 @@
   function getColors() { return getMap().colors; }
   function getCanvas() { return document.getElementById('qs-pa-canvas'); }
   function getCtx()    { var c = getCanvas(); return c ? c.getContext('2d') : null; }
-  function d2b(n)      { return ('0000' + n.toString(2)).slice(-4); }
 
   // ── Canvas rendering ──────────────────────────────────────────────────────
 
@@ -384,7 +383,7 @@
       if (label)  label.textContent = 'No colour selected';
     } else {
       if (swatch) { swatch.style.background = colors[pa.colorIdx]; swatch.style.border = '2px solid rgba(255,255,255,0.2)'; }
-      if (label)  label.textContent = d2b(pa.colorIdx) + ' = ' + pa.colorIdx;
+      if (label)  label.textContent = String(pa.colorIdx);
     }
   }
 
@@ -921,7 +920,7 @@
       if (lb) lb.textContent = 'No colour selected';
     } else {
       if (sw) { sw.style.background = colors[pra.colorIdx]; sw.style.border = '2px solid rgba(255,255,255,0.2)'; }
-      if (lb) lb.textContent = d2b(pra.colorIdx) + ' = ' + pra.colorIdx;
+      if (lb) lb.textContent = String(pra.colorIdx);
     }
   }
 

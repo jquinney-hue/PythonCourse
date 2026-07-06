@@ -344,6 +344,10 @@ function exitStudentQuiz(opts) {
     try { quiz.studentTshirtContestCacheOff(); } catch(e) {}
     quiz.studentTshirtContestCacheOff = null;
   }
+  if (quiz.studentBlockbenchContestCacheOff) {
+    try { quiz.studentBlockbenchContestCacheOff(); } catch(e) {}
+    quiz.studentBlockbenchContestCacheOff = null;
+  }
   if (opts.removePlayer && quiz.sessionRef) {
     quiz.sessionRef.child('players/' + state.uid).remove();
   }

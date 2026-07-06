@@ -237,10 +237,16 @@
               "order": 1
             },
             {
+              "id": "year9-blockbench-bracket-contest",
+              "title": "L2: Blockbench Bracket Contest",
+              "file": "lessons/year9-blockbench-bracket-contest.json",
+              "order": 2
+            },
+            {
               "id": "test-blockbench-quiz",
               "title": "TEST: Blockbench Model Quiz",
               "file": "lessons/test-blockbench-quiz.json",
-              "order": 2
+              "order": 3
             }
           ]
         }
