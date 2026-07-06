@@ -76,12 +76,12 @@
     var TEMPLATE_MAX_HEIGHT = Math.max(80, Number(options.templateMaxHeight) || 0);
     var TEMPLATE_OFFSET_X = options.templateOffsetX;
     var TEMPLATE_OFFSET_Y = options.templateOffsetY;
-    var UNDO_MAX = 12;
+    var UNDO_MAX = Math.max(1, Math.min(12, Number(options.undoMax) || 8));
 
     // ── State ──────────────────────────────────────────────────
     var W = 0, H = 0;
     var display, dctx, strokes, sctx, tcanvas, maskAlpha = null, img = new Image();
-    var tool = 'brush', size = 16, painting = false, last = null, lineStart = null, undoStack = [];
+    var tool = 'brush', size = 16, painting = false, last = null, lineStart = null, undoStack = [], hasDrawn = false;
     var mapId = (MAPS()[0] || {}).id, colorIdx = -1, buffer = '', timerEnd = 0, timerRaf = null, calcExpr = '';
 
     function G(id) { return el.querySelector('#' + id); }
@@ -288,6 +288,10 @@
         drawW = W;
         drawH = H;
       }
+      if (!options.undoMax) {
+        var pixels = W * H;
+        UNDO_MAX = pixels > 750000 ? 4 : pixels > 450000 ? 6 : 8;
+      }
       display.width = W; display.height = H;
       strokes = document.createElement('canvas'); strokes.width = W; strokes.height = H; sctx = strokes.getContext('2d');
       tcanvas = document.createElement('canvas'); tcanvas.width = W; tcanvas.height = H;
@@ -323,8 +327,29 @@
       if (lineStart) { dctx.fillStyle = 'rgba(59,130,246,0.9)'; dctx.beginPath(); dctx.arc(lineStart.x, lineStart.y, Math.max(4, size / 2), 0, Math.PI * 2); dctx.fill(); }
     }
 
-    function pushUndo() { try { undoStack.push(sctx.getImageData(0, 0, W, H)); if (undoStack.length > UNDO_MAX) undoStack.shift(); } catch (e) {} }
-    function undo() { if (undoStack.length) { sctx.putImageData(undoStack.pop(), 0, 0); render(); } }
+    function releaseCanvas(c) { if (c) { try { c.width = 0; c.height = 0; } catch (_e) {} } }
+    function clearUndoStack() {
+      while (undoStack.length) releaseCanvas(undoStack.pop());
+    }
+    function pushUndo() {
+      try {
+        var snap = document.createElement('canvas');
+        snap.width = W; snap.height = H;
+        snap.getContext('2d').drawImage(strokes, 0, 0);
+        snap._tsdHasDrawn = hasDrawn;
+        undoStack.push(snap);
+        while (undoStack.length > UNDO_MAX) releaseCanvas(undoStack.shift());
+      } catch (e) {}
+    }
+    function undo() {
+      if (!undoStack.length) return;
+      var snap = undoStack.pop();
+      sctx.clearRect(0, 0, W, H);
+      try { sctx.drawImage(snap, 0, 0); } catch (_e) {}
+      hasDrawn = !!snap._tsdHasDrawn;
+      releaseCanvas(snap);
+      render();
+    }
 
     function drawSegment(a, b, erase) {
       sctx.save();
@@ -334,6 +359,7 @@
       sctx.beginPath(); sctx.moveTo(a.x, a.y); sctx.lineTo(b.x, b.y); sctx.stroke();
       if (DRAW_OUTSIDE_MASK) { sctx.globalCompositeOperation = 'destination-out'; sctx.drawImage(tcanvas, 0, 0); }
       sctx.restore();
+      if (!erase) hasDrawn = true;
     }
 
     function floodFill(px, py, hex) {
@@ -344,20 +370,30 @@
       if (ta === 255 && Math.abs(tr - fc.r) < 4 && Math.abs(tg - fc.g) < 4 && Math.abs(tb - fc.b) < 4) return;
       var TOL = 42;
       function match(i) { var a = d[i + 3]; if (ta < 24) return a < 24; return a >= 24 && Math.abs(d[i] - tr) <= TOL && Math.abs(d[i + 1] - tg) <= TOL && Math.abs(d[i + 2] - tb) <= TOL; }
-      var stack = [[x, y]];
-      while (stack.length) {
-        var pt = stack.pop(), cx = pt[0], cy = pt[1];
-        if (!canDrawAt(cx, cy) || !match((cy * W + cx) * 4)) continue;
-        var lx = cx, rx = cx;
-        while (lx - 1 >= 0 && canDrawAt(lx - 1, cy) && match((cy * W + (lx - 1)) * 4)) lx--;
-        while (rx + 1 < W && canDrawAt(rx + 1, cy) && match((cy * W + (rx + 1)) * 4)) rx++;
-        for (var xx = lx; xx <= rx; xx++) {
-          var j = (cy * W + xx) * 4; d[j] = fc.r; d[j + 1] = fc.g; d[j + 2] = fc.b; d[j + 3] = 255;
-          if (cy > 0 && canDrawAt(xx, cy - 1) && match(((cy - 1) * W + xx) * 4)) stack.push([xx, cy - 1]);
-          if (cy < H - 1 && canDrawAt(xx, cy + 1) && match(((cy + 1) * W + xx) * 4)) stack.push([xx, cy + 1]);
-        }
+      var total = W * H;
+      var stack = new Int32Array(total);
+      var visited = new Uint8Array(total);
+      var top = 0;
+      var start = y * W + x;
+      stack[0] = start; visited[start] = 1;
+      function enqueue(nx, ny) {
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || !canDrawAt(nx, ny)) return;
+        var idx = ny * W + nx;
+        if (visited[idx] || !match(idx * 4)) return;
+        visited[idx] = 1;
+        stack[++top] = idx;
+      }
+      while (top >= 0) {
+        var idx = stack[top--], cx = idx % W, cy = (idx / W) | 0, j = idx * 4;
+        if (!match(j)) continue;
+        d[j] = fc.r; d[j + 1] = fc.g; d[j + 2] = fc.b; d[j + 3] = 255;
+        enqueue(cx - 1, cy);
+        enqueue(cx + 1, cy);
+        enqueue(cx, cy - 1);
+        enqueue(cx, cy + 1);
       }
       sctx.putImageData(image, 0, 0);
+      hasDrawn = true;
     }
 
     function pos(e) { var r = display.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; }
@@ -398,7 +434,7 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-tool]'), function (b) { b.addEventListener('click', function () { setTool(b.dataset.tool); }); });
     G('tsd-size').addEventListener('input', function (e) { size = +e.target.value; });
     G('tsd-undo').addEventListener('click', undo);
-    G('tsd-clear').addEventListener('click', function () { if (!W) return; pushUndo(); sctx.clearRect(0, 0, W, H); lineStart = null; render(); });
+    G('tsd-clear').addEventListener('click', function () { if (!W) return; pushUndo(); sctx.clearRect(0, 0, W, H); lineStart = null; hasDrawn = false; render(); });
     G('tsd-bit-0').onclick = function () { pushBit('0'); };
     G('tsd-bit-1').onclick = function () { pushBit('1'); };
     G('tsd-bit-bs').onclick = function () { buffer = buffer.slice(0, -1); renderBinary(); };
@@ -413,11 +449,18 @@
       toDataURL: function (type) { return W ? display.toDataURL(type || 'image/png') : null; },
       toBlob: function (cb, type) { if (W) display.toBlob(cb, type || 'image/png'); else cb(null); },
       isEmpty: function () {
-        if (!W) return true;
-        try { var d = sctx.getImageData(0, 0, W, H).data; for (var i = 3; i < d.length; i += 4) if (d[i] > 8) return false; return true; } catch (e) { return false; }
+        return !W || !hasDrawn;
       },
-      clear: function () { if (W) { pushUndo(); sctx.clearRect(0, 0, W, H); render(); } },
-      destroy: function () { stopTimer(); document.removeEventListener('keydown', keyHandler); }
+      clear: function () { if (W) { pushUndo(); sctx.clearRect(0, 0, W, H); hasDrawn = false; render(); } },
+      destroy: function () {
+        stopTimer();
+        document.removeEventListener('keydown', keyHandler);
+        clearUndoStack();
+        painting = false; last = null; lineStart = null; maskAlpha = null;
+        try { if (img) { img.onload = null; img.onerror = null; img.src = ''; } } catch (_e2) {}
+        releaseCanvas(strokes); releaseCanvas(tcanvas); releaseCanvas(display);
+        if (el._tshirt === api) el._tshirt = null;
+      }
     };
     el._tshirt = api;
     return api;

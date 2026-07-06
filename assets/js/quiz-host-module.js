@@ -1931,18 +1931,19 @@ async function startTshirtDrawingRound(roundIndex, participants, rankings, cfg) 
   var bracketObj = {};
   brackets.forEach(function(bracket) { bracketObj[bracket.id] = bracket; });
   var now = Date.now();
-  await quiz.sessionRef.child('tshirtContest/rounds/' + roundIndex).set({
+  var updates = {
+    state: 'tshirt_draw',
+    questionStart: now,
+    questionDuration: cfg.drawSeconds || 180
+  };
+  updates['tshirtContest/rounds/' + roundIndex] = {
     index: roundIndex,
     topic: topic,
     startedAt: now,
     brackets: bracketObj
-  });
-  await quiz.sessionRef.update({
-    state: 'tshirt_draw',
-    questionStart: now,
-    questionDuration: cfg.drawSeconds || 180
-  });
-  await quiz.sessionRef.child('tshirtContest/roundIndex').set(roundIndex);
+  };
+  updates['tshirtContest/roundIndex'] = roundIndex;
+  await quiz.sessionRef.update(updates);
 }
 
 async function startTshirtBracketVoteOrResolve(cfg) {
@@ -2528,18 +2529,19 @@ async function startBlockbenchDrawingRound(roundIndex, participants, rankings, c
   var bracketObj = {};
   brackets.forEach(function(bracket) { bracketObj[bracket.id] = bracket; });
   var now = Date.now();
-  await quiz.sessionRef.child('blockbenchContest/rounds/' + roundIndex).set({
+  var updates = {
+    state: 'blockbench_draw',
+    questionStart: now,
+    questionDuration: cfg.drawSeconds || 180
+  };
+  updates['blockbenchContest/rounds/' + roundIndex] = {
     index: roundIndex,
     topic: topic,
     startedAt: now,
     brackets: bracketObj
-  });
-  await quiz.sessionRef.update({
-    state: 'blockbench_draw',
-    questionStart: now,
-    questionDuration: cfg.drawSeconds || 180
-  });
-  await quiz.sessionRef.child('blockbenchContest/roundIndex').set(roundIndex);
+  };
+  updates['blockbenchContest/roundIndex'] = roundIndex;
+  await quiz.sessionRef.update(updates);
 }
 
 async function startBlockbenchBracketVoteOrResolve(cfg) {

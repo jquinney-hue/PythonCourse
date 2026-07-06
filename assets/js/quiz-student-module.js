@@ -1106,6 +1106,15 @@ function isCurrentStudentTshirtContestRender(renderToken, mount) {
   return quiz._tshirtContestRenderToken === renderToken && (!mount || document.body.contains(mount));
 }
 
+function nextStudentBlockbenchContestRenderToken() {
+  quiz._blockbenchContestRenderToken = (quiz._blockbenchContestRenderToken || 0) + 1;
+  return quiz._blockbenchContestRenderToken;
+}
+
+function isCurrentStudentBlockbenchContestRender(renderToken) {
+  return quiz._blockbenchContestRenderToken === renderToken;
+}
+
 function isBlockbenchContestState(stateVal) {
   return [
     'blockbench_topics',
@@ -1470,23 +1479,77 @@ function renderStudentTshirtTopicVote(qIdx, questionStart, duration) {
   });
 }
 
+function studentContestRoundInfo(contest, questionStart) {
+  contest = contest || {};
+  var rawRoundIndex = contest.roundIndex;
+  var roundIndex = rawRoundIndex === undefined || rawRoundIndex === null ? 0 : Number(rawRoundIndex);
+  if (!isFinite(roundIndex) || roundIndex < 0) {
+    return { ready: false, roundIndex: 0, round: null, brackets: [] };
+  }
+  roundIndex = Math.floor(roundIndex);
+  var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : null;
+  var brackets = tshirtContestValues(round && round.brackets);
+  var startedAt = Number(round && round.startedAt);
+  var expectedStart = Number(questionStart) || 0;
+  var startMatches = !round || !startedAt || !expectedStart || startedAt === expectedStart;
+  return {
+    ready: !!round && startMatches && brackets.length > 0,
+    roundIndex: roundIndex,
+    round: round,
+    brackets: brackets
+  };
+}
+
+function studentContestKeyMatches(stateVal, qIdx, questionStart) {
+  var prefix = [stateVal, qIdx, questionStart].join(':') + ':';
+  return String(quiz.currentStudentContestKey || '').indexOf(prefix) === 0;
+}
+
+function showStudentTshirtDrawLoading(message) {
+  setStudentQuestionWorkMode('tshirt');
+  document.getElementById('qs-tshirt-answer').classList.remove('hidden');
+  document.getElementById('qs-q-text').textContent = 'Loading drawing round...';
+  var container = document.getElementById('qs-tshirt-canvas');
+  var btn = document.getElementById('btn-tshirt-submit');
+  var fb = document.getElementById('tshirt-feedback');
+  destroyStudentTshirtContestDesigner(false);
+  if (container) {
+    container.innerHTML =
+      '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-8 text-center text-gray-300">' +
+        escapeHtml(message || 'Loading your bracket...') +
+      '</div>';
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; btn.onclick = null; }
+  if (fb) { fb.textContent = 'Waiting for the round details.'; fb.style.color = '#94a3b8'; }
+}
+
+function retryStudentTshirtDraw(qIdx, questionStart, duration, renderToken) {
+  setTimeout(function() {
+    if (!isCurrentStudentTshirtContestRender(renderToken)) return;
+    if (!studentContestKeyMatches('tshirt_draw', qIdx, questionStart)) return;
+    renderStudentTshirtDraw(qIdx, questionStart, duration);
+  }, 500);
+}
+
 function renderStudentTshirtDraw(qIdx, questionStart, duration) {
   var renderToken = nextStudentTshirtContestRenderToken();
   var drawItem = studentTshirtContestItemForQuestion(qIdx);
   setupStudentTshirtContestQuestion('Draw your ' + drawItem.itemDesignLabel + '.', 'Drawing round', questionStart, duration);
   setStudentQuestionWorkMode('tshirt');
-  Promise.all([
-    quiz.sessionRef.child('tshirtContest/roundIndex').get(),
-    quiz.sessionRef.child('tshirtContest').get()
-  ]).then(function(snaps) {
+  quiz.sessionRef.child('tshirtContest').get().then(function(snap) {
     if (!isCurrentStudentTshirtContestRender(renderToken)) return;
-    var roundIndex = Number(snaps[0].val()) || 0;
-    var contest = snaps[1].val() || {};
+    var contest = snap.val() || {};
     var item = studentTshirtContestItemForQuestion(qIdx, contest);
-    var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
-    var brackets = tshirtContestValues(round.brackets);
+    var roundInfo = studentContestRoundInfo(contest, questionStart);
+    if (!roundInfo.ready) {
+      showStudentTshirtDrawLoading('Loading your bracket...');
+      retryStudentTshirtDraw(qIdx, questionStart, duration, renderToken);
+      return;
+    }
+    var roundIndex = roundInfo.roundIndex;
+    var round = roundInfo.round;
     var myBracket = null;
-    brackets.forEach(function(b) {
+    roundInfo.brackets.forEach(function(b) {
       if (tshirtContestValues(b.entrants).indexOf(state.uid) !== -1) myBracket = b;
     });
     var already = contest.submissions && contest.submissions[roundIndex] && contest.submissions[roundIndex][state.uid];
@@ -1518,6 +1581,12 @@ function renderStudentTshirtDraw(qIdx, questionStart, duration) {
       btn.onclick = function() { submitStudentTshirtContestDesign(roundIndex, btn, fb, item); };
     }
     if (fb) { fb.textContent = ''; fb.style.color = '#94a3b8'; }
+  }).catch(function(e) {
+    if (!isCurrentStudentTshirtContestRender(renderToken)) return;
+    showStudentTshirtDrawLoading('Could not load your bracket yet.');
+    var fb = document.getElementById('tshirt-feedback');
+    if (fb) { fb.textContent = e.message || 'Could not load the drawing round.'; fb.style.color = '#f87171'; }
+    retryStudentTshirtDraw(qIdx, questionStart, duration, renderToken);
   });
 }
 
@@ -1713,6 +1782,7 @@ async function submitStudentTshirtCharacterDrawing(roundIndex, choice, submitBtn
     });
     fb('Character submitted for the end showcase.', '#4ade80');
     submitBtn.textContent = 'Submitted';
+    if (inst.destroy) inst.destroy();
   } catch(e3) {
     fb(e3.message, '#f87171');
     submitBtn.disabled = false;
@@ -2212,18 +2282,46 @@ function renderStudentBlockbenchTopicVote(qIdx, questionStart, duration) {
   });
 }
 
+function showStudentBlockbenchDrawLoading(message) {
+  setStudentQuestionWorkMode(null);
+  resetBlockbenchQuizFrame();
+  var blockbenchWrap = document.getElementById('qs-blockbench-answer');
+  if (blockbenchWrap) blockbenchWrap.classList.add('hidden');
+  var waitWrap = document.getElementById('qs-widget-answer');
+  var waitBox = document.getElementById('qs-widget-container');
+  if (waitWrap) waitWrap.classList.remove('hidden');
+  if (waitBox) {
+    waitBox.innerHTML =
+      '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-8 text-center text-gray-300">' +
+        escapeHtml(message || 'Loading your modelling bracket...') +
+      '</div>';
+  }
+}
+
+function retryStudentBlockbenchDraw(qIdx, questionStart, duration, renderToken) {
+  setTimeout(function() {
+    if (!isCurrentStudentBlockbenchContestRender(renderToken)) return;
+    if (!studentContestKeyMatches('blockbench_draw', qIdx, questionStart)) return;
+    renderStudentBlockbenchDraw(qIdx, questionStart, duration);
+  }, 500);
+}
+
 function renderStudentBlockbenchDraw(qIdx, questionStart, duration) {
+  var renderToken = nextStudentBlockbenchContestRenderToken();
   setupStudentTshirtContestQuestion('Build your Blockbench model.', 'Modelling round', questionStart, duration);
-  Promise.all([
-    quiz.sessionRef.child('blockbenchContest/roundIndex').get(),
-    quiz.sessionRef.child('blockbenchContest').get()
-  ]).then(function(snaps) {
-    var roundIndex = Number(snaps[0].val()) || 0;
-    var contest = snaps[1].val() || {};
-    var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
-    var brackets = tshirtContestValues(round.brackets);
+  quiz.sessionRef.child('blockbenchContest').get().then(function(snap) {
+    if (!isCurrentStudentBlockbenchContestRender(renderToken)) return;
+    var contest = snap.val() || {};
+    var roundInfo = studentContestRoundInfo(contest, questionStart);
+    if (!roundInfo.ready) {
+      showStudentBlockbenchDrawLoading('Loading your modelling bracket...');
+      retryStudentBlockbenchDraw(qIdx, questionStart, duration, renderToken);
+      return;
+    }
+    var roundIndex = roundInfo.roundIndex;
+    var round = roundInfo.round;
     var myBracket = null;
-    brackets.forEach(function(b) {
+    roundInfo.brackets.forEach(function(b) {
       if (tshirtContestValues(b.entrants).indexOf(state.uid) !== -1) myBracket = b;
     });
     var already = contest.submissions && contest.submissions[roundIndex] && contest.submissions[roundIndex][state.uid];
@@ -2267,6 +2365,17 @@ function renderStudentBlockbenchDraw(qIdx, questionStart, duration) {
     if (window._qsBlockbenchResize) window.removeEventListener('resize', window._qsBlockbenchResize);
     window._qsBlockbenchResize = scaleBlockbenchQuizFrame;
     window.addEventListener('resize', window._qsBlockbenchResize);
+  }).catch(function(e) {
+    if (!isCurrentStudentBlockbenchContestRender(renderToken)) return;
+    showStudentBlockbenchDrawLoading('Could not load your modelling bracket yet.');
+    var waitBox = document.getElementById('qs-widget-container');
+    if (waitBox) {
+      waitBox.innerHTML =
+        '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-8 text-center text-red-300">' +
+          escapeHtml(e.message || 'Could not load the modelling round.') +
+        '</div>';
+    }
+    retryStudentBlockbenchDraw(qIdx, questionStart, duration, renderToken);
   });
 }
 
