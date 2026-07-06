@@ -1447,7 +1447,7 @@ function renderStudentTshirtDraw(qIdx, questionStart, duration) {
       waitBox.innerHTML =
         '<div class="text-center text-gray-300">' +
           '<div class="text-xl font-bold text-yellow-300 mb-2">' + escapeHtml(round.topic || 'Computing') + '</div>' +
-          '<p>You are not drawing in this round. You will vote when submissions are ready.</p>' +
+          '<p>You are not drawing this round — sit tight, then you will help judge the designs when voting opens.</p>' +
         '</div>';
       return;
     }
@@ -1536,9 +1536,9 @@ function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
   var h2 = voting.querySelector('h2');
   var p = voting.querySelector('p');
   if (h2) h2.textContent = 'Choose the best design';
-  if (p) p.textContent = 'You do not vote on your own bracket.';
+  if (p) p.textContent = 'Pick the winner of every mini competition. You cannot vote in one you are competing in.';
   var cardEl = document.getElementById('qs-voting-card');
-  cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading brackets...</p>';
+  cardEl.innerHTML = '<p class="text-gray-400 text-sm text-center">Loading designs...</p>';
   quiz.sessionRef.child('tshirtContest').get().then(async function(snap) {
     var contest = snap.val() || {};
     var item = studentTshirtContestItemForQuestion(qIdx, contest);
@@ -1546,24 +1546,25 @@ function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
     var roundIndex = Number(contest.roundIndex) || 0;
     var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
     var submissions = contest.submissions && contest.submissions[roundIndex] ? contest.submissions[roundIndex] : {};
-    var myVotes = contest.bracketVotes && contest.bracketVotes[roundIndex] && contest.bracketVotes[roundIndex][state.uid] ? contest.bracketVotes[roundIndex][state.uid] : {};
-    var brackets = tshirtContestValues(round.brackets).filter(function(bracket) {
+    var myVotes = (contest.bracketVotes && contest.bracketVotes[roundIndex] && contest.bracketVotes[roundIndex][state.uid]) || {};
+    // Every mini competition (1v1 or 1v1v1) the student is NOT competing in, with
+    // 2+ real designs to compare. Blocked designs are dropped from the contest.
+    var voteable = tshirtContestValues(round.brackets).filter(function(bracket) {
       return tshirtContestValues(bracket.entrants).indexOf(state.uid) === -1;
-    });
-    var voteable = brackets.map(function(bracket) {
+    }).map(function(bracket) {
       var entries = tshirtContestValues(bracket.entrants).filter(function(code) {
-        return submissions[code] && submissions[code].fileId;
+        return submissions[code] && submissions[code].fileId && !tshirtContestSubmissionBlocked(submissions[code]);
       }).map(function(code) {
-        return { code: code, fileId: submissions[code].fileId, blocked: tshirtContestSubmissionBlocked(submissions[code]) };
+        return { code: code, fileId: submissions[code].fileId };
       });
       return { bracket: bracket, entries: entries };
-    }).filter(function(item) {
-      return item.entries.filter(function(entry) { return !entry.blocked; }).length >= 2;
-    });
+    }).filter(function(v) { return v.entries.length >= 2; });
+
     if (!voteable.length) {
-      cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">No brackets for you to vote on this round. Waiting for results...</p>';
+      cardEl.innerHTML = '<p class="text-green-400 font-semibold text-center">No competitions for you to judge this round. Sit tight — results are on the way.</p>';
       return;
     }
+
     var token;
     try {
       token = await window.driveEnsureStudentToken(cardEl);
@@ -1571,29 +1572,44 @@ function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
       cardEl.innerHTML = '<p class="text-red-400 text-sm text-center">Google Drive access is needed to view designs.</p>';
       return;
     }
-    cardEl.innerHTML = '<div class="space-y-4">' + voteable.map(function(item, idx) {
-      return '<div class="tsc-bracket-card rounded-xl bg-gray-800 border border-gray-700 overflow-hidden" data-bracket-id="' + escapeHtml(item.bracket.id) + '">' +
-        '<div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">' +
-          '<span class="font-bold text-white">Bracket ' + (idx + 1) + '</span>' +
-          '<span class="text-xs text-gray-400">' + escapeHtml(round.topic || 'Computing') + '</span>' +
-        '</div>' +
-        '<div class="grid gap-3 p-3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">' +
-          item.entries.map(function(entry) {
-            var selected = !entry.blocked && myVotes[item.bracket.id] === entry.code;
-            return '<button data-tshirt-live="1" class="tsc-shirt-choice rounded-lg border ' + (selected ? 'border-yellow-400 bg-yellow-900/30' : 'border-gray-700 bg-gray-900') + ' p-2 text-left ' + (entry.blocked ? 'opacity-80 cursor-not-allowed' : 'hover:border-yellow-300') + '" data-bracket-id="' + escapeHtml(item.bracket.id) + '" data-code="' + escapeHtml(entry.code) + '" data-file-id="' + escapeHtml(entry.fileId) + '" data-blocked="' + (entry.blocked ? '1' : '0') + '"' + (entry.blocked ? ' disabled' : '') + '>' +
-              '<div class="tsc-shirt-img rounded bg-gray-700 mb-2 flex items-center justify-center text-xs text-gray-400" style="aspect-ratio:1">' + (entry.blocked ? 'Blocked by teacher' : 'Loading...') + '</div>' +
-              '<div class="font-semibold text-sm text-white truncate">' + escapeHtml(studentName(entry.code) || entry.code) + '</div>' +
-            '</button>';
-          }).join('') +
-        '</div>' +
-      '</div>';
-    }).join('') + '</div>';
+
+    var total = voteable.length;
+    function updateProgress() {
+      var voted = voteable.filter(function(v) { return !!myVotes[v.bracket.id]; }).length;
+      var pr = document.getElementById('tsc-vote-progress');
+      if (!pr) return;
+      pr.textContent = voted >= total
+        ? '✓ All done — you voted in all ' + total + ' competition' + (total === 1 ? '' : 's') + '. Waiting for the round to end…'
+        : 'Voted in ' + voted + ' of ' + total + ' competition' + (total === 1 ? '' : 's');
+    }
+
+    // Render ONCE. Voting updates the selection in place — the view is never
+    // rebuilt, so the design images never reload.
+    cardEl.innerHTML =
+      '<div id="tsc-vote-progress" class="text-center text-sm font-semibold text-yellow-300 mb-3"></div>' +
+      '<div class="space-y-4">' + voteable.map(function(v, idx) {
+        var voted = !!myVotes[v.bracket.id];
+        return '<div class="tsc-bracket-card rounded-xl bg-gray-800 border border-gray-700 overflow-hidden" data-bracket-id="' + escapeHtml(v.bracket.id) + '">' +
+          '<div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">' +
+            '<span class="font-bold text-white">Competition ' + (idx + 1) + ' of ' + total + '</span>' +
+            '<span class="tsc-bracket-status text-xs ' + (voted ? 'text-green-400 font-semibold' : 'text-gray-400') + '">' + (voted ? '✓ Voted' : 'Tap a design to vote') + '</span>' +
+          '</div>' +
+          '<div class="grid gap-3 p-3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">' +
+            v.entries.map(function(entry) {
+              var selected = myVotes[v.bracket.id] === entry.code;
+              return '<button data-tshirt-live="1" class="tsc-shirt-choice rounded-lg border ' + (selected ? 'border-yellow-400 bg-yellow-900/30' : 'border-gray-700 bg-gray-900 hover:border-yellow-300') + ' p-2 text-left" data-bracket-id="' + escapeHtml(v.bracket.id) + '" data-code="' + escapeHtml(entry.code) + '" data-file-id="' + escapeHtml(entry.fileId) + '">' +
+                '<div class="tsc-shirt-img rounded bg-gray-700 mb-2 flex items-center justify-center text-xs text-gray-400" style="aspect-ratio:1">Loading…</div>' +
+                '<div class="font-semibold text-sm text-white truncate">' + escapeHtml(studentName(entry.code) || entry.code) + '</div>' +
+              '</button>';
+            }).join('') +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    updateProgress();
+
     cardEl.querySelectorAll('.tsc-shirt-choice').forEach(function(btn) {
+      // Fetch each design once.
       var imgBox = btn.querySelector('.tsc-shirt-img');
-      if (btn.dataset.blocked === '1') {
-        renderStudentTshirtBlockedSquare(imgBox);
-        return;
-      }
       window.driveFetchFileAsDataUrl(btn.dataset.fileId, token).then(function(dataUrl) {
         imgBox.innerHTML = '';
         var img = document.createElement('img');
@@ -1601,13 +1617,25 @@ function renderStudentTshirtBracketVote(qIdx, questionStart, duration) {
         img.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#334155;border-radius:6px';
         imgBox.appendChild(img);
       }).catch(function() { imgBox.textContent = 'Could not load'; });
+
       btn.onclick = function() {
-        if (btn.dataset.blocked === '1') return;
         var bracketId = btn.dataset.bracketId;
         var code = btn.dataset.code;
-        quiz.sessionRef.child('tshirtContest/bracketVotes/' + roundIndex + '/' + state.uid + '/' + bracketId).set(code).then(function() {
-          renderStudentTshirtBracketVote(qIdx, questionStart, duration);
-        }).catch(function(e) {
+        if (myVotes[bracketId] === code) return;
+        var card = btn.closest('.tsc-bracket-card');
+        if (card) {
+          card.querySelectorAll('.tsc-shirt-choice').forEach(function(other) {
+            other.classList.remove('border-yellow-400', 'bg-yellow-900/30');
+            other.classList.add('border-gray-700', 'bg-gray-900');
+          });
+          btn.classList.remove('border-gray-700', 'bg-gray-900');
+          btn.classList.add('border-yellow-400', 'bg-yellow-900/30');
+          var st = card.querySelector('.tsc-bracket-status');
+          if (st) { st.textContent = '✓ Voted'; st.className = 'tsc-bracket-status text-xs text-green-400 font-semibold'; }
+        }
+        myVotes[bracketId] = code;
+        updateProgress();
+        quiz.sessionRef.child('tshirtContest/bracketVotes/' + roundIndex + '/' + state.uid + '/' + bracketId).set(code).catch(function(e) {
           console.warn('[T-shirt contest] bracket vote failed:', e.message);
         });
       };
