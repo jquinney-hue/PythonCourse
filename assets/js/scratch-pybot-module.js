@@ -578,11 +578,9 @@ function renderBlockbenchModelViewer(container, projectText, options) {
   }
   function fallback(message) {
     cleanup();
-    try {
-      renderBlockbenchSnapshotPreview(container, JSON.parse(projectText));
-    } catch(e) {
-      container.innerHTML = '<p style="color:#f87171;font-size:0.85rem;text-align:center;padding:1rem">Could not load model: ' + escapeHtml(message || e.message || e) + '</p>';
-    }
+    // Do NOT fall back to the 2D canvas snapshot — it never rendered these models
+    // correctly ("No cubes found in this model"). Show a clear error instead.
+    container.innerHTML = '<p style="color:#f87171;font-size:0.85rem;text-align:center;padding:1rem">Could not load model: ' + escapeHtml(message || 'viewer error') + '</p>';
   }
   function sendLoad() {
     if (done || !frame.contentWindow) return;

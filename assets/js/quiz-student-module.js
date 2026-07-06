@@ -2487,12 +2487,9 @@ async function submitStudentBlockbenchContestModel(qIdx) {
 
 function renderBlockbenchContestPreview(container, projectText) {
   if (!container) return;
-  try {
-    if (typeof renderBlockbenchSnapshotPreview === 'function') {
-      renderBlockbenchSnapshotPreview(container, JSON.parse(projectText));
-      return;
-    }
-  } catch(e) {}
+  // Always render with the real Blockbench viewer (the same one the end-of-contest
+  // leaderboard uses). The lightweight 2D canvas snapshot never rendered these models
+  // correctly — it produced "No cubes found in this model" — so it is not used here.
   if (typeof renderBlockbenchModelViewer === 'function') {
     renderBlockbenchModelViewer(container, projectText, { height: 260, spin: true });
   } else {
