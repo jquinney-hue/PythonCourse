@@ -151,6 +151,8 @@
   //   starter  {string|null}  Pre-fill editor when this step loads (null = keep current)
   //   target   {string|null}  Code shown as a hint block
   //   requires {string[]} All must appear in editor before Next unlocks ([] = always unlocked)
+  //   category {string?}  Tutorial picker category; falls back to TUTORIAL_CATEGORY_BY_ID
+  //   isNew    {bool?}    Show a yellow NEW badge for newly-added tutorials
   var TUTORIALS = [
     {
       id: 'if-statements',
@@ -3563,12 +3565,24 @@
       '.ps-thead{padding:12px 16px;border-bottom:1px solid var(--ps-border-strong,#3f3f5a);display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px;flex-shrink:0}',
       '.ps-thead button{background:none;border:none;color:var(--ps-muted,#888);font-size:22px;cursor:pointer;line-height:1}',
       '.ps-thead button:hover{color:var(--ps-text-strong,#ccc)}',
-      '.ps-tgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;overflow-y:auto}',
+      '.ps-tcontent{flex:1;min-height:0;overflow-y:auto;padding:14px 16px}',
+      '.ps-tpanel{display:flex;flex-direction:column;gap:12px}',
+      '.ps-tpanel.ps-tpanel-hidden{display:none}',
+      '.ps-tgrid,.ps-tcat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}',
+      '.ps-tcat{background:var(--ps-panel-3,#252538);border:1px solid var(--ps-border-strong,#3f3f5a);border-radius:8px;overflow:hidden}',
+      '.ps-tcat-summary{list-style:none;display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;color:var(--ps-text-strong,#fff);font-size:13px;font-weight:700}',
+      '.ps-tcat-summary::-webkit-details-marker{display:none}',
+      '.ps-tcat-summary:hover{background:var(--ps-panel-hover,#2d2d48)}',
+      '.ps-tcat-chevron{font-size:12px;color:var(--ps-accent-bright,#a87fff);transition:transform .12s;transform:rotate(0deg)}',
+      '.ps-tcat[open] .ps-tcat-chevron{transform:rotate(90deg)}',
+      '.ps-tcat-count{margin-left:auto;color:var(--ps-muted,#9090b0);font-size:11px;font-weight:600}',
+      '.ps-tcat-grid{padding:12px;border-top:1px solid var(--ps-border-strong,#3f3f5a)}',
       '.ps-tcard{background:var(--ps-panel-2,#18182a);border:1px solid var(--ps-border-strong,#3f3f5a);border-radius:8px;padding:14px 16px;cursor:default;transition:border-color .12s}',
       '.ps-tcard:hover{border-color:var(--ps-accent,#7c5fcf)}',
       '.ps-tcard-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}',
       '.ps-tcard-emoji{font-size:22px;line-height:1}',
-      '.ps-tcard-title{font-size:13px;font-weight:700;color:var(--ps-text-strong,#fff)}',
+      '.ps-tcard-title{font-size:13px;font-weight:700;color:var(--ps-text-strong,#fff);min-width:0;overflow:hidden;text-overflow:ellipsis}',
+      '.ps-tcard-new{margin-left:auto;background:#fbbf24;color:#1f1300;border:1px solid #fde68a;border-radius:999px;padding:2px 6px;font-size:9px;font-weight:900;letter-spacing:.05em;line-height:1;box-shadow:0 0 0 1px rgba(0,0,0,.18)}',
       '.ps-tcard-desc{font-size:12px;color:var(--ps-muted,#9090b0);line-height:1.5;margin-bottom:10px}',
       '.ps-tcard-foot{display:flex;gap:6px;align-items:center}',
       '.ps-tcard-start{flex:1;background:var(--ps-accent,#7c5fcf);border:none;color:#fff;cursor:pointer;padding:6px 0;border-radius:5px;font-size:12px;font-weight:600;font-family:inherit;transition:opacity .1s}',
@@ -4109,32 +4123,111 @@
   }
 
   // ── Tutorial pick modal ───────────────────────────────────────
-  // Tutorials categorised as games (the rest are Concepts)
+  // Tutorial categories are display-only: keep the TUTORIALS array order stable
+  // so existing saved progress keys still point at the same tutorial indexes.
   var _GAME_TITLES = {
     'Flappy Bird':1,'Doodle Jump':1,'Duck Hunt':1,'RPG Survivor':1,
     'Apple Catcher':1,'Whack-a-Mole':1,'Space Shooter':1,'Pong':1,'Breakout':1
   };
 
-  function buildTutorialHTML() {
-    var tutCards = TUTORIALS.map(function (t, i) {
-      var cat = (_GAME_TITLES[t.title] || t.cat === 'game') ? 'game' : 'concept';
-      return '<div class="ps-tcard" data-idx="' + i + '" data-cat="' + cat + '">' +
-        '<div class="ps-tcard-top">' +
-          '<span class="ps-tcard-emoji">' + t.emoji + '</span>' +
-          '<span class="ps-tcard-title">' + t.title + '</span>' +
-        '</div>' +
-        '<div class="ps-tcard-desc">' + t.desc + '</div>' +
-        '<div class="ps-tcard-foot">' +
-          '<button class="ps-tcard-start" data-idx="' + i + '">▶ Start (' + t.steps.length + ' steps)</button>' +
-          '<button class="ps-tcard-reset" data-idx="' + i + '" title="Clear saved progress" style="display:none">↺ Reset</button>' +
-        '</div>' +
-      '</div>';
-    }).join('');
+  var TUTORIAL_CATEGORY_BY_ID = {
+    'if-statements': 'Python Basics',
+    'for-loops': 'Python Basics',
+    'while-loops': 'Python Basics',
+    'left-right-movement': 'Movement & Animation',
+    'costume-animation': 'Movement & Animation',
+    'gravity': 'Movement & Animation',
+    'bouncing-ball': 'Movement & Animation',
+    'functions': 'Code Organisation',
+    'lists': 'Code Organisation',
+    'messages': 'Code Organisation',
+    'debug-refactor': 'Code Organisation'
+  };
 
-    var chalCards = CHALLENGES.map(function (ch, i) {
+  var TUTORIAL_CATEGORY_ORDER = [
+    'Python Basics',
+    'Movement & Animation',
+    'Code Organisation',
+    'Full Games'
+  ];
+
+  function tutorialCategory(t) {
+    if (t.category) return t.category;
+    if (t.id && TUTORIAL_CATEGORY_BY_ID[t.id]) return TUTORIAL_CATEGORY_BY_ID[t.id];
+    if (_GAME_TITLES[t.title] || t.cat === 'game') return 'Full Games';
+    return 'Python Basics';
+  }
+
+  function compareTutorialCategories(a, b) {
+    var ai = TUTORIAL_CATEGORY_ORDER.indexOf(a);
+    var bi = TUTORIAL_CATEGORY_ORDER.indexOf(b);
+    if (ai !== -1 || bi !== -1) {
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
+    return a.localeCompare(b);
+  }
+
+  function compareTutorialEntries(a, b) {
+    return a.t.title.localeCompare(b.t.title);
+  }
+
+  function tutorialIsNew(t) {
+    return !!(
+      t.isNew === true ||
+      t.new === true ||
+      t.badge === 'new' ||
+      (Array.isArray(t.badges) && t.badges.indexOf('new') !== -1)
+    );
+  }
+
+  function buildTutorialCardHTML(t, i) {
+    var newBadge = tutorialIsNew(t)
+      ? '<span class="ps-tcard-new" title="New tutorial">NEW</span>'
+      : '';
+    return '<div class="ps-tcard" data-idx="' + i + '">' +
+      '<div class="ps-tcard-top">' +
+        '<span class="ps-tcard-emoji">' + (t.emoji || '&#128216;') + '</span>' +
+        '<span class="ps-tcard-title">' + t.title + '</span>' +
+        newBadge +
+      '</div>' +
+      '<div class="ps-tcard-desc">' + t.desc + '</div>' +
+      '<div class="ps-tcard-foot">' +
+        '<button class="ps-tcard-start" data-idx="' + i + '">&#9654; Start (' + t.steps.length + ' steps)</button>' +
+        '<button class="ps-tcard-reset" data-idx="' + i + '" title="Clear saved progress" style="display:none">&#8634; Reset</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function buildTutorialGroupsHTML() {
+    var groups = {};
+    TUTORIALS.forEach(function (t, i) {
+      var cat = tutorialCategory(t);
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push({ t: t, i: i });
+    });
+
+    return Object.keys(groups).sort(compareTutorialCategories).map(function (cat, catIdx) {
+      var cards = groups[cat].slice().sort(compareTutorialEntries).map(function (entry) {
+        return buildTutorialCardHTML(entry.t, entry.i);
+      }).join('');
+      return '<details class="ps-tcat"' + (catIdx === 0 ? ' open' : '') + '>' +
+        '<summary class="ps-tcat-summary">' +
+          '<span class="ps-tcat-chevron">&#8250;</span>' +
+          '<span>' + cat + '</span>' +
+          '<span class="ps-tcat-count">' + groups[cat].length + '</span>' +
+        '</summary>' +
+        '<div class="ps-tcat-grid">' + cards + '</div>' +
+      '</details>';
+    }).join('');
+  }
+
+  function buildChallengeCardsHTML() {
+    return CHALLENGES.map(function (ch, i) {
       var stars = '★'.repeat(ch.difficulty) + '☆'.repeat(4 - ch.difficulty);
       var hintsHTML = ch.hints.map(function (h) { return '<li>' + h + '</li>'; }).join('');
-      return '<div class="ps-tcard ps-tcard-chal" data-chal-idx="' + i + '" data-cat="challenge">' +
+      return '<div class="ps-tcard ps-tcard-chal" data-chal-idx="' + i + '">' +
         '<div class="ps-tcard-top">' +
           '<span class="ps-tcard-emoji">' + ch.emoji + '</span>' +
           '<span class="ps-tcard-title">' + ch.title + '</span>' +
@@ -4148,15 +4241,21 @@
         '<div class="ps-tchal-results"></div>' +
       '</div>';
     }).join('');
+  }
 
+  function buildTutorialHTML() {
     return '<div class="ps-tbox">' +
       '<div class="ps-thead"><span>📚 Tutorials</span><button title="Close">&times;</button></div>' +
       '<div class="ps-ttabs">' +
-        '<div class="ps-ttab ps-ttab-active" data-cat="concept">📐 Concepts</div>' +
-        '<div class="ps-ttab" data-cat="game">🎮 Games</div>' +
-        '<div class="ps-ttab" data-cat="challenge">🎯 Challenges</div>' +
+        '<div class="ps-ttab ps-ttab-active" data-panel="tutorials">Tutorials</div>' +
+        '<div class="ps-ttab" data-panel="challenges">Challenges</div>' +
       '</div>' +
-      '<div class="ps-tgrid">' + tutCards + chalCards + '</div>' +
+      '<div class="ps-tcontent">' +
+        '<div class="ps-tpanel" data-panel="tutorials">' + buildTutorialGroupsHTML() + '</div>' +
+        '<div class="ps-tpanel ps-tpanel-hidden" data-panel="challenges">' +
+          '<div class="ps-tgrid">' + buildChallengeCardsHTML() + '</div>' +
+        '</div>' +
+      '</div>' +
     '</div>';
   }
 
@@ -4169,22 +4268,21 @@
     });
 
     // Tab switching
-    function switchTab(activeCat) {
+    function switchTab(activePanel) {
       tm.querySelectorAll('.ps-ttab').forEach(function (tab) {
-        tab.classList.toggle('ps-ttab-active', tab.dataset.cat === activeCat);
+        tab.classList.toggle('ps-ttab-active', tab.dataset.panel === activePanel);
       });
-      tm.querySelectorAll('.ps-tcard').forEach(function (card) {
-        card.style.display = card.dataset.cat === activeCat ? '' : 'none';
+      tm.querySelectorAll('.ps-tpanel').forEach(function (panel) {
+        panel.classList.toggle('ps-tpanel-hidden', panel.dataset.panel !== activePanel);
       });
     }
     tm.querySelectorAll('.ps-ttab').forEach(function (tab) {
-      tab.addEventListener('click', function () { switchTab(tab.dataset.cat); });
+      tab.addEventListener('click', function () { switchTab(tab.dataset.panel); });
     });
-    switchTab('concept'); // start on Concepts tab
+    switchTab('tutorials'); // start on Tutorials tab
 
     function refreshTutorialCards() {
-      tm.querySelectorAll('.ps-tcard').forEach(function (card) {
-        if (card.dataset.cat === 'challenge') return; // skip challenge cards
+      tm.querySelectorAll('.ps-tcard[data-idx]').forEach(function (card) {
         var idx      = parseInt(card.dataset.idx, 10);
         var tut      = TUTORIALS[idx];
         if (!tut) return;
