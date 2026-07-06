@@ -1252,10 +1252,45 @@ function tshirtContestHideQuestionPanels() {
   if (visual) { visual.innerHTML = ''; visual.classList.add('hidden'); }
 }
 
+// Auto-submit for the design/bracket contests: when a drawing or topic phase has
+// <=5s left and the student has made something but not hit submit, submit it for
+// them. Only fires for phases that actually have a submit button (design, character
+// draw, blockbench model, topic writing) — voting phases have none, so nothing fires.
+// The timer arms this once per phase via quiz._contestAutoSubmitFired.
+function studentContestAutoSubmitIfNeeded() {
+  function live(el) {
+    return el && el.offsetParent !== null && !el.disabled &&
+           String(el.textContent || '').indexOf('Submitted') === -1;
+  }
+  // T-shirt design AND character draw share #btn-tshirt-submit (per-phase onclick).
+  var drawBtn = document.getElementById('btn-tshirt-submit');
+  if (live(drawBtn)) {
+    var inst = quiz._tshirtContestDesigner;
+    // Only auto-submit if something was actually drawn (avoids a "draw something first"
+    // flash on a blank canvas). If still blank, keep watching later ticks.
+    if (inst && typeof inst.isEmpty === 'function' && !inst.isEmpty()) { drawBtn.click(); return true; }
+    return false;
+  }
+  // Blockbench model submission.
+  var modelBtn = document.getElementById('btn-quiz-submit-blockbench');
+  if (live(modelBtn)) { modelBtn.click(); return true; }
+  // Topic writing — only if at least one topic box has text.
+  var topicsBtn = document.getElementById('btn-tsc-save-topics');
+  if (live(topicsBtn)) {
+    var typed = Array.prototype.some.call(document.querySelectorAll('.tsc-topic-input'), function(i) {
+      return String(i.value || '').trim() !== '';
+    });
+    if (typed) { topicsBtn.click(); return true; }
+    return false;
+  }
+  return false;
+}
+
 function startStudentTshirtContestTimer(questionStart, duration) {
   clearStudentTimer();
   var timerEnd = (questionStart || Date.now()) + (duration || 30) * 1000;
   var key = quiz.currentStudentContestKey;
+  quiz._contestAutoSubmitFired = false;
   function tick() {
     if (quiz.currentStudentContestKey !== key) return;
     var rem = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
@@ -1266,6 +1301,10 @@ function startStudentTshirtContestTimer(questionStart, duration) {
       var pct = duration > 0 ? ((timerEnd - Date.now()) / (duration * 1000)) * 100 : 0;
       bar.style.width = Math.max(0, pct) + '%';
       bar.className = 'h-1.5 transition-all ' + (pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+    }
+    // Auto-submit with 5s or less left (once per phase).
+    if (rem > 0 && rem <= 5 && !quiz._contestAutoSubmitFired) {
+      if (studentContestAutoSubmitIfNeeded()) quiz._contestAutoSubmitFired = true;
     }
     if (rem <= 0) {
       clearStudentTimer();
