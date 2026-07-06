@@ -69,6 +69,13 @@
 
     var TEMPLATE = options.templateUrl || 'assets/byte-brawlers/tshirt.png';
     var MAXSIZE = options.maxSize || 620;
+    var DRAW_OUTSIDE_MASK = options.drawOutsideMask === true;
+    var CANVAS_WIDTH = Math.max(320, Number(options.canvasWidth) || 0);
+    var CANVAS_HEIGHT = Math.max(320, Number(options.canvasHeight) || 0);
+    var TEMPLATE_MAX_WIDTH = Math.max(80, Number(options.templateMaxWidth) || 0);
+    var TEMPLATE_MAX_HEIGHT = Math.max(80, Number(options.templateMaxHeight) || 0);
+    var TEMPLATE_OFFSET_X = options.templateOffsetX;
+    var TEMPLATE_OFFSET_Y = options.templateOffsetY;
     var UNDO_MAX = 12;
 
     // ── State ──────────────────────────────────────────────────
@@ -260,28 +267,58 @@
     img.src = TEMPLATE;
 
     function onTemplateLoad() {
-      var iw = img.naturalWidth, ih = img.naturalHeight, s = Math.min(1, MAXSIZE / Math.max(iw, ih));
-      W = Math.round(iw * s); H = Math.round(ih * s);
+      var iw = img.naturalWidth, ih = img.naturalHeight;
+      var s = Math.min(1, MAXSIZE / Math.max(iw, ih));
+      var drawW, drawH, drawX = 0, drawY = 0;
+      if (DRAW_OUTSIDE_MASK) {
+        W = Math.round(CANVAS_WIDTH || MAXSIZE);
+        H = Math.round(CANVAS_HEIGHT || MAXSIZE);
+        s = Math.min(
+          TEMPLATE_MAX_WIDTH ? TEMPLATE_MAX_WIDTH / iw : 1,
+          TEMPLATE_MAX_HEIGHT ? TEMPLATE_MAX_HEIGHT / ih : 1,
+          1
+        );
+        drawW = Math.max(1, Math.round(iw * s));
+        drawH = Math.max(1, Math.round(ih * s));
+        drawX = TEMPLATE_OFFSET_X == null ? Math.round((W - drawW) / 2) : Math.round(Number(TEMPLATE_OFFSET_X) || 0);
+        drawY = TEMPLATE_OFFSET_Y == null ? Math.round((H - drawH) / 2) : Math.round(Number(TEMPLATE_OFFSET_Y) || 0);
+      } else {
+        W = Math.round(iw * s);
+        H = Math.round(ih * s);
+        drawW = W;
+        drawH = H;
+      }
       display.width = W; display.height = H;
       strokes = document.createElement('canvas'); strokes.width = W; strokes.height = H; sctx = strokes.getContext('2d');
       tcanvas = document.createElement('canvas'); tcanvas.width = W; tcanvas.height = H;
-      var tctx = tcanvas.getContext('2d'); tctx.drawImage(img, 0, 0, W, H);
+      var tctx = tcanvas.getContext('2d'); tctx.drawImage(img, drawX, drawY, drawW, drawH);
       maskAlpha = new Uint8ClampedArray(W * H);
       var md = tctx.getImageData(0, 0, W, H).data;
       for (var i = 0; i < W * H; i++) maskAlpha[i] = md[i * 4 + 3];
       render(); wirePointer();
     }
     function inShirt(x, y) { return x >= 0 && y >= 0 && x < W && y < H && maskAlpha[y * W + x] >= 24; }
+    function canDrawAt(x, y) {
+      if (x < 0 || y < 0 || x >= W || y >= H) return false;
+      var insideTemplate = inShirt(x, y);
+      return DRAW_OUTSIDE_MASK ? !insideTemplate : insideTemplate;
+    }
 
     function render() {
       if (!W) return;
       dctx.globalCompositeOperation = 'source-over';
       dctx.clearRect(0, 0, W, H);
-      dctx.fillStyle = '#ffffff'; dctx.fillRect(0, 0, W, H);
-      dctx.drawImage(strokes, 0, 0);
-      dctx.globalCompositeOperation = 'destination-in'; dctx.drawImage(tcanvas, 0, 0);
-      dctx.globalCompositeOperation = 'multiply'; dctx.drawImage(tcanvas, 0, 0);
-      dctx.globalCompositeOperation = 'source-over';
+      if (DRAW_OUTSIDE_MASK) {
+        dctx.drawImage(strokes, 0, 0);
+        dctx.globalCompositeOperation = 'destination-out'; dctx.drawImage(tcanvas, 0, 0);
+        dctx.globalCompositeOperation = 'source-over'; dctx.drawImage(tcanvas, 0, 0);
+      } else {
+        dctx.fillStyle = '#ffffff'; dctx.fillRect(0, 0, W, H);
+        dctx.drawImage(strokes, 0, 0);
+        dctx.globalCompositeOperation = 'destination-in'; dctx.drawImage(tcanvas, 0, 0);
+        dctx.globalCompositeOperation = 'multiply'; dctx.drawImage(tcanvas, 0, 0);
+        dctx.globalCompositeOperation = 'source-over';
+      }
       // preview marker for the line tool's first point
       if (lineStart) { dctx.fillStyle = 'rgba(59,130,246,0.9)'; dctx.beginPath(); dctx.arc(lineStart.x, lineStart.y, Math.max(4, size / 2), 0, Math.PI * 2); dctx.fill(); }
     }
@@ -295,12 +332,13 @@
       if (erase) { sctx.globalCompositeOperation = 'destination-out'; sctx.strokeStyle = 'rgba(0,0,0,1)'; }
       else { sctx.globalCompositeOperation = 'source-over'; sctx.strokeStyle = currentColor(); }
       sctx.beginPath(); sctx.moveTo(a.x, a.y); sctx.lineTo(b.x, b.y); sctx.stroke();
+      if (DRAW_OUTSIDE_MASK) { sctx.globalCompositeOperation = 'destination-out'; sctx.drawImage(tcanvas, 0, 0); }
       sctx.restore();
     }
 
     function floodFill(px, py, hex) {
       var x = Math.round(px), y = Math.round(py);
-      if (!inShirt(x, y)) return;
+      if (!canDrawAt(x, y)) return;
       var image = sctx.getImageData(0, 0, W, H), d = image.data, ti = (y * W + x) * 4;
       var tr = d[ti], tg = d[ti + 1], tb = d[ti + 2], ta = d[ti + 3], fc = hexToRgb(hex);
       if (ta === 255 && Math.abs(tr - fc.r) < 4 && Math.abs(tg - fc.g) < 4 && Math.abs(tb - fc.b) < 4) return;
@@ -309,14 +347,14 @@
       var stack = [[x, y]];
       while (stack.length) {
         var pt = stack.pop(), cx = pt[0], cy = pt[1];
-        if (!inShirt(cx, cy) || !match((cy * W + cx) * 4)) continue;
+        if (!canDrawAt(cx, cy) || !match((cy * W + cx) * 4)) continue;
         var lx = cx, rx = cx;
-        while (lx - 1 >= 0 && inShirt(lx - 1, cy) && match((cy * W + (lx - 1)) * 4)) lx--;
-        while (rx + 1 < W && inShirt(rx + 1, cy) && match((cy * W + (rx + 1)) * 4)) rx++;
+        while (lx - 1 >= 0 && canDrawAt(lx - 1, cy) && match((cy * W + (lx - 1)) * 4)) lx--;
+        while (rx + 1 < W && canDrawAt(rx + 1, cy) && match((cy * W + (rx + 1)) * 4)) rx++;
         for (var xx = lx; xx <= rx; xx++) {
           var j = (cy * W + xx) * 4; d[j] = fc.r; d[j + 1] = fc.g; d[j + 2] = fc.b; d[j + 3] = 255;
-          if (cy > 0 && inShirt(xx, cy - 1) && match(((cy - 1) * W + xx) * 4)) stack.push([xx, cy - 1]);
-          if (cy < H - 1 && inShirt(xx, cy + 1) && match(((cy + 1) * W + xx) * 4)) stack.push([xx, cy + 1]);
+          if (cy > 0 && canDrawAt(xx, cy - 1) && match(((cy - 1) * W + xx) * 4)) stack.push([xx, cy - 1]);
+          if (cy < H - 1 && canDrawAt(xx, cy + 1) && match(((cy + 1) * W + xx) * 4)) stack.push([xx, cy + 1]);
         }
       }
       sctx.putImageData(image, 0, 0);

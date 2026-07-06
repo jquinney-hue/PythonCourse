@@ -1464,6 +1464,95 @@ function tshirtFallbackTopics() {
   ];
 }
 
+var HOST_TSHIRT_CONTEST_CACHE_PREFIX = 'pylearn_host_tshirt_contest_';
+
+function hostTshirtContestCacheKey(lobbyCode) {
+  return HOST_TSHIRT_CONTEST_CACHE_PREFIX + String(lobbyCode || '').toUpperCase();
+}
+
+function hostTshirtContestBuildCacheContest(contest) {
+  contest = contest || {};
+  var cleanSubmissions = {};
+  Object.keys(contest.submissions || {}).forEach(function(roundKey) {
+    cleanSubmissions[roundKey] = {};
+    Object.keys(contest.submissions[roundKey] || {}).forEach(function(code) {
+      var sub = contest.submissions[roundKey][code] || {};
+      if (!sub.fileId) return;
+      cleanSubmissions[roundKey][code] = {
+        fileId: sub.fileId,
+        submittedAt: sub.submittedAt || null,
+        blocked: sub.blocked === true,
+        blockedAt: sub.blockedAt || null
+      };
+    });
+  });
+  var cleanCharacterShowcase = {};
+  Object.keys(contest.characterShowcase || {}).forEach(function(code) {
+    cleanCharacterShowcase[code] = {};
+    Object.keys(contest.characterShowcase[code] || {}).forEach(function(roundKey) {
+      var sub = contest.characterShowcase[code][roundKey] || {};
+      if (!sub.fileId) return;
+      cleanCharacterShowcase[code][roundKey] = {
+        fileId: sub.fileId,
+        sourceCode: sub.sourceCode || '',
+        sourceRound: Number(sub.sourceRound) || 0,
+        roundIndex: Number(sub.roundIndex) || 0,
+        itemType: sub.itemType || '',
+        submittedAt: sub.submittedAt || null
+      };
+    });
+  });
+  return {
+    config: contest.config || null,
+    roundIndex: contest.roundIndex || 0,
+    rounds: contest.rounds || null,
+    submissions: cleanSubmissions,
+    characterShowcase: cleanCharacterShowcase,
+    champion: contest.champion || null,
+    finalLeaderboard: contest.finalLeaderboard || null
+  };
+}
+
+function hostTshirtContestSaveCache(lobbyCode, contest) {
+  try {
+    if (!window.localStorage || !lobbyCode || !contest) return;
+    localStorage.setItem(hostTshirtContestCacheKey(lobbyCode), JSON.stringify({
+      savedAt: Date.now(),
+      lobbyCode: String(lobbyCode).toUpperCase(),
+      contest: hostTshirtContestBuildCacheContest(contest)
+    }));
+  } catch(_e) {}
+}
+
+function hostTshirtContestLoadCache(lobbyCode) {
+  try {
+    if (!window.localStorage || !lobbyCode) return null;
+    var raw = localStorage.getItem(hostTshirtContestCacheKey(lobbyCode));
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    return parsed && parsed.contest ? parsed.contest : null;
+  } catch(_e) {
+    return null;
+  }
+}
+
+async function getHostTshirtContestData(options) {
+  var includeMeta = options && options.includeMeta;
+  if (quiz.sessionRef) {
+    try {
+      var snap = await quiz.sessionRef.child('tshirtContest').get();
+      if (snap.exists()) {
+        var liveContest = snap.val() || {};
+        hostTshirtContestSaveCache(quiz.lobbyCode, liveContest);
+        return includeMeta ? { contest: liveContest, source: 'live' } : liveContest;
+      }
+    } catch(_e) {}
+  }
+  var cachedContest = hostTshirtContestLoadCache(quiz.lobbyCode);
+  if (includeMeta) return { contest: cachedContest || {}, source: cachedContest ? 'cache' : 'empty' };
+  return cachedContest || {};
+}
+
 async function startTshirtContestQuestion(qIdx, q) {
   clearHostQuestionTimer();
   clearRevealTimer();
@@ -2064,6 +2153,79 @@ function blockbenchFallbackTopics() {
 
 function blockbenchSubmissionBlocked(submission) {
   return !!(submission && submission.blocked === true);
+}
+
+var HOST_BLOCKBENCH_CONTEST_CACHE_PREFIX = 'pylearn_host_blockbench_contest_';
+
+function hostBlockbenchContestCacheKey(lobbyCode) {
+  return HOST_BLOCKBENCH_CONTEST_CACHE_PREFIX + String(lobbyCode || '').toUpperCase();
+}
+
+function hostBlockbenchContestBuildCacheContest(contest) {
+  contest = contest || {};
+  var cleanSubmissions = {};
+  Object.keys(contest.submissions || {}).forEach(function(roundKey) {
+    cleanSubmissions[roundKey] = {};
+    Object.keys(contest.submissions[roundKey] || {}).forEach(function(code) {
+      var sub = contest.submissions[roundKey][code] || {};
+      if (!sub.fileId) return;
+      cleanSubmissions[roundKey][code] = {
+        fileId: sub.fileId,
+        submittedAt: sub.submittedAt || null,
+        blocked: sub.blocked === true,
+        blockedAt: sub.blockedAt || null,
+        cubeCount: sub.cubeCount || 0
+      };
+    });
+  });
+  return {
+    config: contest.config || null,
+    roundIndex: contest.roundIndex || 0,
+    rounds: contest.rounds || null,
+    submissions: cleanSubmissions,
+    champion: contest.champion || null,
+    finalLeaderboard: contest.finalLeaderboard || null
+  };
+}
+
+function hostBlockbenchContestSaveCache(lobbyCode, contest) {
+  try {
+    if (!window.localStorage || !lobbyCode || !contest) return;
+    localStorage.setItem(hostBlockbenchContestCacheKey(lobbyCode), JSON.stringify({
+      savedAt: Date.now(),
+      lobbyCode: String(lobbyCode).toUpperCase(),
+      contest: hostBlockbenchContestBuildCacheContest(contest)
+    }));
+  } catch(_e) {}
+}
+
+function hostBlockbenchContestLoadCache(lobbyCode) {
+  try {
+    if (!window.localStorage || !lobbyCode) return null;
+    var raw = localStorage.getItem(hostBlockbenchContestCacheKey(lobbyCode));
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    return parsed && parsed.contest ? parsed.contest : null;
+  } catch(_e) {
+    return null;
+  }
+}
+
+async function getHostBlockbenchContestData(options) {
+  var includeMeta = options && options.includeMeta;
+  if (quiz.sessionRef) {
+    try {
+      var snap = await quiz.sessionRef.child('blockbenchContest').get();
+      if (snap.exists()) {
+        var liveContest = snap.val() || {};
+        hostBlockbenchContestSaveCache(quiz.lobbyCode, liveContest);
+        return includeMeta ? { contest: liveContest, source: 'live' } : liveContest;
+      }
+    } catch(_e) {}
+  }
+  var cachedContest = hostBlockbenchContestLoadCache(quiz.lobbyCode);
+  if (includeMeta) return { contest: cachedContest || {}, source: cachedContest ? 'cache' : 'empty' };
+  return cachedContest || {};
 }
 
 async function startBlockbenchContestQuestion(qIdx, q) {
@@ -2740,6 +2902,22 @@ async function endQuiz() {
   // Compute leaderboard before marking finished
   var leaderboard = await buildLeaderboard();
   await quiz.sessionRef.update({ state: 'finished', leaderboard: leaderboard });
+  if ((quiz.questions || []).some(isTshirtContestQuestion)) {
+    try {
+      var hostContestSnap = await quiz.sessionRef.child('tshirtContest').get();
+      if (hostContestSnap.exists()) hostTshirtContestSaveCache(quiz.lobbyCode, hostContestSnap.val() || {});
+    } catch(_hostContestCacheErr) {
+      console.warn('[T-shirt contest] Could not cache contest data for host:', _hostContestCacheErr);
+    }
+  }
+  if ((quiz.questions || []).some(isBlockbenchContestQuestion)) {
+    try {
+      var hostBlockbenchContestSnap = await quiz.sessionRef.child('blockbenchContest').get();
+      if (hostBlockbenchContestSnap.exists()) hostBlockbenchContestSaveCache(quiz.lobbyCode, hostBlockbenchContestSnap.val() || {});
+    } catch(_hostBlockbenchContestCacheErr) {
+      console.warn('[Blockbench contest] Could not cache contest data for host:', _hostBlockbenchContestCacheErr);
+    }
+  }
   renderHostLeaderboard(leaderboard);
   setQuizHostView('finished');
   // Clean up listeners
@@ -2919,7 +3097,10 @@ function renderHostLeaderboard(leaderboard) {
     }
     el.appendChild(row);
   });
-  if (isTshirtContest) appendHostTshirtContestSummary(el);
+  if (isTshirtContest) {
+    appendHostTshirtContestSummary(el);
+    appendHostTshirtCharacterShowcase(el);
+  }
   if (isBlockbenchContest) appendHostBlockbenchContestSummary(el);
 }
 
@@ -2929,8 +3110,8 @@ function appendHostTshirtContestSummary(el) {
   holder.className = 'mt-6 w-full max-w-2xl text-left';
   holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">Loading bracket results...</p>';
   el.appendChild(holder);
-  quiz.sessionRef.child('tshirtContest/rounds').get().then(function(snap) {
-    var rounds = tshirtObjValues(snap.val()).sort(function(a, b) { return (a.index || 0) - (b.index || 0); });
+  getHostTshirtContestData().then(function(contest) {
+    var rounds = tshirtObjValues(contest.rounds).sort(function(a, b) { return (a.index || 0) - (b.index || 0); });
     if (!rounds.length) {
       holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">No bracket results recorded.</p>';
       return;
@@ -2957,14 +3138,93 @@ function appendHostTshirtContestSummary(el) {
   });
 }
 
+function appendHostTshirtCharacterShowcase(el) {
+  if (!quiz.sessionRef || !el) return;
+  var holder = document.createElement('div');
+  holder.className = 'mt-6 w-full max-w-4xl text-left';
+  holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated character showcase</h3><p class="text-gray-400 text-sm text-center">Loading character drawings...</p>';
+  el.appendChild(holder);
+  getHostTshirtContestData().then(async function(contest) {
+    var raw = contest.characterShowcase || {};
+    var entries = [];
+    Object.keys(raw).forEach(function(code) {
+      Object.keys(raw[code] || {}).forEach(function(roundKey) {
+        var sub = raw[code][roundKey] || {};
+        if (!sub.fileId) return;
+        entries.push({
+          code: code,
+          fileId: sub.fileId,
+          sourceCode: sub.sourceCode || '',
+          roundIndex: Number(sub.roundIndex) || Number(roundKey) || 0,
+          submittedAt: Number(sub.submittedAt) || 0
+        });
+      });
+    });
+    entries.sort(function(a, b) {
+      if (a.roundIndex !== b.roundIndex) return a.roundIndex - b.roundIndex;
+      return a.submittedAt - b.submittedAt;
+    });
+    if (!entries.length) {
+      holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated character showcase</h3><p class="text-gray-400 text-sm text-center">No character drawings were submitted.</p>';
+      return;
+    }
+    var token = window.classroomState && window.classroomState.token;
+    if (!token) {
+      try { await getClassroomToken(); token = window.classroomState && window.classroomState.token; } catch(_e) {}
+    }
+    holder.innerHTML =
+      '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated character showcase</h3>' +
+      '<details class="rounded-lg bg-gray-800 border border-gray-700 p-3">' +
+        '<summary class="cursor-pointer text-yellow-300 font-bold">Show ' + entries.length + ' character drawing' + (entries.length === 1 ? '' : 's') + '</summary>' +
+        '<div class="grid gap-3 mt-3" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">' +
+          entries.map(function(entry) {
+            return '<div class="rounded-lg bg-gray-900 border border-gray-700 p-3">' +
+              '<div class="tsc-character-showcase-img rounded bg-gray-950 flex items-center justify-center text-xs text-gray-400 overflow-hidden" style="aspect-ratio:1" data-file-id="' + escapeHtml(entry.fileId) + '">Open showcase to load</div>' +
+              '<div class="mt-2 font-semibold text-sm text-white truncate">' + escapeHtml(studentName(entry.code) || entry.code) + '</div>' +
+              '<div class="text-xs text-gray-400 truncate">Around ' + escapeHtml(studentName(entry.sourceCode) || entry.sourceCode || 'a winner') + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</details>';
+    var details = holder.querySelector('details');
+    var loaded = false;
+    function loadCharacterShowcaseImages() {
+      if (loaded) return;
+      loaded = true;
+      holder.querySelectorAll('.tsc-character-showcase-img').forEach(function(box) {
+        if (!token) {
+          box.textContent = 'Drive is not connected';
+          return;
+        }
+        box.textContent = 'Loading...';
+        window.driveFetchFileAsDataUrl(box.dataset.fileId, token).then(function(dataUrl) {
+          if (!document.body.contains(box)) return;
+          box.innerHTML = '';
+          var img = document.createElement('img');
+          img.src = dataUrl;
+          img.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#0f172a';
+          box.appendChild(img);
+        }).catch(function() {
+          if (document.body.contains(box)) box.textContent = 'Could not load';
+        });
+      });
+    }
+    if (details) details.addEventListener('toggle', function() {
+      if (details.open) loadCharacterShowcaseImages();
+    });
+  }).catch(function(e) {
+    holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated character showcase</h3><p class="text-red-300 text-sm text-center">Could not load character drawings: ' + escapeHtml(e.message) + '</p>';
+  });
+}
+
 function appendHostBlockbenchContestSummary(el) {
   if (!quiz.sessionRef || !el) return;
   var holder = document.createElement('div');
   holder.className = 'mt-6 w-full max-w-2xl text-left';
   holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">Loading bracket results...</p>';
   el.appendChild(holder);
-  quiz.sessionRef.child('blockbenchContest/rounds').get().then(function(snap) {
-    var rounds = tshirtObjValues(snap.val()).sort(function(a, b) { return (a.index || 0) - (b.index || 0); });
+  getHostBlockbenchContestData().then(function(contest) {
+    var rounds = tshirtObjValues(contest.rounds).sort(function(a, b) { return (a.index || 0) - (b.index || 0); });
     if (!rounds.length) {
       holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-gray-400 text-sm text-center">No bracket results recorded.</p>';
       return;
@@ -3032,10 +3292,17 @@ async function showHostTshirtContestWorkModal(code) {
     return;
   }
 
-  var contestSnap = await quiz.sessionRef.child('tshirtContest').get();
-  var contest = contestSnap.val() || {};
+  var contestResult = await getHostTshirtContestData({ includeMeta: true });
+  var contest = contestResult.contest || {};
+  var canModerate = contestResult.source === 'live';
   var item = hostTshirtContestItemConfig(contest.config || initialItem);
   title.textContent = name + "'s " + item.itemPluralLabel;
+  if (!canModerate) {
+    var readOnlyNotice = document.createElement('div');
+    readOnlyNotice.style.cssText = 'background:#292524;border:1px solid #854d0e;color:#fde68a;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem';
+    readOnlyNotice.textContent = 'Viewing cached contest images. Blocking and unblocking is only available while the live quiz session still exists.';
+    inner.appendChild(readOnlyNotice);
+  }
   var submissions = contest.submissions || {};
   var rounds = tshirtObjValues(contest.rounds).sort(function(a, b) {
     return (a.index || 0) - (b.index || 0);
@@ -3066,7 +3333,7 @@ async function showHostTshirtContestWorkModal(code) {
         '</div>' +
         '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.45rem;flex-shrink:0">' +
           '<div style="color:' + (bracket && bracket.winner === code ? '#4ade80' : '#cbd5e1') + ';font-size:0.78rem;font-weight:700;text-align:right">' + escapeHtml(status) + '</div>' +
-          (sub && sub.fileId ? '<button type="button" class="tsc-contest-block-btn" style="background:' + (blocked ? '#334155' : '#7f1d1d') + ';color:#f8fafc;border:1px solid ' + (blocked ? '#64748b' : '#ef4444') + ';border-radius:6px;padding:0.3rem 0.65rem;font-size:0.75rem;font-weight:700;cursor:pointer">' + (blocked ? 'Unblock image' : 'Block image') + '</button>' : '') +
+          (sub && sub.fileId ? (canModerate ? '<button type="button" class="tsc-contest-block-btn" style="background:' + (blocked ? '#334155' : '#7f1d1d') + ';color:#f8fafc;border:1px solid ' + (blocked ? '#64748b' : '#ef4444') + ';border-radius:6px;padding:0.3rem 0.65rem;font-size:0.75rem;font-weight:700;cursor:pointer">' + (blocked ? 'Unblock image' : 'Block image') + '</button>' : '<div style="color:#fbbf24;font-size:0.72rem;font-weight:700;text-align:right">Cached view</div>') : '') +
         '</div>' +
       '</div>' +
       '<div class="tsc-contest-shirt-img" style="min-height:220px;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:0.85rem">Loading design...</div>';
@@ -3107,6 +3374,7 @@ async function showHostTshirtContestWorkModal(code) {
         }).then(function() {
           sub.blocked = nextBlocked;
           if (nextBlocked) sub.blockedAt = Date.now(); else delete sub.blockedAt;
+          hostTshirtContestSaveCache(quiz.lobbyCode, contest);
           blockBtn.textContent = nextBlocked ? 'Unblock image' : 'Block image';
           blockBtn.style.background = nextBlocked ? '#334155' : '#7f1d1d';
           blockBtn.style.borderColor = nextBlocked ? '#64748b' : '#ef4444';
@@ -3169,8 +3437,15 @@ async function showHostBlockbenchContestWorkModal(code) {
     return;
   }
 
-  var contestSnap = await quiz.sessionRef.child('blockbenchContest').get();
-  var contest = contestSnap.val() || {};
+  var contestResult = await getHostBlockbenchContestData({ includeMeta: true });
+  var contest = contestResult.contest || {};
+  var canModerate = contestResult.source === 'live';
+  if (!canModerate) {
+    var readOnlyNotice = document.createElement('div');
+    readOnlyNotice.style.cssText = 'background:#292524;border:1px solid #854d0e;color:#fde68a;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem';
+    readOnlyNotice.textContent = 'Viewing cached contest models. Blocking and unblocking is only available while the live quiz session still exists.';
+    inner.appendChild(readOnlyNotice);
+  }
   var submissions = contest.submissions || {};
   var rounds = tshirtObjValues(contest.rounds).sort(function(a, b) {
     return (a.index || 0) - (b.index || 0);
@@ -3201,7 +3476,7 @@ async function showHostBlockbenchContestWorkModal(code) {
         '</div>' +
         '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.45rem;flex-shrink:0">' +
           '<div style="color:' + (bracket && bracket.winner === code ? '#4ade80' : '#cbd5e1') + ';font-size:0.78rem;font-weight:700;text-align:right">' + escapeHtml(status) + '</div>' +
-          (sub && sub.fileId ? '<button type="button" class="bbc-contest-block-btn" style="background:' + (blocked ? '#334155' : '#7f1d1d') + ';color:#f8fafc;border:1px solid ' + (blocked ? '#64748b' : '#ef4444') + ';border-radius:6px;padding:0.3rem 0.65rem;font-size:0.75rem;font-weight:700;cursor:pointer">' + (blocked ? 'Unblock model' : 'Block model') + '</button>' : '') +
+          (sub && sub.fileId ? (canModerate ? '<button type="button" class="bbc-contest-block-btn" style="background:' + (blocked ? '#334155' : '#7f1d1d') + ';color:#f8fafc;border:1px solid ' + (blocked ? '#64748b' : '#ef4444') + ';border-radius:6px;padding:0.3rem 0.65rem;font-size:0.75rem;font-weight:700;cursor:pointer">' + (blocked ? 'Unblock model' : 'Block model') + '</button>' : '<div style="color:#fbbf24;font-size:0.72rem;font-weight:700;text-align:right">Cached view</div>') : '') +
         '</div>' +
       '</div>' +
       '<div class="bbc-contest-model" style="min-height:260px;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:0.85rem">Loading model...</div>';
@@ -3238,6 +3513,7 @@ async function showHostBlockbenchContestWorkModal(code) {
         }).then(function() {
           sub.blocked = nextBlocked;
           if (nextBlocked) sub.blockedAt = Date.now(); else delete sub.blockedAt;
+          hostBlockbenchContestSaveCache(quiz.lobbyCode, contest);
           blockBtn.textContent = nextBlocked ? 'Unblock model' : 'Block model';
           blockBtn.style.background = nextBlocked ? '#334155' : '#7f1d1d';
           blockBtn.style.borderColor = nextBlocked ? '#64748b' : '#ef4444';
