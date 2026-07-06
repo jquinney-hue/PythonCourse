@@ -1,7 +1,7 @@
 {
   "id": "year8-tshirt-contest",
   "title": "L5: Byte Brawlers Practice",
-  "description": "Practise the binary sprint and clothing drawing tools before the class design contest.",
+  "description": "Practise the binary sprint, binary and hexadecimal conversions, and clothing drawing tools before the class design contest.",
   "steps": [
     {
       "id": "binary-sprint-practice",
@@ -9,6 +9,115 @@
       "autoComplete": false,
       "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Practice Mode: binary sprint</h2><p class='text-gray-700 mb-3'>In the class contest, this sprint decides how many topic ideas you can submit. You will have 30 seconds to convert as many 4-bit binary numbers into denary as possible.</p><ul class='list-disc pl-5 text-gray-700 space-y-1 mb-4'><li>1 correct answer unlocks 1 topic slot.</li><li>3 correct answers unlock 2 topic slots.</li><li>7 correct answers unlock 3 topic slots.</li><li>15 correct answers unlock 4 topic slots.</li></ul><div id='y8bb-binary-practice'></div>",
       "js": "if (window.initTshirtContestBinaryPractice) { initTshirtContestBinaryPractice('y8bb-binary-practice'); } else { document.getElementById('y8bb-binary-practice').innerHTML = '<p class=\"text-red-400\">Practice mode not available - refresh the page.</p>'; }"
+    },
+    {
+      "id": "binary-place-values",
+      "title": "Binary Place Values",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Binary place values</h2><p class='text-gray-700 mb-3'>Binary is base 2. Each column is worth double the column to its right. A <strong>1</strong> means use that column value. A <strong>0</strong> means ignore that column value.</p><div class='ex-box mb-4'><table class='bb-table'><thead><tr><th>128</th><th>64</th><th>32</th><th>16</th><th>8</th><th>4</th><th>2</th><th>1</th></tr></thead><tbody><tr><td>0</td><td class='bb-on'>1</td><td>0</td><td class='bb-on'>1</td><td>0</td><td>0</td><td class='bb-on'>1</td><td>0</td></tr></tbody></table><p class='bb-answer-line mt-3'>01010010 = 64 + 16 + 2 = 82</p></div><p class='text-gray-700'>Every binary-to-denary conversion uses the same rule: find the columns with a 1, then add those place values.</p>"
+    },
+    {
+      "id": "binary-to-denary-guided",
+      "title": "Step Through: Binary to Denary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Binary to denary: worked example</h2><p class='text-gray-700 mb-4'>Follow the steps, then you will try some yourself.</p><div id='y8bb-bd-step'></div>",
+      "js": "BinaryLesson.createStepper({containerId:'y8bb-bd-step',steps:[{title:'We are converting 01011001 to denary',html:BinaryLesson.bitTable([0,1,0,1,1,0,0,1]),note:'Read the headings from left to right: 128, 64, 32, 16, 8, 4, 2, 1.'},{title:'Pick out the columns with a 1',html:'<table class=bb-table><thead><tr><th>Bit</th><th>Column value</th><th>Use it?</th></tr></thead><tbody><tr><td>0</td><td>128</td><td>No</td></tr><tr><td>1</td><td>64</td><td>Yes</td></tr><tr><td>0</td><td>32</td><td>No</td></tr><tr><td>1</td><td>16</td><td>Yes</td></tr><tr><td>1</td><td>8</td><td>Yes</td></tr><tr><td>0</td><td>4</td><td>No</td></tr><tr><td>0</td><td>2</td><td>No</td></tr><tr><td>1</td><td>1</td><td>Yes</td></tr></tbody></table>',note:'The active columns are 64, 16, 8 and 1.'},{title:'Add the active columns',html:'<p class=bb-answer-line>64 + 16 + 8 + 1 = 89</p>',note:'01011001 in denary is 89.'}]});"
+    },
+    {
+      "id": "binary-to-denary-practice",
+      "title": "Practice: Binary to Denary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: binary to denary</h2><p class='text-gray-700 mb-4'>Add the place values where the bit is 1. Type the denary answer.</p><div id='y8bb-bd-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-bd-practice',questions:[{prompt:'Convert 00001111 to denary.',html:BinaryLesson.bitTable([0,0,0,0,1,1,1,1]),answer:'15',right:'Correct: 8 + 4 + 2 + 1 = 15.',wrong:'Check the active columns: 8, 4, 2 and 1.'},{prompt:'Convert 01000001 to denary.',html:BinaryLesson.bitTable([0,1,0,0,0,0,0,1]),answer:'65',right:'Correct: 64 + 1 = 65.',wrong:'Only the 64 and 1 columns are active.'},{prompt:'Convert 10101010 to denary.',html:BinaryLesson.bitTable([1,0,1,0,1,0,1,0]),answer:'170',right:'Correct: 128 + 32 + 8 + 2 = 170.',wrong:'Add 128, 32, 8 and 2.'},{generated:'binary_to_denary'},{generated:'binary_to_denary'}]});"
+    },
+    {
+      "id": "denary-to-binary-guided",
+      "title": "Step Through: Denary to Binary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Denary to binary: worked example</h2><p class='text-gray-700 mb-4'>To build an 8-bit binary number, move left to right through the place values. If the column fits in what is left, write 1 and subtract it. If it does not fit, write 0.</p><div id='y8bb-db-step'></div>",
+      "js": "BinaryLesson.createStepper({containerId:'y8bb-db-step',steps:[{title:'We are converting 173 to 8-bit binary',html:'<div class=bb-big-number><span>173</span></div>',note:'Start at 128 because this is the biggest 8-bit place value.'},{title:'Check each column from left to right',html:'<table class=bb-table><thead><tr><th>Column</th><th>Does it fit?</th><th>Left over</th><th>Bit</th></tr></thead><tbody><tr><td>128</td><td>Yes, 173 >= 128</td><td>45</td><td>1</td></tr><tr><td>64</td><td>No, 45 &lt; 64</td><td>45</td><td>0</td></tr><tr><td>32</td><td>Yes, 45 >= 32</td><td>13</td><td>1</td></tr><tr><td>16</td><td>No, 13 &lt; 16</td><td>13</td><td>0</td></tr><tr><td>8</td><td>Yes, 13 >= 8</td><td>5</td><td>1</td></tr><tr><td>4</td><td>Yes, 5 >= 4</td><td>1</td><td>1</td></tr><tr><td>2</td><td>No, 1 &lt; 2</td><td>1</td><td>0</td></tr><tr><td>1</td><td>Yes, 1 >= 1</td><td>0</td><td>1</td></tr></tbody></table>',note:'Whenever a column fits, write 1 and subtract it. Otherwise write 0.'},{title:'Read the bits from left to right',html:BinaryLesson.bitTable([1,0,1,0,1,1,0,1]),note:'173 in 8-bit binary is 10101101.'}]});"
+    },
+    {
+      "id": "denary-to-binary-practice",
+      "title": "Practice: Denary to Binary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: denary to binary</h2><p class='text-gray-700 mb-4'>Use the columns 128, 64, 32, 16, 8, 4, 2, 1. Click the bits to build the answer.</p><div id='y8bb-db-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-db-practice',questions:[{prompt:'Convert 13 to 8-bit binary.',answer:'00001101',right:'Correct: 8 + 4 + 1 = 13.',wrong:'13 uses 8, 4 and 1.'},{prompt:'Convert 64 to 8-bit binary.',answer:'01000000',right:'Correct: only the 64 column is active.',wrong:'64 needs a 1 in the 64 column only.'},{prompt:'Convert 99 to 8-bit binary.',answer:'01100011',right:'Correct: 64 + 32 + 2 + 1 = 99.',wrong:'99 uses 64, 32, 2 and 1.'},{prompt:'Convert 150 to 8-bit binary.',answer:'10010110',right:'Correct: 128 + 16 + 4 + 2 = 150.',wrong:'150 uses 128, 16, 4 and 2.'},{generated:'denary_to_binary'}]});"
+    },
+    {
+      "id": "binary-denary-mixed",
+      "title": "Mixed Binary and Denary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Mixed checkpoint: binary and denary</h2><p class='text-gray-700 mb-4'>This mixes both directions. Read the question carefully before answering.</p><div id='y8bb-bd-mixed'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-bd-mixed',questions:[{generated:'binary_to_denary'},{generated:'denary_to_binary'},{generated:'binary_to_denary'},{generated:'denary_to_binary'},{generated:'binary_to_denary'},{generated:'denary_to_binary'}]});"
+    },
+    {
+      "id": "hex-digit-map",
+      "title": "Hexadecimal Digits",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Hexadecimal digits</h2><p class='text-gray-700 mb-3'>Hexadecimal is base 16. A single hex digit can store any value from 0 to 15. After 9, hex uses letters.</p><div class='ex-box mb-4'><table class='bb-table'><thead><tr><th>Denary</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th></tr></thead><tbody><tr><td>Hex</td><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>A</td><td>B</td><td>C</td><td>D</td><td>E</td><td>F</td></tr></tbody></table></div><p class='text-gray-700'>A is 10, B is 11, C is 12, D is 13, E is 14 and F is 15.</p>"
+    },
+    {
+      "id": "single-hex-practice",
+      "title": "Practice: Single Hex Digits",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: single hex digits</h2><p class='text-gray-700 mb-4'>Convert between denary values 0-15 and one hex digit.</p><div id='y8bb-hex-digit-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-hex-digit-practice',questions:[{prompt:'What denary value does hex A represent?',html:'<div class=bb-hex-pair><div>A</div></div>',answer:'10',right:'Correct: A means 10.'},{prompt:'What denary value does hex F represent?',html:'<div class=bb-hex-pair><div>F</div></div>',answer:'15',right:'Correct: F means 15.'},{prompt:'Write denary 12 as one hex digit.',answer:'C',right:'Correct: 12 maps to C.',wrong:'Use the table: 10=A, 11=B, 12=C.'},{prompt:'Write denary 7 as one hex digit.',answer:'7',right:'Correct: 0-9 stay as the same digit.'},{prompt:'What denary value does hex D represent?',html:'<div class=bb-hex-pair><div>D</div></div>',answer:'13',right:'Correct: D means 13.'},{prompt:'Write denary 15 as one hex digit.',answer:'F',right:'Correct: 15 maps to F.'},{prompt:'What denary value does hex B represent?',html:'<div class=bb-hex-pair><div>B</div></div>',answer:'11',right:'Correct: B means 11.'},{prompt:'Write denary 10 as one hex digit.',answer:'A',right:'Correct: 10 maps to A.'}]});"
+    },
+    {
+      "id": "nibbles-explained",
+      "title": "Four Bits to One Hex Digit",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Four bits make one hex digit</h2><p class='text-gray-700 mb-4'>A group of 4 bits is called a nibble. One nibble can store 0-15, exactly the same range as one hex digit.</p><div id='y8bb-nibble-step'></div>",
+      "js": "BinaryLesson.createStepper({containerId:'y8bb-nibble-step',steps:[{title:'A nibble has four place values',html:BinaryLesson.bitTable([1,0,1,1],[8,4,2,1]),note:'Four bits use the place values 8, 4, 2 and 1.'},{title:'Convert 1011 to denary first',html:'<p class=bb-answer-line>8 + 2 + 1 = 11</p>',note:'Only columns with a 1 are added.'},{title:'Map the denary value to hex',html:'<table class=bb-table><thead><tr><th>Denary</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th></tr></thead><tbody><tr><td>Hex</td><td>A</td><td class=bb-on>B</td><td>C</td><td>D</td><td>E</td><td>F</td></tr></tbody></table>',note:'11 maps to B, so 1011 in binary is B in hex.'},{title:'Reverse direction: E to binary',html:'<p class=bb-answer-line>E = 14 = 8 + 4 + 2</p>' + BinaryLesson.bitTable([1,1,1,0],[8,4,2,1]),note:'E becomes 1110. Always write all four bits.'}]});"
+    },
+    {
+      "id": "nibble-practice",
+      "title": "Practice: Binary and Hex Digits",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: binary and hex digits</h2><p class='text-gray-700 mb-4'>Each 4-bit group converts to exactly one hex digit. Practise both directions.</p><div id='y8bb-nibble-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-nibble-practice',questions:[{prompt:'Convert 0011 to hex.',html:BinaryLesson.bitTable([0,0,1,1],[8,4,2,1]),answer:'3',right:'Correct: 2 + 1 = 3.'},{prompt:'Convert 1010 to hex.',html:BinaryLesson.bitTable([1,0,1,0],[8,4,2,1]),answer:'A',right:'Correct: 8 + 2 = 10, which maps to A.'},{prompt:'Convert 1111 to hex.',html:BinaryLesson.bitTable([1,1,1,1],[8,4,2,1]),answer:'F',right:'Correct: 8 + 4 + 2 + 1 = 15, which maps to F.'},{prompt:'Convert 0110 to hex.',html:BinaryLesson.bitTable([0,1,1,0],[8,4,2,1]),answer:'6',right:'Correct: 4 + 2 = 6.'},{prompt:'Convert hex C to 4-bit binary.',html:'<div class=bb-hex-pair><div>C</div></div>',answer:'1100',right:'Correct: C = 12 = 8 + 4, so 1100.'},{prompt:'Convert hex 5 to 4-bit binary.',html:'<div class=bb-hex-pair><div>5</div></div>',answer:'0101',right:'Correct: 5 = 4 + 1, so 0101.'},{prompt:'Convert hex E to 4-bit binary.',html:'<div class=bb-hex-pair><div>E</div></div>',answer:'1110',right:'Correct: E = 14 = 8 + 4 + 2, so 1110.'},{prompt:'Convert hex 9 to 4-bit binary.',html:'<div class=bb-hex-pair><div>9</div></div>',answer:'1001',right:'Correct: 9 = 8 + 1, so 1001.'}]});"
+    },
+    {
+      "id": "two-digit-hex",
+      "title": "Two-Digit Hex Values",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Two-digit hex values</h2><p class='text-gray-700 mb-3'>Two hex digits can represent a whole byte. The left hex digit is worth sixteens. The right hex digit is worth ones.</p><div class='ex-box mb-4'><table class='bb-table'><thead><tr><th>16s column</th><th>1s column</th></tr></thead><tbody><tr><td>5</td><td>A</td></tr><tr><td>5 x 16 = 80</td><td>A = 10</td></tr></tbody></table><p class='bb-answer-line mt-3'>5A = 80 + 10 = 90</p></div><p class='text-gray-700'>A byte is 8 bits, so it can be written as two nibbles. Each nibble becomes one hex digit.</p>"
+    },
+    {
+      "id": "two-digit-hex-practice",
+      "title": "Practice: Hex and Denary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: two-digit hex and denary</h2><p class='text-gray-700 mb-4'>For hex to denary, multiply the left digit by 16 and add the right digit. For denary to hex, find how many sixteens fit first.</p><div id='y8bb-hex-denary-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-hex-denary-practice',questions:[{prompt:'Convert 2F to denary.',html:'<div class=bb-hex-pair><div>2</div><div>F</div></div>',answer:'47',right:'Correct: 2 x 16 = 32, and F = 15. 32 + 15 = 47.'},{prompt:'Convert C8 to denary.',html:'<div class=bb-hex-pair><div>C</div><div>8</div></div>',answer:'200',right:'Correct: C = 12, so 12 x 16 = 192. 192 + 8 = 200.'},{prompt:'Convert denary 90 to hex.',answer:'5A',right:'Correct: 90 has 5 sixteens with 10 left over. 10 maps to A, so 5A.'},{prompt:'Convert denary 165 to hex.',answer:'A5',right:'Correct: 165 has 10 sixteens with 5 left over. 10 maps to A, so A5.'},{generated:'hex_to_denary'},{generated:'denary_to_hex'}]});"
+    },
+    {
+      "id": "binary-hex-guided",
+      "title": "Step Through: Binary and Hex",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Binary and hex: worked examples</h2><p class='text-gray-700 mb-4'>Because 4 bits map to one hex digit, 8 bits map to two hex digits.</p><div id='y8bb-bh-step'></div>",
+      "js": "BinaryLesson.createStepper({containerId:'y8bb-bh-step',steps:[{title:'Convert 11001010 to hex by splitting into nibbles',html:BinaryLesson.bitTable([1,1,0,0,1,0,1,0],[8,4,2,1,8,4,2,1],true),note:'Split 11001010 into 1100 and 1010.'},{title:'Convert the left nibble',html:BinaryLesson.bitTable([1,1,0,0],[8,4,2,1]) + '<p class=bb-answer-line>8 + 4 = 12 = C</p>',note:'1100 becomes C.'},{title:'Convert the right nibble',html:BinaryLesson.bitTable([1,0,1,0],[8,4,2,1]) + '<p class=bb-answer-line>8 + 2 = 10 = A</p>',note:'1010 becomes A, so 11001010 becomes CA.'},{title:'Reverse direction: convert B3 to binary',html:'<table class=bb-table><thead><tr><th>Hex digit</th><th>Denary</th><th>4 bits</th></tr></thead><tbody><tr><td>B</td><td>11</td><td>1011</td></tr><tr><td>3</td><td>3</td><td>0011</td></tr></tbody></table>',note:'Put the two groups together: B3 becomes 10110011.'}]});"
+    },
+    {
+      "id": "binary-to-hex-practice",
+      "title": "Practice: Binary to Hex",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: binary to hex</h2><p class='text-gray-700 mb-4'>Split the byte into two groups of four bits. Convert each group to one hex digit.</p><div id='y8bb-bh-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-bh-practice',questions:[{prompt:'Convert this binary number to hex.',html:BinaryLesson.bitTable([1,1,0,0,1,0,1,0],[8,4,2,1,8,4,2,1],true),answer:'CA',right:'Correct: 1100 = C and 1010 = A.'},{prompt:'Convert this binary number to hex.',html:BinaryLesson.bitTable([1,1,1,1,0,0,0,0],[8,4,2,1,8,4,2,1],true),answer:'F0',right:'Correct: 1111 = F and 0000 = 0.'},{prompt:'Convert this binary number to hex.',html:BinaryLesson.bitTable([0,0,0,1,1,1,1,1],[8,4,2,1,8,4,2,1],true),answer:'1F',right:'Correct: 0001 = 1 and 1111 = F.'},{generated:'binary_to_hex'},{generated:'binary_to_hex'}]});"
+    },
+    {
+      "id": "hex-to-binary-practice",
+      "title": "Practice: Hex to Binary",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Checked practice: hex to binary</h2><p class='text-gray-700 mb-4'>Convert each hex digit into exactly 4 bits, then join the two groups together.</p><div id='y8bb-hb-practice'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-hb-practice',questions:[{type:'bit_input',prompt:'Convert A5 to 8-bit binary.',html:'<div class=bb-hex-pair><div>A</div><div>5</div></div>',answer:'10100101',useNibbles:true,right:'Correct: A = 1010 and 5 = 0101.'},{type:'bit_input',prompt:'Convert 0F to 8-bit binary.',html:'<div class=bb-hex-pair><div>0</div><div>F</div></div>',answer:'00001111',useNibbles:true,right:'Correct: 0 = 0000 and F = 1111.'},{type:'bit_input',prompt:'Convert C3 to 8-bit binary.',html:'<div class=bb-hex-pair><div>C</div><div>3</div></div>',answer:'11000011',useNibbles:true,right:'Correct: C = 1100 and 3 = 0011.'},{type:'bit_input',prompt:'Convert 7E to 8-bit binary.',html:'<div class=bb-hex-pair><div>7</div><div>E</div></div>',answer:'01111110',useNibbles:true,right:'Correct: 7 = 0111 and E = 1110.'},{generated:'hex_to_binary'}]});"
+    },
+    {
+      "id": "conversion-checkpoint",
+      "title": "Final Conversion Checkpoint",
+      "autoComplete": false,
+      "content": "<h2 class='text-xl font-bold mb-3 text-gray-800'>Final checkpoint before free draw</h2><p class='text-gray-700 mb-4'>Answer a mix of binary, denary and hexadecimal questions. This checks that you can convert in every direction you need for Byte Brawlers.</p><div id='y8bb-final-checkpoint'></div>",
+      "js": "BinaryLesson.createPractice({containerId:'y8bb-final-checkpoint',questions:[{generated:'binary_to_denary'},{generated:'denary_to_binary'},{generated:'binary_to_hex'},{generated:'hex_to_binary'},{generated:'hex_to_denary'},{generated:'denary_to_hex'}]});"
     },
     {
       "id": "drawing-practice",

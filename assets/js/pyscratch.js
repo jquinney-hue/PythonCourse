@@ -1266,6 +1266,7 @@
     },
     {
       id: 'functions',
+      isNew: true,
       title: 'Functions',
       emoji: '🧩',
       desc: 'Wrap code you use again and again into a named function, then call it whenever you need it — and pass it a value to change what it does.',
@@ -1312,6 +1313,7 @@
     },
     {
       id: 'lists',
+      isNew: true,
       title: 'Lists',
       emoji: '📋',
       desc: 'Store many values in one place with a list, loop through them, and grow the list while your program runs.',
@@ -1358,6 +1360,7 @@
     },
     {
       id: 'messages',
+      isNew: true,
       title: 'Messages & Events',
       emoji: '📣',
       desc: 'Split a trigger from its reaction. One part of your code broadcasts a message; a separate handler reacts — the same way sprites and clones respond to events.',
@@ -1396,6 +1399,7 @@
     },
     {
       id: 'debug-refactor',
+      isNew: true,
       title: 'Debug & Refactor',
       emoji: '🔧',
       desc: 'Real programming is fixing code that does the wrong thing, then tidying it up. Hunt down two bugs, then refactor the repetition into one clean function.',
@@ -1449,6 +1453,250 @@
         {
           title: '✅ Try it!',
           text: 'Click the <strong>green flag ▶</strong>. All four arrows work, and the logic lives in one tidy <code>move()</code> function.<br><br><strong>Challenge:</strong> Add a <code>speed</code> parameter — <code>move(dx, dy, speed)</code> — and make a "run" key that moves faster. Notice you only change the function <em>once</em>.',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+
+    // ══ APPLIED GAMES ═══════════════════════════════════════════════════════════
+    // Capstone game projects that put the new concept tutorials (functions, lists,
+    // messages, debug/refactor) to work. Ordered by difficulty via `order`.
+    {
+      id: 'geometry-dash',
+      isNew: true,
+      order: 1,
+      title: 'Geometry Dash',
+      emoji: '🟦',
+      desc: 'Build a one-button auto-runner. Your cube runs on the spot while spikes rush past — tap space to jump. You will wrap the jump logic in its own function and call it.',
+      steps: [
+        {
+          title: 'What are we building?',
+          text: 'A Geometry Dash style auto-runner! Your cube stays on the left while <strong>Spike</strong> obstacles scroll toward it. Press <strong>space</strong> to jump over them.<br><br>This game shows off <strong>functions</strong>: instead of writing the jump maths in the middle of your loop, you wrap it in <code>def jump():</code> and just call <code>jump()</code> when space is pressed. The Score counter is made by <code>set_variable()</code> and shown with <code>display_variable()</code>.',
+          starter: null, target: null, newLines: [], requires: []
+        },
+        {
+          title: 'Write the jump function',
+          text: 'Start with a velocity variable <code>vy = 0</code>. Then define a <code>jump()</code> function: it only launches the cube (<code>vy = 12</code>) when it is on the ground (<code>y_position() &lt;= -100</code>), so you cannot double-jump in mid-air. <code>global vy</code> lets the function change the outside variable.',
+          starter: '',
+          target: 'vy = 0\n\ndef jump():\n    global vy\n    if y_position() <= -100:\n        vy = 12',
+          newLines: ['vy = 0', '', 'def jump():', '    global vy', '    if y_position() <= -100:', '        vy = 12'],
+          requires: ['def jump():', 'y_position() <= -100', 'vy = 12']
+        },
+        {
+          title: 'The game loop and gravity',
+          text: 'Now the main loop. Gravity pulls <code>vy</code> down a little every frame, and <code>change_y(vy)</code> moves the cube. When it lands on the ground at <code>-100</code>, stop it and reset <code>vy</code>.',
+          starter: 'vy = 0\n\ndef jump():\n    global vy\n    if y_position() <= -100:\n        vy = 12',
+          target: 'vy = 0\n\ndef jump():\n    global vy\n    if y_position() <= -100:\n        vy = 12\n\ndef game_start():\n    global vy\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    go_to_xy(-150, -100)\n    while True:\n        vy = vy - 0.8\n        change_y(vy)\n        if y_position() < -100:\n            set_y(-100)\n            vy = 0',
+          newLines: ['', 'def game_start():', '    global vy', '    set_variable("Score", 0)', '    display_variable("Score", True)', '    go_to_xy(-150, -100)', '    while True:', '        vy = vy - 0.8', '        change_y(vy)', '        if y_position() < -100:', '            set_y(-100)', '            vy = 0'],
+          requires: ['def game_start():', 'set_variable("Score", 0)', 'display_variable("Score", True)', 'go_to_xy(-150, -100)', 'vy = vy - 0.8', 'change_y(vy)', 'y_position() < -100', 'set_y(-100)']
+        },
+        {
+          title: 'Jump and crash',
+          text: 'Call your function! When <strong>space</strong> is pressed, run <code>jump()</code> — one tidy line instead of the whole jump routine. Then end the game if the cube hits a Spike.',
+          starter: 'vy = 0\n\ndef jump():\n    global vy\n    if y_position() <= -100:\n        vy = 12\n\ndef game_start():\n    global vy\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    go_to_xy(-150, -100)\n    while True:\n        vy = vy - 0.8\n        change_y(vy)\n        if y_position() < -100:\n            set_y(-100)\n            vy = 0',
+          target: 'vy = 0\n\ndef jump():\n    global vy\n    if y_position() <= -100:\n        vy = 12\n\ndef game_start():\n    global vy\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    go_to_xy(-150, -100)\n    while True:\n        vy = vy - 0.8\n        change_y(vy)\n        if y_position() < -100:\n            set_y(-100)\n            vy = 0\n        if key_pressed("space"):\n            jump()\n        if touching("Spike"):\n            say("Game Over!")\n            stop()',
+          newLines: ['        if key_pressed("space"):', '            jump()', '        if touching("Spike"):', '            say("Game Over!")', '            stop()'],
+          requires: ['key_pressed("space")', '            jump()', 'touching("Spike")', 'say("Game Over!")', 'stop()']
+        },
+        {
+          title: 'Add the Spike sprite',
+          text: 'Spikes are their own game object, so they need a <strong>separate sprite</strong>. Click the highlighted button, give it a <strong>spiky triangular costume</strong>, and name it <strong>Spike</strong>.',
+          highlight: 'add-sprite-btn',
+          highlightLabel: 'Add a sprite here',
+          requiredSpriteNames: ['Spike'],
+          requiredSpriteHints: { 'Spike': 'Add a sprite and name it "Spike"' },
+          starter: null, target: null, newLines: [], requires: []
+        },
+        {
+          title: 'Spike: scroll and score',
+          text: 'Click your <strong>Spike</strong> sprite and delete its default code. Send it flying from the right edge to the left; when it goes off-screen, loop it back to the right and add 1 to the Score for surviving.',
+          starter: null,
+          target: 'def game_start():\n    go_to_xy(240, -100)\n    while True:\n        change_x(-6)\n        if x_position() < -240:\n            set_x(240)\n            change_variable("Score", 1)',
+          newLines: ['def game_start():', '    go_to_xy(240, -100)', '    while True:', '        change_x(-6)', '        if x_position() < -240:', '            set_x(240)', '            change_variable("Score", 1)'],
+          requires: ['go_to_xy(240, -100)', 'change_x(-6)', 'x_position() < -240', 'set_x(240)', 'change_variable("Score", 1)']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong> and jump the spikes! The Score climbs every time one passes safely.<br><br><strong>Challenges:</strong><ul style="margin-top:0.5rem;padding-left:1.2rem"><li>Make the spike faster as the Score climbs using <code>get_variable("Score")</code>.</li><li>Add a second obstacle sprite that scrolls at a different height.</li><li>Give <code>jump()</code> a <code>power</code> parameter — <code>jump(power)</code> — so a second key jumps higher.</li></ul>',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+
+    {
+      id: 'rhythm-game',
+      isNew: true,
+      order: 2,
+      title: 'Rhythm Game',
+      emoji: '🎵',
+      desc: 'Notes drop down the screen — hit space as each one reaches the line. Uses a list of lane positions and broadcast messages to score the hits.',
+      steps: [
+        {
+          title: 'What are we building?',
+          text: 'A rhythm game! Notes fall down the screen as clones, and you press <strong>space</strong> when one reaches the bottom line.<br><br>This brings two new ideas together: a <strong>list</strong> holds the four lane positions, and a <strong>broadcast message</strong> ("hit") tells every note to check whether it is in the hit zone. The <code>Score</code> counter is a Scratch variable.',
+          starter: null, target: null, newLines: [], requires: []
+        },
+        {
+          title: 'The lane list and note spawner',
+          text: 'Store the four lane x-positions in a <strong>list</strong> called <code>lanes</code>. Then <code>game_start()</code> hides the original note (only its clones are seen) and spawns a new clone every <code>0.7</code> seconds.',
+          starter: '',
+          target: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)',
+          newLines: ['lanes = [-150, -50, 50, 150]', '', 'def game_start():', '    hide()', '    set_variable("Score", 0)', '    display_variable("Score", True)', '    while True:', '        create_clone()', '        wait(0.7)'],
+          requires: ['lanes = [-150, -50, 50, 150]', 'hide()', 'set_variable("Score", 0)', 'display_variable("Score", True)', 'create_clone()', 'wait(0.7)']
+        },
+        {
+          title: 'Notes fall in a random lane',
+          text: 'Each clone picks a random lane <em>from the list</em> with <code>lanes[pick_random(0, 3)]</code>, appears at the top, and falls. If it drops off the bottom without a hit, it deletes itself.',
+          starter: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)',
+          target: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(lanes[pick_random(0, 3)], 160)\n    show()\n    while True:\n        change_y(-5)\n        if y_position() < -180:\n            delete_clone()',
+          newLines: ['', 'def when_I_start_as_a_clone():', '    go_to_xy(lanes[pick_random(0, 3)], 160)', '    show()', '    while True:', '        change_y(-5)', '        if y_position() < -180:', '            delete_clone()'],
+          requires: ['def when_I_start_as_a_clone():', 'lanes[pick_random(0, 3)]', 'show()', 'change_y(-5)', 'y_position() < -180', 'delete_clone()']
+        },
+        {
+          title: 'Press space to send a hit',
+          text: 'A <code>when_key_pressed</code> handler fires once each time a key is tapped. When it is space, <code>broadcast("hit")</code> — an announcement every note clone can hear at the same moment.',
+          starter: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(lanes[pick_random(0, 3)], 160)\n    show()\n    while True:\n        change_y(-5)\n        if y_position() < -180:\n            delete_clone()',
+          target: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(lanes[pick_random(0, 3)], 160)\n    show()\n    while True:\n        change_y(-5)\n        if y_position() < -180:\n            delete_clone()\n\ndef when_key_pressed(key):\n    if key == "space":\n        broadcast("hit")',
+          newLines: ['', 'def when_key_pressed(key):', '    if key == "space":', '        broadcast("hit")'],
+          requires: ['def when_key_pressed(key):', 'key == "space"', 'broadcast("hit")']
+        },
+        {
+          title: 'Score notes in the hit zone',
+          text: 'Every clone listens for <code>"hit"</code>. If the note receiving the message is near the bottom line — its <code>y_position()</code> between <code>-150</code> and <code>-90</code> — it scores a point and disappears. Notes anywhere else simply ignore the message.',
+          starter: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(lanes[pick_random(0, 3)], 160)\n    show()\n    while True:\n        change_y(-5)\n        if y_position() < -180:\n            delete_clone()\n\ndef when_key_pressed(key):\n    if key == "space":\n        broadcast("hit")',
+          target: 'lanes = [-150, -50, 50, 150]\n\ndef game_start():\n    hide()\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    while True:\n        create_clone()\n        wait(0.7)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(lanes[pick_random(0, 3)], 160)\n    show()\n    while True:\n        change_y(-5)\n        if y_position() < -180:\n            delete_clone()\n\ndef when_key_pressed(key):\n    if key == "space":\n        broadcast("hit")\n\ndef when_message_received(message):\n    if message == "hit":\n        if y_position() < -90 and y_position() > -150:\n            change_variable("Score", 1)\n            delete_clone()',
+          newLines: ['', 'def when_message_received(message):', '    if message == "hit":', '        if y_position() < -90 and y_position() > -150:', '            change_variable("Score", 1)', '            delete_clone()'],
+          requires: ['def when_message_received(message):', 'message == "hit"', 'y_position() < -90', 'y_position() > -150', 'change_variable("Score", 1)']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong> and tap <strong>space</strong> as notes reach the line!<br><br><strong>Challenges:</strong><ul style="margin-top:0.5rem;padding-left:1.2rem"><li>Add a <code>Combo</code> variable that climbs with each hit and resets on a miss.</li><li>Draw a faint line costume at the hit zone so players can see where to aim.</li><li>Speed the song up over time by lowering the <code>wait()</code> between spawns.</li></ul>',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+
+    {
+      id: 'tower-defense',
+      isNew: true,
+      order: 3,
+      title: 'Tower Defense',
+      emoji: '🏰',
+      desc: 'Enemies march along a fixed path while your tower zaps any that come close. The path is a list of waypoints, and the tower fires with a broadcast.',
+      steps: [
+        {
+          title: 'What are we building?',
+          text: 'A tower defense game! Enemy clones follow a set route across the stage; your tower fires at any that get close.<br><br>The route is a <strong>list of waypoints</strong> (each waypoint is its own little <code>[x, y]</code> list), and the tower attacks by <strong>broadcasting</strong> a message the enemies listen for.<br><br>First, <strong>rename your sprite to <code>Enemy</code></strong> using the name box below the stage.',
+          starter: null, target: null, newLines: [], requires: [],
+          requiredSpriteNames: ['Enemy'],
+          requiredSpriteHints: { 'Enemy': 'Rename your sprite to "Enemy"' }
+        },
+        {
+          title: 'Enemy: the path list and spawner',
+          text: 'On your <strong>Enemy</strong> sprite, store the route as a <strong>list of waypoints</strong> — notice each item is itself an <code>[x, y]</code> list. <code>game_start()</code> hides the original and spawns a clone every <code>2.5</code> seconds. <code>Lives</code> counts the enemies that get through.',
+          starter: '',
+          target: 'path = [[-200, 150], [200, 150], [200, -120], [-200, -120]]\n\ndef game_start():\n    hide()\n    set_variable("Lives", 5)\n    display_variable("Lives", True)\n    while True:\n        create_clone()\n        wait(2.5)',
+          newLines: ['path = [[-200, 150], [200, 150], [200, -120], [-200, -120]]', '', 'def game_start():', '    hide()', '    set_variable("Lives", 5)', '    display_variable("Lives", True)', '    while True:', '        create_clone()', '        wait(2.5)'],
+          requires: ['path = [[-200, 150], [200, 150], [200, -120], [-200, -120]]', 'hide()', 'set_variable("Lives", 5)', 'display_variable("Lives", True)', 'create_clone()', 'wait(2.5)']
+        },
+        {
+          title: 'Enemy: walk the path',
+          text: 'Each clone starts at the first waypoint, then <code>for point in path:</code> glides to every <code>[x, y]</code> in turn — reading <code>point[0]</code> for the x and <code>point[1]</code> for the y. If it survives the whole path it costs you a life.',
+          starter: 'path = [[-200, 150], [200, 150], [200, -120], [-200, -120]]\n\ndef game_start():\n    hide()\n    set_variable("Lives", 5)\n    display_variable("Lives", True)\n    while True:\n        create_clone()\n        wait(2.5)',
+          target: 'path = [[-200, 150], [200, 150], [200, -120], [-200, -120]]\n\ndef game_start():\n    hide()\n    set_variable("Lives", 5)\n    display_variable("Lives", True)\n    while True:\n        create_clone()\n        wait(2.5)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(-200, 150)\n    show()\n    for point in path:\n        glide_to_xy(point[0], point[1], 2)\n    change_variable("Lives", -1)\n    delete_clone()',
+          newLines: ['', 'def when_I_start_as_a_clone():', '    go_to_xy(-200, 150)', '    show()', '    for point in path:', '        glide_to_xy(point[0], point[1], 2)', '    change_variable("Lives", -1)', '    delete_clone()'],
+          requires: ['def when_I_start_as_a_clone():', 'go_to_xy(-200, 150)', 'show()', 'for point in path:', 'glide_to_xy(point[0], point[1], 2)', 'change_variable("Lives", -1)', 'delete_clone()']
+        },
+        {
+          title: 'Add the Tower sprite',
+          text: 'Click the highlighted button to add a second sprite. <strong>Name it exactly <code>Tower</code></strong> — the enemy code measures <code>distance_to("Tower")</code>, so the spelling must match. Give it a tower-like costume near the middle of the stage.',
+          highlight: 'add-sprite-btn',
+          highlightLabel: 'Add the Tower sprite here',
+          requiredSpriteNames: ['Enemy', 'Tower'],
+          requiredSpriteHints: { 'Tower': 'Add a sprite named "Tower"' },
+          starter: null, target: null, newLines: [], requires: []
+        },
+        {
+          title: 'Tower: fire on a beat',
+          text: 'Click your <strong>Tower</strong> sprite and delete its default code. Set up the Score counter, park the tower in the centre, and <code>broadcast("shoot")</code> on a steady beat.',
+          starter: null,
+          target: 'def game_start():\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    go_to_xy(0, 0)\n    while True:\n        broadcast("shoot")\n        wait(0.8)',
+          newLines: ['def game_start():', '    set_variable("Score", 0)', '    display_variable("Score", True)', '    go_to_xy(0, 0)', '    while True:', '        broadcast("shoot")', '        wait(0.8)'],
+          requires: ['set_variable("Score", 0)', 'display_variable("Score", True)', 'go_to_xy(0, 0)', 'broadcast("shoot")', 'wait(0.8)']
+        },
+        {
+          title: 'Enemy: get shot down',
+          text: 'Click your <strong>Enemy</strong> sprite again. Add a message handler: when a clone hears <code>"shoot"</code> while it is close to the tower (<code>distance_to("Tower") &lt; 90</code>), it scores a point and is destroyed.',
+          starter: null,
+          target: 'path = [[-200, 150], [200, 150], [200, -120], [-200, -120]]\n\ndef game_start():\n    hide()\n    set_variable("Lives", 5)\n    display_variable("Lives", True)\n    while True:\n        create_clone()\n        wait(2.5)\n\ndef when_I_start_as_a_clone():\n    go_to_xy(-200, 150)\n    show()\n    for point in path:\n        glide_to_xy(point[0], point[1], 2)\n    change_variable("Lives", -1)\n    delete_clone()\n\ndef when_message_received(message):\n    if message == "shoot":\n        if distance_to("Tower") < 90:\n            change_variable("Score", 1)\n            delete_clone()',
+          newLines: ['', 'def when_message_received(message):', '    if message == "shoot":', '        if distance_to("Tower") < 90:', '            change_variable("Score", 1)', '            delete_clone()'],
+          requires: ['def when_message_received(message):', 'message == "shoot"', 'distance_to("Tower") < 90', 'change_variable("Score", 1)']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong>. Enemies loop the path and vanish when they pass your tower.<br><br><strong>Challenges:</strong><ul style="margin-top:0.5rem;padding-left:1.2rem"><li>Add more waypoints to <code>path</code> to make a longer, twistier route.</li><li>Add a game-over when <code>get_variable("Lives") &lt;= 0</code>.</li><li>Add a second Tower sprite — the enemies already listen for any <code>"shoot"</code>, so it just works.</li></ul>',
+          starter: null, target: null, newLines: [], requires: []
+        }
+      ]
+    },
+
+    {
+      id: 'overcooked',
+      isNew: true,
+      order: 4,
+      title: 'Overcooked',
+      emoji: '🍳',
+      desc: 'Fill kitchen orders before you fall behind. Orders come from a menu list, a function with a parameter serves each dish, and a message sends the waiter running.',
+      steps: [
+        {
+          title: 'What are we building?',
+          text: 'A simplified Overcooked! An order appears — <em>Make a Burger!</em> — and you press <strong>1</strong>, <strong>2</strong> or <strong>3</strong> to cook the matching dish.<br><br>This capstone brings the new skills together: a <strong>list</strong> holds the menu, <strong>functions</strong> (one takes a <em>parameter</em>) handle the orders, and a <strong>broadcast</strong> tells a Waiter sprite to run the plate out.',
+          starter: null, target: null, newLines: [], requires: []
+        },
+        {
+          title: 'The menu list and a new order',
+          text: 'Store the dishes in a <strong>list</strong> called <code>menu</code>, and remember which one is wanted with <code>current</code>. The <code>new_order()</code> function picks a random dish number and shows it by reading <code>menu[current]</code> out of the list.',
+          starter: '',
+          target: 'menu = ["Burger", "Pizza", "Salad"]\ncurrent = 0\n\ndef new_order():\n    global current\n    current = pick_random(0, 2)\n    say("Make a " + menu[current] + "!")',
+          newLines: ['menu = ["Burger", "Pizza", "Salad"]', 'current = 0', '', 'def new_order():', '    global current', '    current = pick_random(0, 2)', '    say("Make a " + menu[current] + "!")'],
+          requires: ['menu = ["Burger", "Pizza", "Salad"]', 'def new_order():', 'current = pick_random(0, 2)', 'menu[current]']
+        },
+        {
+          title: 'A function that takes a parameter',
+          text: 'The <code>serve(choice)</code> function takes a <strong>parameter</strong> — the dish number you tried to cook. If <code>choice</code> matches the <code>current</code> order it scores, tells the waiter with <code>broadcast("served")</code>, and starts the next order.',
+          starter: 'menu = ["Burger", "Pizza", "Salad"]\ncurrent = 0\n\ndef new_order():\n    global current\n    current = pick_random(0, 2)\n    say("Make a " + menu[current] + "!")',
+          target: 'menu = ["Burger", "Pizza", "Salad"]\ncurrent = 0\n\ndef new_order():\n    global current\n    current = pick_random(0, 2)\n    say("Make a " + menu[current] + "!")\n\ndef serve(choice):\n    global current\n    if choice == current:\n        change_variable("Score", 1)\n        broadcast("served")\n        new_order()\n        wait(0.3)',
+          newLines: ['', 'def serve(choice):', '    global current', '    if choice == current:', '        change_variable("Score", 1)', '        broadcast("served")', '        new_order()', '        wait(0.3)'],
+          requires: ['def serve(choice):', 'choice == current', 'change_variable("Score", 1)', 'broadcast("served")', '        new_order()', 'wait(0.3)']
+        },
+        {
+          title: 'The kitchen loop',
+          text: 'Now wire up the keys. <code>game_start()</code> shows the first order, then the loop calls <code>serve()</code> with a different number for each key — <code>serve(0)</code> for key <strong>1</strong>, <code>serve(1)</code> for <strong>2</strong>, <code>serve(2)</code> for <strong>3</strong>. One function handles all three dishes!',
+          starter: 'menu = ["Burger", "Pizza", "Salad"]\ncurrent = 0\n\ndef new_order():\n    global current\n    current = pick_random(0, 2)\n    say("Make a " + menu[current] + "!")\n\ndef serve(choice):\n    global current\n    if choice == current:\n        change_variable("Score", 1)\n        broadcast("served")\n        new_order()\n        wait(0.3)',
+          target: 'menu = ["Burger", "Pizza", "Salad"]\ncurrent = 0\n\ndef new_order():\n    global current\n    current = pick_random(0, 2)\n    say("Make a " + menu[current] + "!")\n\ndef serve(choice):\n    global current\n    if choice == current:\n        change_variable("Score", 1)\n        broadcast("served")\n        new_order()\n        wait(0.3)\n\ndef game_start():\n    global current\n    set_variable("Score", 0)\n    display_variable("Score", True)\n    new_order()\n    while True:\n        if key_pressed("1"):\n            serve(0)\n        if key_pressed("2"):\n            serve(1)\n        if key_pressed("3"):\n            serve(2)',
+          newLines: ['', 'def game_start():', '    global current', '    set_variable("Score", 0)', '    display_variable("Score", True)', '    new_order()', '    while True:', '        if key_pressed("1"):', '            serve(0)', '        if key_pressed("2"):', '            serve(1)', '        if key_pressed("3"):', '            serve(2)'],
+          requires: ['def game_start():', 'set_variable("Score", 0)', 'display_variable("Score", True)', '    new_order()', 'key_pressed("1")', 'serve(0)', 'key_pressed("2")', 'serve(1)', 'key_pressed("3")', 'serve(2)']
+        },
+        {
+          title: 'Add the Waiter sprite',
+          text: 'Click the highlighted button to add a second sprite. <strong>Name it exactly <code>Waiter</code></strong>, and give it a friendly costume. It will react to the <code>"served"</code> broadcast.',
+          highlight: 'add-sprite-btn',
+          highlightLabel: 'Add the Waiter sprite here',
+          requiredSpriteNames: ['Waiter'],
+          requiredSpriteHints: { 'Waiter': 'Add a sprite named "Waiter"' },
+          starter: null, target: null, newLines: [], requires: []
+        },
+        {
+          title: 'Waiter: run the plate out',
+          text: 'Click your <strong>Waiter</strong> sprite and delete its default code. Keep it hidden in the corner until it hears <code>"served"</code> — then it pops up, shouts <em>Order up!</em>, and hides again.',
+          starter: null,
+          target: 'def game_start():\n    go_to_xy(180, -130)\n    hide()\n\ndef when_message_received(message):\n    if message == "served":\n        show()\n        say_for_secs("Order up!", 0.4)\n        hide()',
+          newLines: ['def game_start():', '    go_to_xy(180, -130)', '    hide()', '', 'def when_message_received(message):', '    if message == "served":', '        show()', '        say_for_secs("Order up!", 0.4)', '        hide()'],
+          requires: ['go_to_xy(180, -130)', 'def when_message_received(message):', 'message == "served"', 'show()', 'say_for_secs("Order up!", 0.4)']
+        },
+        {
+          title: '✅ Try it!',
+          text: 'Click the <strong>green flag ▶</strong> and cook the orders with keys <strong>1</strong>, <strong>2</strong> and <strong>3</strong>!<br><br><strong>Challenges:</strong><ul style="margin-top:0.5rem;padding-left:1.2rem"><li>Add a fourth dish to the <code>menu</code> list and a <code>serve(3)</code> on key <strong>4</strong>.</li><li>Add a <code>Lives</code> variable and lose one for a wrong key (an <code>else</code> in <code>serve</code>).</li><li>Add a countdown using <code>timer()</code> so orders must be filled before time runs out.</li></ul>',
           starter: null, target: null, newLines: [], requires: []
         }
       ]
@@ -4141,14 +4389,19 @@
     'functions': 'Code Organisation',
     'lists': 'Code Organisation',
     'messages': 'Code Organisation',
-    'debug-refactor': 'Code Organisation'
+    'debug-refactor': 'Code Organisation',
+    'geometry-dash': 'Applied Games',
+    'rhythm-game': 'Applied Games',
+    'tower-defense': 'Applied Games',
+    'overcooked': 'Applied Games'
   };
 
   var TUTORIAL_CATEGORY_ORDER = [
     'Python Basics',
     'Movement & Animation',
     'Code Organisation',
-    'Full Games'
+    'Full Games',
+    'Applied Games'
   ];
 
   function tutorialCategory(t) {
@@ -4170,6 +4423,11 @@
   }
 
   function compareTutorialEntries(a, b) {
+    // Tutorials with an explicit numeric `order` sort by it first (used to keep
+    // the Applied Games in difficulty order); everything else stays alphabetical.
+    var ao = (typeof a.t.order === 'number') ? a.t.order : Infinity;
+    var bo = (typeof b.t.order === 'number') ? b.t.order : Infinity;
+    if (ao !== bo) return ao - bo;
     return a.t.title.localeCompare(b.t.title);
   }
 
