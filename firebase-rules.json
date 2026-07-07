@@ -173,6 +173,13 @@
               }
             }
           },
+          "sceneShowcase": {
+            "$studentCode": {
+              "$roundIndex": {
+                ".write": "auth != null && root.child('studentSessions').child(auth.uid).child('code').val() === $studentCode"
+              }
+            }
+          },
           "bracketVotes": {
             "$roundIndex": {
               "$voterCode": {
