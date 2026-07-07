@@ -278,9 +278,12 @@ function waitForBlockbenchQuizReady(qIdx, loadKey, attempt) {
 function resetBlockbenchQuizFrame() {
   var frame = document.getElementById('qs-blockbench-frame');
   if (!frame) return;
+  var scenePicker = document.getElementById('bbc-scene-picker');
+  if (scenePicker && scenePicker.parentNode) scenePicker.parentNode.removeChild(scenePicker);
   frame.style.pointerEvents = '';
   frame.onload = null;
   frame.dataset.quizLoadKey = '';
+  frame.dataset.blockbenchContestScene = '';
   if (frame.src !== 'about:blank') frame.src = 'about:blank';
 }
 

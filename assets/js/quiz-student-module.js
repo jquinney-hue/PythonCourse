@@ -2450,10 +2450,15 @@ function loadStudentBlockbenchSceneProject(qIdx, loadKey, projectText, choice, r
 
 function renderStudentBlockbenchSceneBuild(qIdx, questionStart, duration, contest, roundIndex, renderToken) {
   contest = contest || {};
+  function removeScenePicker() {
+    var oldPicker = document.getElementById('bbc-scene-picker');
+    if (oldPicker && oldPicker.parentNode) oldPicker.parentNode.removeChild(oldPicker);
+  }
   var existing = contest.sceneShowcase && contest.sceneShowcase[state.uid] && contest.sceneShowcase[state.uid][roundIndex];
   if (existing && existing.fileId) {
     setStudentQuestionWorkMode(null);
     resetBlockbenchQuizFrame();
+    removeScenePicker();
     var waitWrapExisting = document.getElementById('qs-widget-answer');
     var waitBoxExisting = document.getElementById('qs-widget-container');
     if (waitWrapExisting) waitWrapExisting.classList.remove('hidden');
@@ -2471,6 +2476,7 @@ function renderStudentBlockbenchSceneBuild(qIdx, questionStart, duration, contes
   if (!choices.length) {
     setStudentQuestionWorkMode(null);
     resetBlockbenchQuizFrame();
+    removeScenePicker();
     var waitWrap = document.getElementById('qs-widget-answer');
     var waitBox = document.getElementById('qs-widget-container');
     if (waitWrap) waitWrap.classList.remove('hidden');
@@ -2488,16 +2494,25 @@ function renderStudentBlockbenchSceneBuild(qIdx, questionStart, duration, contes
   var widgetWrap = document.getElementById('qs-widget-answer');
   var widgetBox = document.getElementById('qs-widget-container');
   var blockbenchWrap = document.getElementById('qs-blockbench-answer');
-  if (widgetWrap) widgetWrap.classList.remove('hidden');
+  if (widgetWrap) widgetWrap.classList.add('hidden');
+  if (widgetBox) widgetBox.innerHTML = '';
   if (blockbenchWrap) blockbenchWrap.classList.remove('hidden');
-  document.getElementById('qs-q-text').textContent = 'You were eliminated: choose a winning model and build a scene around it.';
-  if (widgetBox) {
-    widgetBox.innerHTML =
-      '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 mb-3 text-center">' +
-        '<div class="text-yellow-300 font-bold mb-1">Add to a winning model</div>' +
-        '<div class="text-sm text-gray-300 mb-3">Pick a previous winner. Blockbench will load their model so you can add scenery, props, background objects or extra detail for the end showcase.</div>' +
-        '<select id="bbc-scene-source" data-tshirt-live="1" class="w-full rounded bg-gray-900 border border-gray-600 px-3 py-2 text-white text-sm"></select>' +
-      '</div>';
+  document.getElementById('qs-q-text').textContent = 'Add scenery or extra detail around a winning model.';
+  removeScenePicker();
+  if (blockbenchWrap) {
+    var picker = document.createElement('div');
+    picker.id = 'bbc-scene-picker';
+    picker.style.cssText =
+      'display:flex;align-items:center;gap:0.7rem;flex-wrap:wrap;' +
+      'background:#1e293b;border:1px solid #334155;border-bottom:none;' +
+      'border-radius:0.5rem 0.5rem 0 0;padding:0.45rem 0.7rem;color:#cbd5e1';
+    picker.innerHTML =
+      '<div style="font-size:0.8rem;line-height:1.2;min-width:11rem;flex:1 1 15rem">' +
+        '<span style="display:block;color:#fbbf24;font-weight:700">Add to a winning model</span>' +
+        '<span style="color:#94a3b8">Choose one, then build around it.</span>' +
+      '</div>' +
+      '<select id="bbc-scene-source" data-tshirt-live="1" style="flex:2 1 18rem;min-width:14rem;max-width:100%;border:1px solid #475569;border-radius:0.45rem;background:#0f172a;color:#f8fafc;padding:0.45rem 0.6rem;font-size:0.85rem"></select>';
+    blockbenchWrap.insertBefore(picker, blockbenchWrap.firstChild);
   }
   var select = document.getElementById('bbc-scene-source');
   choices.forEach(function(choice, idx) {
@@ -2551,6 +2566,8 @@ function renderStudentBlockbenchSceneBuild(qIdx, questionStart, duration, contes
 function renderStudentBlockbenchDraw(qIdx, questionStart, duration) {
   var renderToken = nextStudentBlockbenchContestRenderToken();
   setupStudentTshirtContestQuestion('Build your Blockbench model.', 'Modelling round', questionStart, duration);
+  var oldScenePicker = document.getElementById('bbc-scene-picker');
+  if (oldScenePicker && oldScenePicker.parentNode) oldScenePicker.parentNode.removeChild(oldScenePicker);
   quiz.sessionRef.child('blockbenchContest').get().then(function(snap) {
     if (!isCurrentStudentBlockbenchContestRender(renderToken)) return;
     var contest = snap.val() || {};
