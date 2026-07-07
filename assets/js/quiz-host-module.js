@@ -2124,7 +2124,8 @@ function isBlockbenchContestState(stateVal) {
     'blockbench_topics',
     'blockbench_topic_vote',
     'blockbench_draw',
-    'blockbench_bracket_vote'
+    'blockbench_bracket_vote',
+    'blockbench_round_results'
   ].indexOf(stateVal) !== -1;
 }
 
@@ -2179,11 +2180,28 @@ function hostBlockbenchContestBuildCacheContest(contest) {
       };
     });
   });
+  var cleanSceneShowcase = {};
+  Object.keys(contest.sceneShowcase || {}).forEach(function(code) {
+    cleanSceneShowcase[code] = {};
+    Object.keys(contest.sceneShowcase[code] || {}).forEach(function(roundKey) {
+      var sub = contest.sceneShowcase[code][roundKey] || {};
+      if (!sub.fileId) return;
+      cleanSceneShowcase[code][roundKey] = {
+        fileId: sub.fileId,
+        sourceCode: sub.sourceCode || '',
+        sourceRound: Number(sub.sourceRound) || 0,
+        roundIndex: Number(sub.roundIndex) || 0,
+        cubeCount: sub.cubeCount || 0,
+        submittedAt: sub.submittedAt || null
+      };
+    });
+  });
   return {
     config: contest.config || null,
     roundIndex: contest.roundIndex || 0,
     rounds: contest.rounds || null,
     submissions: cleanSubmissions,
+    sceneShowcase: cleanSceneShowcase,
     champion: contest.champion || null,
     finalLeaderboard: contest.finalLeaderboard || null
   };
@@ -2322,13 +2340,31 @@ function renderHostBlockbenchContestView(stateVal, snap) {
     title = 'Bracket Voting';
     subtitle = 'Students choose the best model in brackets they are not part of.';
     buttonText = 'Resolve round';
+  } else if (stateVal === 'blockbench_round_results') {
+    var pendingAdvance = snap.child('blockbenchContest/pendingRoundAdvance').val() || {};
+    title = 'Round ' + (roundIndex + 1) + ' Results';
+    subtitle = pendingAdvance.type === 'finish'
+      ? 'The final bracket is resolved. Show the leaderboard when everyone has seen the result.'
+      : 'These bracket winners move into the next modelling round.';
+    buttonText = pendingAdvance.type === 'finish' ? 'Show final leaderboard' : 'Start next round';
   }
 
   titleEl.textContent = title;
   subEl.textContent = subtitle;
   btn.textContent = buttonText + ' ->';
   btn.onclick = function() { advanceBlockbenchContest().catch(function(e) { alert(e.message || 'Could not advance contest.'); }); };
-  startHostBlockbenchContestTimer(duration, startedAt);
+  if (stateVal === 'blockbench_round_results') {
+    clearHostQuestionTimer();
+    var timerEl = document.getElementById('qhc-timer');
+    var barEl = document.getElementById('qhc-timer-bar');
+    if (timerEl) timerEl.textContent = '--';
+    if (barEl) {
+      barEl.style.width = '100%';
+      barEl.className = 'h-2 transition-all bg-gray-600';
+    }
+  } else {
+    startHostBlockbenchContestTimer(duration, startedAt);
+  }
 
   var round = snap.child('blockbenchContest/rounds/' + roundIndex).val() || {};
   var topic = round.topic || '';
@@ -2346,21 +2382,43 @@ function renderHostBlockbenchContestView(stateVal, snap) {
   bracketWrap.className = 'grid gap-3 w-full max-w-3xl';
   var brackets = tshirtObjValues(round.brackets);
   if (brackets.length) {
+    if (stateVal === 'blockbench_round_results') {
+      var resultHeading = document.createElement('div');
+      resultHeading.className = 'text-center text-sm font-semibold text-green-300 mb-1';
+      resultHeading.textContent = 'Bracket winners';
+      bracketWrap.appendChild(resultHeading);
+    }
     brackets.forEach(function(bracket, i) {
       var entrants = tshirtObjValues(bracket.entrants);
       var row = document.createElement('div');
       row.className = 'rounded-lg bg-gray-800 border border-gray-700 px-4 py-3';
-      row.innerHTML =
-        '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
-        '<div class="flex flex-wrap gap-2">' +
-        entrants.map(function(code) {
-          var winner = bracket.winner === code;
-          return '<span class="rounded-full px-3 py-1 text-sm ' + (winner ? 'bg-green-700 text-green-100' : 'bg-gray-700 text-gray-100') + '">' +
-            escapeHtml(studentName(code) || code) + (winner ? ' (winner)' : '') + '</span>';
-        }).join('') +
-        '</div>';
+      if (stateVal === 'blockbench_round_results') {
+        var winnerName = bracket.winner ? (studentName(bracket.winner) || bracket.winner) : 'No winner';
+        row.innerHTML =
+          '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">' +
+            '<div class="min-w-0">' +
+              '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
+              '<div class="text-sm text-gray-300 truncate">' + escapeHtml(entrants.map(function(code) { return studentName(code) || code; }).join(' vs ')) + '</div>' +
+            '</div>' +
+            '<div class="rounded-lg bg-green-700/30 border border-green-500/40 px-3 py-2 text-green-100 font-bold shrink-0">' +
+              escapeHtml(winnerName) +
+            '</div>' +
+          '</div>';
+      } else {
+        row.innerHTML =
+          '<div class="text-xs text-gray-500 mb-1">Bracket ' + (i + 1) + '</div>' +
+          '<div class="flex flex-wrap gap-2">' +
+          entrants.map(function(code) {
+            var winner = bracket.winner === code;
+            return '<span class="rounded-full px-3 py-1 text-sm ' + (winner ? 'bg-green-700 text-green-100' : 'bg-gray-700 text-gray-100') + '">' +
+              escapeHtml(studentName(code) || code) + (winner ? ' (winner)' : '') + '</span>';
+          }).join('') +
+          '</div>';
+      }
       bracketWrap.appendChild(row);
     });
+  } else if (stateVal === 'blockbench_round_results') {
+    bracketWrap.innerHTML = '<div class="rounded-lg bg-gray-800 border border-gray-700 px-4 py-3 text-center text-gray-300">No bracket results were recorded for this round.</div>';
   }
   bodyEl.appendChild(bracketWrap);
 
@@ -2369,6 +2427,10 @@ function renderHostBlockbenchContestView(stateVal, snap) {
 
 function renderHostBlockbenchContestProgress(stateVal, roundIndex, progressEl) {
   if (!quiz.sessionRef || !progressEl) return;
+  if (stateVal === 'blockbench_round_results') {
+    progressEl.innerHTML = '<div class="text-green-300 font-bold">Review the winners, then continue when the class is ready.</div>';
+    return;
+  }
   var path =
     stateVal === 'blockbench_topics' ? 'blockbenchContest/topics' :
     stateVal === 'blockbench_topic_vote' ? 'blockbenchContest/topicVotes' :
@@ -2429,6 +2491,8 @@ async function advanceBlockbenchContest() {
       await startBlockbenchBracketVoteOrResolve(cfg);
     } else if (stateVal === 'blockbench_bracket_vote') {
       await resolveBlockbenchRoundAndContinue(cfg);
+    } else if (stateVal === 'blockbench_round_results') {
+      await continueBlockbenchContestAfterRoundResults(cfg);
     }
   } finally {
     quiz._blockbenchContestAdvancing = false;
@@ -2622,13 +2686,61 @@ async function resolveBlockbenchRoundAndContinue(cfg) {
   });
   await Promise.all(winnerWrites);
   await quiz.sessionRef.child('blockbenchContest/rounds/' + roundIndex + '/winners').set(tshirtArrayToFirebaseObj(winners));
+  var now = Date.now();
   if (winners.length <= 1) {
-    await finishBlockbenchContest(winners[0] || null);
+    await quiz.sessionRef.child('blockbenchContest/pendingRoundAdvance').set({
+      type: 'finish',
+      champion: winners[0] || null,
+      roundIndex: roundIndex,
+      createdAt: now
+    });
+  } else {
+    await quiz.sessionRef.child('blockbenchContest/pendingRoundAdvance').set({
+      type: 'draw',
+      roundIndex: roundIndex,
+      nextRoundIndex: roundIndex + 1,
+      participants: tshirtArrayToFirebaseObj(winners),
+      createdAt: now
+    });
+  }
+  await quiz.sessionRef.update({
+    state: 'blockbench_round_results',
+    questionStart: now,
+    questionDuration: 0
+  });
+}
+
+async function continueBlockbenchContestAfterRoundResults(cfg) {
+  var contestSnap = await quiz.sessionRef.child('blockbenchContest').get();
+  var contest = contestSnap.val() || {};
+  var pending = contest.pendingRoundAdvance || {};
+  var participants = tshirtObjValues(pending.participants);
+  if (pending.type === 'finish') {
+    await quiz.sessionRef.child('blockbenchContest/pendingRoundAdvance').remove();
+    await finishBlockbenchContest(pending.champion || null);
     return;
   }
-  var rankSnap = await quiz.sessionRef.child('blockbenchContest/topicRankings').get();
-  var rankings = rankSnap.exists() ? tshirtObjValues(rankSnap.val()) : blockbenchFallbackTopics();
-  await startBlockbenchDrawingRound(roundIndex + 1, winners, rankings, cfg);
+  if (pending.type === 'draw' && participants.length) {
+    var nextRoundIndex = Number(pending.nextRoundIndex);
+    if (!Number.isFinite(nextRoundIndex)) nextRoundIndex = (Number(pending.roundIndex) || 0) + 1;
+    var rankSnap = await quiz.sessionRef.child('blockbenchContest/topicRankings').get();
+    var rankings = rankSnap.exists() ? tshirtObjValues(rankSnap.val()) : blockbenchFallbackTopics();
+    await quiz.sessionRef.child('blockbenchContest/pendingRoundAdvance').remove();
+    await startBlockbenchDrawingRound(nextRoundIndex, participants, rankings, cfg);
+    return;
+  }
+
+  var roundIndex = Number(contest.roundIndex) || 0;
+  var round = contest.rounds && contest.rounds[roundIndex] ? contest.rounds[roundIndex] : {};
+  var winners = tshirtObjValues(round.winners);
+  await quiz.sessionRef.child('blockbenchContest/pendingRoundAdvance').remove();
+  if (winners.length <= 1) {
+    await finishBlockbenchContest(winners[0] || null);
+  } else {
+    var fallbackRankSnap = await quiz.sessionRef.child('blockbenchContest/topicRankings').get();
+    var fallbackRankings = fallbackRankSnap.exists() ? tshirtObjValues(fallbackRankSnap.val()) : blockbenchFallbackTopics();
+    await startBlockbenchDrawingRound(roundIndex + 1, winners, fallbackRankings, cfg);
+  }
 }
 
 async function buildBlockbenchContestLeaderboard(champion) {
@@ -3103,7 +3215,10 @@ function renderHostLeaderboard(leaderboard) {
     appendHostTshirtContestSummary(el);
     appendHostTshirtCharacterShowcase(el);
   }
-  if (isBlockbenchContest) appendHostBlockbenchContestSummary(el);
+  if (isBlockbenchContest) {
+    appendHostBlockbenchContestSummary(el);
+    appendHostBlockbenchSceneShowcase(el);
+  }
 }
 
 function appendHostTshirtContestSummary(el) {
@@ -3250,6 +3365,82 @@ function appendHostBlockbenchContestSummary(el) {
     });
   }).catch(function(e) {
     holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Bracket winners</h3><p class="text-red-300 text-sm text-center">Could not load bracket results: ' + escapeHtml(e.message) + '</p>';
+  });
+}
+
+function appendHostBlockbenchSceneShowcase(el) {
+  if (!el) return;
+  var holder = document.createElement('div');
+  holder.className = 'mt-6 w-full max-w-4xl text-left';
+  holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated scene showcase</h3><p class="text-gray-400 text-sm text-center">Loading extra models...</p>';
+  el.appendChild(holder);
+  getHostBlockbenchContestData().then(async function(contest) {
+    var raw = contest.sceneShowcase || {};
+    var entries = [];
+    Object.keys(raw).forEach(function(code) {
+      Object.keys(raw[code] || {}).forEach(function(roundKey) {
+        var sub = raw[code][roundKey] || {};
+        if (!sub.fileId) return;
+        entries.push({
+          code: code,
+          fileId: sub.fileId,
+          sourceCode: sub.sourceCode || '',
+          sourceRound: Number(sub.sourceRound) || 0,
+          roundIndex: Number(sub.roundIndex) || Number(roundKey) || 0,
+          submittedAt: Number(sub.submittedAt) || 0
+        });
+      });
+    });
+    entries.sort(function(a, b) {
+      if (a.roundIndex !== b.roundIndex) return a.roundIndex - b.roundIndex;
+      return a.submittedAt - b.submittedAt;
+    });
+    if (!entries.length) {
+      holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated scene showcase</h3><p class="text-gray-400 text-sm text-center">No extra Blockbench scenes were submitted.</p>';
+      return;
+    }
+    var token = window.classroomState && window.classroomState.token;
+    if (!token) {
+      try { await getClassroomToken(); token = window.classroomState && window.classroomState.token; } catch(_e) {}
+    }
+    holder.innerHTML =
+      '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated scene showcase</h3>' +
+      '<details class="rounded-lg bg-gray-800 border border-gray-700 p-3">' +
+        '<summary class="cursor-pointer text-yellow-300 font-bold">Show ' + entries.length + ' extra Blockbench scene' + (entries.length === 1 ? '' : 's') + '</summary>' +
+        '<div class="grid gap-3 mt-3" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">' +
+          entries.map(function(entry) {
+            return '<div class="rounded-lg bg-gray-900 border border-gray-700 p-3">' +
+              '<div class="bbc-scene-showcase-model rounded bg-gray-950 flex items-center justify-center text-xs text-gray-400 overflow-hidden" style="height:260px" data-file-id="' + escapeHtml(entry.fileId) + '">Open showcase to load</div>' +
+              '<div class="mt-2 font-semibold text-sm text-white truncate">' + escapeHtml(studentName(entry.code) || entry.code) + '</div>' +
+              '<div class="text-xs text-gray-400 truncate">Built around ' + escapeHtml(studentName(entry.sourceCode) || entry.sourceCode || 'a winner') + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</details>';
+    var details = holder.querySelector('details');
+    var loaded = false;
+    function loadSceneShowcaseModels() {
+      if (loaded) return;
+      loaded = true;
+      holder.querySelectorAll('.bbc-scene-showcase-model').forEach(function(box) {
+        if (!token) {
+          box.textContent = 'Drive is not connected';
+          return;
+        }
+        box.textContent = 'Loading...';
+        window.driveFetchFileAsText(box.dataset.fileId, token).then(function(text) {
+          if (!document.body.contains(box)) return;
+          renderBlockbenchModelViewer(box, text, { height: 260, spin: true });
+        }).catch(function() {
+          if (document.body.contains(box)) box.textContent = 'Could not load';
+        });
+      });
+    }
+    if (details) details.addEventListener('toggle', function() {
+      if (details.open) loadSceneShowcaseModels();
+    });
+  }).catch(function(e) {
+    holder.innerHTML = '<h3 class="text-lg font-bold text-white mb-3 text-center">Eliminated scene showcase</h3><p class="text-red-300 text-sm text-center">Could not load extra models: ' + escapeHtml(e.message) + '</p>';
   });
 }
 

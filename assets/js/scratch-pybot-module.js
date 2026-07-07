@@ -240,9 +240,16 @@ function waitForBlockbenchQuizReady(qIdx, loadKey, attempt) {
       submitBtn.onclick = function() { submitStudentBlockbenchShare(qIdx); };
       if (fb) fb.textContent = 'Build your model in Blockbench, then submit it for voting.';
     } else if (q.type === 'blockbench_contest') {
-      submitBtn.textContent = 'Submit Model';
-      submitBtn.onclick = function() { submitStudentBlockbenchContestModel(qIdx); };
-      if (fb) fb.textContent = 'Build your model in Blockbench, then submit it for the bracket.';
+      if (frame && frame.dataset.blockbenchContestScene === '1') {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Loading winner...';
+        submitBtn.onclick = null;
+        if (fb) fb.textContent = 'Loading the selected winning model...';
+      } else {
+        submitBtn.textContent = 'Submit Model';
+        submitBtn.onclick = function() { submitStudentBlockbenchContestModel(qIdx); };
+        if (fb) fb.textContent = 'Build your model in Blockbench, then submit it for the bracket.';
+      }
     } else {
       submitBtn.textContent = 'Check & Submit';
       submitBtn.onclick = function() { submitStudentBlockbenchAnswer(qIdx); };
