@@ -1,0 +1,14 @@
+{
+  "id": "year8-hex-machine",
+  "title": "L4: Hex Machine",
+  "description": "Connect machines, convert between hexadecimal and binary, add binary values, and merge machines to climb the class leaderboard.",
+  "steps": [
+    {
+      "id": "play",
+      "title": "Hex Machine",
+      "autoComplete": true,
+      "content": "<h2 class='text-xl font-bold mb-2 text-gray-800'>Hex Machine</h2><p class='text-gray-700 mb-3'>Connect machines, convert their hexadecimal values into binary, add the binary values together, then compress the result back into hexadecimal to build stronger machines. The game saves locally as you play, and you can use the Save and Load buttons to store your progress in Google Drive.</p><div class='ex-box' style='padding:0.6rem 0.8rem;margin-bottom:0.9rem'><div style='display:flex;flex-wrap:wrap;gap:1.25rem;font-size:0.9rem'><div><span style='color:#94a3b8'>Move</span><br><span style='color:#cbd5e1'>Drag machines</span></div><div><span style='color:#94a3b8'>Merge</span><br><span style='color:#cbd5e1'>Drag amber socket to another machine</span></div><div><span style='color:#94a3b8'>Convert</span><br><span style='color:#cbd5e1'>Hex to binary, then binary to hex</span></div><div><span style='color:#94a3b8'>Goal</span><br><span style='color:#cbd5e1'>Build the strongest machine</span></div></div></div><div id='hex-machine-root'></div>",
+      "js": "if (window.initHexMachineGame) { initHexMachineGame('hex-machine-root'); } else { document.getElementById('hex-machine-root').innerHTML = '<p style=\"color:#f87171\">Hex Machine could not load - please refresh the page.</p>'; }"
+    }
+  ]
+}

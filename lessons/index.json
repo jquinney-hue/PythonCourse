@@ -177,9 +177,9 @@
               "order": 3
             },
             {
-              "id": "year8-binary-mine-3d",
-              "title": "L4: Binary Mine 3D",
-              "file": "lessons/year8-binary-mine-3d.json",
+              "id": "year8-hex-machine",
+              "title": "L4: Hex Machine",
+              "file": "lessons/year8-hex-machine.json",
               "order": 4
             },
             {
