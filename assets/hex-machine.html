@@ -12,6 +12,25 @@ canvas.physics-cables{position:absolute;inset:0;width:100%;height:100%;pointer-e
 .mainframe{position:absolute;left:50%;top:50%;width:270px;height:210px;transform:translate(-50%,-50%);z-index:4;border:2px solid #3b5e7e;border-radius:28px;background:linear-gradient(145deg,#172d45,#091522 60%);box-shadow:0 28px 70px #000b,inset 0 0 0 7px #0b1826}.mainframe:before,.mainframe:after{content:"";position:absolute;top:38px;width:18px;height:134px;background:repeating-linear-gradient(#5b7188 0 5px,#1b2c3f 5px 10px)}.mainframe:before{left:-12px;border-radius:7px 0 0 7px}.mainframe:after{right:-12px;border-radius:0 7px 7px 0}.screen{margin:30px 28px 14px;height:100px;border:3px solid #31526c;border-radius:15px;background:radial-gradient(circle,#163c35,#061713);display:grid;place-items:center;text-align:center;box-shadow:inset 0 0 30px #000}.screen small{color:#7fc9aa;letter-spacing:.15em}.money{font:900 clamp(1.7rem,4vw,2.5rem) ui-monospace,monospace;color:#a8ffd0;text-shadow:0 0 14px #5be39f55}.rate{color:#94b9cb;font:800 .86rem ui-monospace,monospace;text-align:center}.mainframe .title{text-align:center;color:#b9cfe0;font-weight:900;letter-spacing:.12em;font-size:.75rem}
 .machine{position:absolute;width:190px;min-height:126px;z-index:5;border:1px solid #3b5a78;border-radius:19px;background:linear-gradient(145deg,#18314c,#0a1726 68%);box-shadow:0 16px 35px #0008;cursor:grab;touch-action:none;transition:box-shadow .2s,border-color .2s,transform .2s}.machine:hover{border-color:#6d91b5;box-shadow:0 18px 42px #0009,0 0 0 2px #59d8ff14}.machine.dragging{cursor:grabbing;transform:scale(1.025);z-index:10}.machine-head{padding:10px 13px 8px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2c4864}.machine-name{font-weight:900}.machine-level{color:var(--cyan);font:900 1.1rem ui-monospace,monospace}.machine-body{padding:12px}.machine-rate{font:900 1rem ui-monospace,monospace}.machine-rate span{color:var(--green)}.machine-note{color:var(--muted);font-size:.74rem;margin-top:6px}.port{position:absolute;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:3px solid #20354a;background:#07111d;box-shadow:0 0 0 3px #0a1726;z-index:2}.port:after{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}.power-port{color:var(--cyan);transition:left .12s,right .12s,top .12s,bottom .12s}.power-port.side-right{right:-14px;left:auto;top:50%;bottom:auto;transform:translateY(-50%)}.power-port.side-left{left:-14px;right:auto;top:50%;bottom:auto;transform:translateY(-50%)}.power-port.side-top{top:-14px;bottom:auto;left:50%;right:auto;transform:translateX(-50%)}.power-port.side-bottom{bottom:-14px;top:auto;left:50%;right:auto;transform:translateX(-50%)}.merge-port{left:50%;bottom:-14px;transform:translateX(-50%);color:var(--amber);cursor:crosshair}.merge-port:hover,.merge-port.hot{box-shadow:0 0 0 4px #ffd16633,0 0 20px #ffd16688}.machine.ready{border-color:var(--amber)}
 .tip{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:8;padding:8px 12px;border:1px solid #2c4763;border-radius:12px;background:#081522dd;color:var(--muted);font-size:.82rem;backdrop-filter:blur(10px)}
+.defence-layer,.bug-layer,.bug-vfx,.bug-banner{position:absolute;inset:0;pointer-events:none}
+.defence-layer{z-index:3}.bug-vfx{z-index:79}.bug-layer{z-index:80}
+.hm-laser{position:absolute;width:42px;height:42px;margin:-21px 0 0 -21px;pointer-events:auto;z-index:3;border:5px solid #f4f4f4;background:#777;box-shadow:-3px -3px 0 #2d2d2d,4px 4px 0 #595959;display:grid;place-items:center;font:900 .68rem ui-monospace,monospace;color:#111;cursor:grab}
+.hm-laser:before{content:"";position:absolute;left:50%;top:-14px;width:13px;height:24px;transform:translateX(-50%);background:#343434;border:3px solid #f4f4f4;box-shadow:0 0 0 2px #555}
+.hm-laser:after{content:"";position:absolute;inset:9px;border-radius:50%;background:#d59a19;box-shadow:0 0 14px #d59a19}
+.hm-laser .tier{position:relative;z-index:2;background:#eee;border:2px solid #333;padding:0 3px;line-height:1.1}
+.hm-laser.ready:after{background:#f3d36c;box-shadow:0 0 18px #ffd166}
+.hm-shot{position:absolute;height:4px;background:#ffef99;box-shadow:0 0 12px #ffd166;transform-origin:left center;z-index:78;pointer-events:none}
+.hm-bug{position:absolute;width:34px;height:28px;margin:-14px 0 0 -17px;pointer-events:auto;z-index:81;border:3px solid #f4f4f4;background:#3d1515;box-shadow:-2px -2px 0 #111,3px 3px 0 #641b1b;color:#fff;cursor:crosshair;display:grid;place-items:center;font:900 .54rem ui-monospace,monospace;transform:translateZ(0)}
+.hm-bug:before,.hm-bug:after{content:"";position:absolute;top:7px;width:10px;height:4px;background:#111;border:2px solid #f4f4f4}.hm-bug:before{left:-10px}.hm-bug:after{right:-10px}
+.hm-bug .bug-core{position:relative;z-index:2}.hm-bug .bug-health{position:absolute;left:-3px;right:-3px;bottom:-10px;height:5px;background:#111;border:1px solid #f4f4f4}.hm-bug .bug-health span{display:block;height:100%;background:#ff4d4d}
+.hm-bug.hit{animation:bugHit .16s steps(2,end) 1}.hm-bug.armoured{background:#202020;box-shadow:-2px -2px 0 #111,3px 3px 0 #777}
+.machine-health{height:9px;margin-top:8px;background:#333;border:2px solid #f4f4f4;box-shadow:1px 1px 0 #444}.machine-health span{display:block;height:100%;background:#2b7a3f}
+.machine.damaged{border-color:#f2b04c}.machine.offline{filter:grayscale(.7);opacity:.82}
+.bug-banner{z-index:92;display:none;align-items:start;justify-content:center;padding-top:16px}.bug-banner.show{display:flex}.bug-banner .bug-message{border:6px solid #f4f4f4;background:#8f1e1e;color:#fff;box-shadow:5px 5px 0 #321010;padding:9px 13px;font:900 .9rem ui-monospace,monospace;text-align:center;max-width:min(460px,80vw)}
+.workspace.bug-raid{animation:raidFlash .68s steps(2,end) infinite}
+.workspace.bug-raid:before{content:"";position:absolute;inset:0;background:#b0000024;z-index:77;pointer-events:none}
+.defence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}.defence-card{background:#929292;border:5px solid #f4f4f4;box-shadow:3px 3px 0 #3d3d3d;padding:9px;display:grid;gap:6px}.defence-card b{font-size:.86rem}.defence-card small{color:#333}.defence-stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;color:#333}
+@keyframes raidFlash{50%{box-shadow:inset 0 0 0 9px #a40e0e}}@keyframes bugHit{50%{filter:brightness(2);transform:translateZ(0) scale(1.12)}}
 .overlay{position:fixed;inset:0;z-index:50;display:none;place-items:center;padding:18px;background:#02060bcc;backdrop-filter:blur(12px)}.overlay.show{display:grid}.console{width:min(940px,100%);max-height:94vh;overflow:auto;border:1px solid #385d7c;border-radius:26px;background:linear-gradient(145deg,#10243a,#081421);box-shadow:0 30px 100px #000;padding:20px}.console-head{display:flex;justify-content:space-between;align-items:start;gap:14px}.console-head h2{margin:2px 0;font-size:1.45rem}.console-head p{margin:0;color:var(--muted)}.close{border:0;border-radius:10px;background:#20364c;color:white;padding:8px 11px;cursor:pointer}.flow{display:grid;gap:10px;margin-top:18px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.stage{border:1px solid #2f4d69;border-radius:18px;background:#0b1929;overflow:hidden;transition:.45s}.stage.done{border-color:#2d7252;transform:scale(.985);opacity:.86}.stage-head{padding:10px 13px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #28435d}.badge{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#203650;color:var(--cyan);font-weight:900}.done .badge{background:var(--green);color:#05271a}.stage-title{font-weight:900}.stage-body{padding:13px}.stage.done .stage-body{display:none}.prompt{text-align:center;color:#c9d8e8;margin:0 0 9px}.table-wrap{display:flex;justify-content:center;overflow-x:auto}.number-table{border-collapse:separate;border-spacing:5px;font-family:ui-monospace,monospace}.number-table th{color:var(--muted);font-size:.66rem}.number-table td{width:var(--cell);height:var(--cell);border:1px solid #3c5c7a;background:#071425;border-radius:9px;text-align:center;font-weight:900;font-size:1.28rem}.number-table .label{width:auto;border:0;background:transparent;color:var(--muted);font-size:.72rem;padding-right:8px}.number-table .hex{color:var(--cyan)}.number-table .rule td:not(.label){height:3px;border:0;background:var(--cyan)}.bit{width:100%;height:100%;border:0;border-radius:8px;background:#102943;color:#9fb2c6;font:900 1.2rem ui-monospace,monospace;cursor:pointer}.bit[data-bit="1"]{background:#103d58;color:var(--cyan);box-shadow:inset 0 0 0 1px #59d8ff66}.bit.bad{background:#421a25;color:#ffd7de;animation:shake .25s}.hex-input{width:100%;height:100%;border:0;border-radius:8px;background:#102943;color:white;text-align:center;text-transform:uppercase;font:900 1.25rem ui-monospace,monospace;outline:2px solid transparent}.hex-input:focus{outline-color:var(--cyan)}.hex-input.bad{background:#421a25}.actions{display:flex;justify-content:center;gap:8px;margin-top:10px}.primary,.secondary{border:0;border-radius:11px;padding:9px 14px;font-weight:900;cursor:pointer}.primary{background:var(--cyan);color:#042438}.secondary{background:#20364c;color:white}.feedback{text-align:center;min-height:22px;margin-top:7px;font-weight:800}.feedback.good{color:var(--green)}.feedback.bad{color:var(--red)}.down{text-align:center;color:var(--cyan);height:20px}.result{display:none;text-align:center;padding:24px;border:1px solid #2d7252;border-radius:18px;background:#0c281c}.result.show{display:block}.result .new{font:950 3.8rem/1 ui-monospace,monospace;color:var(--green);margin:8px}.result p{color:#b6d7c5}.legend{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;margin-top:14px}.legend div{text-align:center;padding:6px 3px;border:1px solid #28445e;border-radius:8px;background:#071425;font:.7rem ui-monospace,monospace;color:var(--muted)}.legend b{display:block;color:var(--cyan);font-size:.85rem}@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 
 .machine.merge-active{width:300px;min-height:250px;cursor:default;border-color:var(--amber);z-index:12;box-shadow:0 20px 60px #000b,0 0 0 2px #ffd16622}.machine.merge-solved{width:230px;min-height:150px;border-color:var(--green)}.machine.merge-active .machine-body{padding:10px}.machine-inline{display:grid;gap:8px}.machine-inline .prompt{font-size:.78rem;margin:0;color:var(--muted)}.mini-table{border-collapse:separate;border-spacing:4px;margin:auto;font-family:ui-monospace,monospace}.mini-table td{width:30px;height:30px;border:1px solid #3c5c7a;background:#071425;border-radius:7px;text-align:center;font-weight:900}.mini-table .label{width:auto;border:0;background:transparent;color:var(--muted);font-size:.66rem;padding-right:4px}.mini-table .hex{color:var(--cyan)}.mini-table .bit{font-size:1rem;border-radius:6px}.machine-inline .actions{margin-top:2px}.machine-inline .primary{padding:7px 10px;font-size:.78rem}.machine-inline .feedback{font-size:.75rem;min-height:18px;margin-top:0}.machine-summary{display:grid;place-items:center;min-height:72px;color:var(--green);font:900 .9rem ui-monospace,monospace}.mainframe.merge-mode{width:min(680px,72vw);height:auto;min-height:270px;z-index:15;transition:width .4s,height .4s}.mainframe.merge-mode .screen{height:auto;min-height:180px;margin:24px 20px 14px;padding:14px;display:block;overflow-x:auto}.mainframe.merge-mode .rate{display:none}.mainframe-console{display:grid;gap:10px}.mainframe-console h3{margin:0;color:var(--amber)}.mainframe-console .number-table{margin:auto}.mainframe-console .feedback{font-size:.82rem}.mainframe-console .hex-input{min-width:42px}.merge-status{color:var(--muted);font-size:.8rem}.machine.merge-source-a{outline:2px solid #59d8ff33}.machine.merge-source-b{outline:2px solid #ffd16633}.merge-cancel{position:absolute;right:12px;top:8px;border:0;background:#20364c;color:white;border-radius:8px;padding:5px 8px;font-size:.72rem;cursor:pointer}.machine.merge-active .merge-port{display:none}.machine.merge-active .power-port{opacity:.7}
@@ -133,18 +152,25 @@ html{color-scheme:light}body{background:#c6c6c6;color:var(--text);font-family:"C
 </style>
 </head>
 <body>
-<div id="game"><header class="hud"><div class="brand"><small>Hex Systems Lab</small><b>Connect • Convert • Merge</b></div><div class="platform-controls"><button class="hm-btn" id="hm-save">Save</button><button class="hm-btn" id="hm-load">Load</button><button class="hm-btn" id="hm-leaderboard">Leaderboard</button><button class="hm-btn" id="hm-fullscreen">Fullscreen</button></div><div class="help">Drag machines anywhere.<br>Drag one amber merge port onto another.</div></header><aside class="shop-panel" id="shopPanel"><div class="shop-head"><b>MACHINE STORE</b><small>Merged tiers unlock here</small></div><div class="shop-list" id="shopList"></div></aside><main class="workspace" id="workspace"><canvas class="physics-cables" id="physicsCables"></canvas><svg class="cables" id="cables"></svg><canvas class="amber-physics-cable" id="amberCableCanvas" aria-hidden="true"></canvas><section class="mainframe" id="mainframe"><div class="title">CENTRAL MAINFRAME</div><div class="screen"><div><small>AVAILABLE FUNDS</small><div class="money" id="money">£0</div></div></div><div class="rate" id="rate">£0 / second</div></section><div class="tip">Drag the amber socket from one machine onto another to merge them.</div></main></div>
+<div id="game"><header class="hud"><div class="brand"><small>Hex Systems Lab</small><b>Connect • Convert • Merge</b></div><div class="platform-controls"><button class="hm-btn" id="hm-save">Save</button><button class="hm-btn" id="hm-load">Load</button><button class="hm-btn" id="hm-leaderboard">Leaderboard</button><button class="hm-btn" id="hm-defence">Defence</button><button class="hm-btn" id="hm-fullscreen">Fullscreen</button></div><div class="help">Drag machines anywhere.<br>Drag one amber merge port onto another.</div></header><aside class="shop-panel" id="shopPanel"><div class="shop-head"><b>MACHINE STORE</b><small>Merged tiers unlock here</small></div><div class="shop-list" id="shopList"></div></aside><main class="workspace" id="workspace"><canvas class="physics-cables" id="physicsCables"></canvas><svg class="cables" id="cables"></svg><canvas class="amber-physics-cable" id="amberCableCanvas" aria-hidden="true"></canvas><div class="defence-layer" id="defenceLayer"></div><div class="bug-vfx" id="bugVfx"></div><div class="bug-layer" id="bugLayer"></div><div class="bug-banner" id="bugBanner"><div class="bug-message" id="bugMessage"></div></div><section class="mainframe" id="mainframe"><div class="title">CENTRAL MAINFRAME</div><div class="screen"><div><small>AVAILABLE FUNDS</small><div class="money" id="money">£0</div></div></div><div class="rate" id="rate">£0 / second</div></section><div class="tip">Drag the amber socket from one machine onto another to merge them.</div></main></div>
 <div class="hm-modal" id="hm-platform-modal"><section class="hm-card"><div class="hm-card-head"><div class="hm-card-title" id="hm-modal-title">Hex Machine</div><button class="hm-btn" id="hm-modal-close">Close</button></div><div id="hm-modal-body"></div></section></div>
 <div class="overlay" id="overlay"><section class="console"><header class="console-head"><div><small style="color:var(--cyan);font-weight:900;letter-spacing:.14em">MERGE CONSOLE</small><h2 id="mergeTitle">Merge machines</h2><p>Convert both machines, add them in binary, then compress the result back to hex.</p></div><button class="close" id="close">Close</button></header><div class="flow" id="flow"></div><div class="legend" id="legend"></div></section></div>
 <script>
 (()=>{
-const HEX='0123456789ABCDEF', ws=document.getElementById('workspace'), svg=document.getElementById('cables'), cableCanvas=document.getElementById('physicsCables'), cableCtx=cableCanvas.getContext('2d'), amberCanvas=document.getElementById('amberCableCanvas'), amberCtx=amberCanvas.getContext('2d');
+const HEX='0123456789ABCDEF', ws=document.getElementById('workspace'), svg=document.getElementById('cables'), cableCanvas=document.getElementById('physicsCables'), cableCtx=cableCanvas.getContext('2d'), amberCanvas=document.getElementById('amberCableCanvas'), amberCtx=amberCanvas.getContext('2d'), defenceLayer=document.getElementById('defenceLayer'), bugLayer=document.getElementById('bugLayer'), bugVfx=document.getElementById('bugVfx'), bugBanner=document.getElementById('bugBanner'), bugMessage=document.getElementById('bugMessage');
 const {Engine,World,Bodies,Body,Constraint}=Matter;
 const cableEngine=Engine.create({gravity:{x:0,y:1,scale:0.00135}});
 const ropes=new Map();
 let amberDragRope=null;
-let workspaceSize={width:0,height:0},resizeFrame=0;
-const state={money:0,machines:[],nextId:1,merge:null,phase:0,solved:{},dragCable:null,unlocked:new Set(),purchaseCounts:new Map()};
+let workspaceSize={width:0,height:0},resizeFrame=0,lastBugTick=performance.now();
+const MACHINE_HP=100, LASER_RADIUS=34, BUG_WARNING_MS=30000, BUG_ACTIVE_MS=20000, BUG_MIN_DELAY=120000, BUG_MAX_DELAY=300000;
+const LASER_TYPES=[
+  {id:'basic',name:'Basic Laser',tier:1,cost:75,range:155,damage:1,cooldown:900},
+  {id:'pulse',name:'Pulse Laser',tier:2,cost:300,range:185,damage:2,cooldown:760},
+  {id:'beam',name:'Beam Laser',tier:3,cost:1200,range:220,damage:3,cooldown:620},
+  {id:'prism',name:'Prism Laser',tier:4,cost:5000,range:255,damage:5,cooldown:520}
+];
+const state={money:0,machines:[],nextId:1,merge:null,phase:0,solved:{},dragCable:null,unlocked:new Set(),purchaseCounts:new Map(),lasers:[],nextLaserId:1,placingLaser:null,bugs:[],nextBugId:1,bugAttack:{phase:'idle',nextAt:0,activeUntil:0,lastSpawnAt:0,wave:0,kills:0}};
 const LARGE_NUMBER_NAMES=[
   '', 'thousand', 'million', 'billion', 'trillion', 'quadrillion',
   'quintillion', 'sextillion', 'septillion', 'octillion', 'nonillion',
@@ -266,9 +292,12 @@ function renderShop(){
   });
 }
 function bitButtons(owner,w){return Array.from({length:w},()=>`<td><button class="bit" type="button" data-owner="${owner}" data-bit="0">0</button></td>`).join('')}
-function addMachine(value,x,y){state.machines.push({id:state.nextId++,value,x,y});renderMachines()}
-function totalRate(){return state.machines.reduce((s,m)=>s+m.value,0)}
-function renderMachines(){ws.querySelectorAll('.machine').forEach(e=>e.remove());clearRopes();for(const m of state.machines){const el=document.createElement('article');el.className='machine';el.dataset.id=m.id;el.style.left=m.x+'px';el.style.top=m.y+'px';el.innerHTML=`<div class="machine-head"><span class="machine-name">${glyphMarkup(m.value,'machine-glyph')}</span><span class="machine-level">0x${hex(m.value)}</span></div><div class="machine-body"><div class="machine-rate"><span>${money(m.value)}</span> / second</div><div class="machine-note">Connected to central mainframe</div></div><div class="port power-port side-right"></div><div class="port merge-port" title="Drag to another machine"></div>`;ws.appendChild(el);bindMachine(el,m);createRope(m)} resizeCableCanvas();syncRopeAnchors();document.getElementById('rate').textContent=money(totalRate())+' / second'}
+function normaliseMachine(m){m.hp=Math.max(0,Math.min(MACHINE_HP,Number.isFinite(Number(m.hp))?Number(m.hp):MACHINE_HP));return m}
+function machineRate(m){normaliseMachine(m);return m.value*Math.max(.12,m.hp/MACHINE_HP)}
+function machineHealthMarkup(m){const pct=Math.max(0,Math.min(100,Math.round(normaliseMachine(m).hp)));return `<div class="machine-health" title="Machine health"><span style="width:${pct}%"></span></div>`}
+function addMachine(value,x,y){state.machines.push({id:state.nextId++,value,x,y,hp:MACHINE_HP});renderMachines()}
+function totalRate(){return state.machines.reduce((s,m)=>s+machineRate(m),0)}
+function renderMachines(){ws.querySelectorAll('.machine').forEach(e=>e.remove());clearRopes();for(const m of state.machines){normaliseMachine(m);const el=document.createElement('article');el.className='machine'+(m.hp<MACHINE_HP*.98?' damaged':'')+(m.hp<=1?' offline':'');el.dataset.id=m.id;el.style.left=m.x+'px';el.style.top=m.y+'px';el.innerHTML=`<div class="machine-head"><span class="machine-name">${glyphMarkup(m.value,'machine-glyph')}</span><span class="machine-level">0x${hex(m.value)}</span></div><div class="machine-body"><div class="machine-rate"><span>${money(machineRate(m))}</span> / second</div><div class="machine-note">${m.hp<MACHINE_HP*.98?'Damaged by bugs':'Connected to central mainframe'}</div>${machineHealthMarkup(m)}</div><div class="port power-port side-right"></div><div class="port merge-port" title="Drag to another machine"></div>`;ws.appendChild(el);bindMachine(el,m);createRope(m)} resizeCableCanvas();syncRopeAnchors();document.getElementById('rate').textContent=money(totalRate())+' / second'}
 function resizeCableCanvas(){
   const r=ws.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);
   for(const [canvas,ctx] of [[cableCanvas,cableCtx],[amberCanvas,amberCtx]]){
@@ -343,9 +372,15 @@ function handleWorkspaceResize(){
     m.y=Math.max(8,Math.min(r.height-eh-8,m.y));
     if(el){el.style.left=m.x+'px';el.style.top=m.y+'px'}
   }
+  for(const laser of state.lasers){
+    if(old.width&&old.height){laser.x*=sx;laser.y*=sy}
+    laser.x=Math.max(LASER_RADIUS,Math.min(r.width-LASER_RADIUS,laser.x));
+    laser.y=Math.max(LASER_RADIUS,Math.min(r.height-LASER_RADIUS,laser.y));
+  }
   workspaceSize={width:r.width,height:r.height};
   resizeCableCanvas();
   rebuildRopes();
+  renderLasers();
   if(state.merge){
     for(const m of [state.merge.a,state.merge.b]){
       const el=ws.querySelector(`.machine[data-id="${m.id}"]`);
@@ -367,6 +402,259 @@ function handleWorkspaceResize(){
 function scheduleWorkspaceResize(){
   cancelAnimationFrame(resizeFrame);
   resizeFrame=requestAnimationFrame(handleWorkspaceResize);
+}
+function limit(value,min,max){return Math.max(min,Math.min(max,value))}
+function randomBugDelay(){return BUG_MIN_DELAY+Math.random()*(BUG_MAX_DELAY-BUG_MIN_DELAY)}
+function showTemporaryBanner(text,ms=3800){state.tempBanner={text,until:performance.now()+ms};updateBugBanner(performance.now())}
+function scheduleBugAttack(delay=randomBugDelay()){
+  const now=performance.now();
+  state.bugAttack.phase='idle';
+  state.bugAttack.nextAt=now+delay;
+  state.bugAttack.activeUntil=0;
+  state.bugAttack.lastSpawnAt=0;
+  updateBugBanner(now);
+}
+function ensureBugSchedule(now=performance.now()){
+  if(!state.bugAttack.nextAt||state.bugAttack.nextAt<now-1000)scheduleBugAttack(randomBugDelay());
+}
+function machineBounds(m){
+  const el=ws.querySelector(`.machine[data-id="${m.id}"]`);
+  return {x:m.x,y:m.y,w:el?.offsetWidth||190,h:el?.offsetHeight||126};
+}
+function machineCenter(m){const b=machineBounds(m);return{x:b.x+b.w/2,y:b.y+b.h/2,b}}
+function rectsOverlap(a,b){return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top}
+function workspaceRectForElement(el,pad=0){
+  const wr=ws.getBoundingClientRect(),r=el.getBoundingClientRect();
+  return{left:r.left-wr.left-pad,top:r.top-wr.top-pad,right:r.right-wr.left+pad,bottom:r.bottom-wr.top+pad};
+}
+function pointHitsBoardObject(x,y,radius=LASER_RADIUS){
+  const footprint={left:x-radius,top:y-radius,right:x+radius,bottom:y+radius};
+  const mf=document.getElementById('mainframe').getBoundingClientRect(),wr=ws.getBoundingClientRect();
+  if(rectsOverlap(footprint,{left:mf.left-wr.left-12,top:mf.top-wr.top-12,right:mf.right-wr.left+12,bottom:mf.bottom-wr.top+12}))return true;
+  const station=document.getElementById('mergeStation');
+  if(station&&rectsOverlap(footprint,workspaceRectForElement(station,12)))return true;
+  return state.machines.some(m=>{const b=machineBounds(m);return rectsOverlap(footprint,{left:b.x-12,top:b.y-12,right:b.x+b.w+12,bottom:b.y+b.h+12})});
+}
+function refreshMachineDisplay(m){
+  const el=ws.querySelector(`.machine[data-id="${m.id}"]`);if(!el)return;
+  normaliseMachine(m);
+  el.classList.toggle('damaged',m.hp<MACHINE_HP*.98);
+  el.classList.toggle('offline',m.hp<=1);
+  const rate=el.querySelector('.machine-rate span');if(rate)rate.textContent=money(machineRate(m));
+  const note=el.querySelector('.machine-note');if(note)note.textContent=m.hp<MACHINE_HP*.98?'Damaged by bugs':'Connected to central mainframe';
+  const bar=el.querySelector('.machine-health span');if(bar)bar.style.width=Math.max(0,Math.min(100,Math.round(m.hp)))+'%';
+}
+function refreshMachineDisplays(){
+  state.machines.forEach(refreshMachineDisplay);
+  const rate=H('rate');if(rate)rate.textContent=money(totalRate())+' / second';
+}
+function laserType(id){return LASER_TYPES.find(t=>t.id===id)||LASER_TYPES[0]}
+function renderLasers(){
+  if(!defenceLayer)return;
+  defenceLayer.innerHTML=state.lasers.map(l=>{
+    const type=laserType(l.typeId);
+    return `<div class="hm-laser" data-laser="${l.id}" style="left:${Math.round(l.x)}px;top:${Math.round(l.y)}px" title="${htmlEscape(type.name)}"><span class="tier">L${type.tier}</span></div>`;
+  }).join('');
+}
+function renderBugs(){
+  if(!bugLayer)return;
+  bugLayer.innerHTML=state.bugs.map(b=>{
+    const pct=Math.max(0,Math.min(100,Math.round((b.hp/b.maxHp)*100)));
+    return `<div class="hm-bug ${b.armor>1?'armoured':''}" data-bug="${b.id}" style="left:${Math.round(b.x)}px;top:${Math.round(b.y)}px"><span class="bug-core">B${b.armor}</span><div class="bug-health"><span style="width:${pct}%"></span></div></div>`;
+  }).join('');
+  bugLayer.querySelectorAll('[data-bug]').forEach(el=>{
+    el.onclick=e=>{e.preventDefault();e.stopPropagation();const bug=state.bugs.find(b=>b.id===Number(el.dataset.bug));if(bug)damageBug(bug,1.25,true)};
+  });
+}
+function bugTargetMachine(bug){
+  let target=state.machines.find(m=>m.id===bug.targetId);
+  if(!target&&state.machines.length){
+    target=state.machines[Math.floor(Math.random()*state.machines.length)];
+    bug.targetId=target.id;
+  }
+  return target;
+}
+function bugAttackPoint(bug,machine){
+  const {x:cx,y:cy,b}=machineCenter(machine),dx=bug.x-cx,dy=bug.y-cy;
+  if(Math.abs(dx/(b.w||1))>=Math.abs(dy/(b.h||1))){
+    const side=dx>=0?1:-1;
+    return{x:cx+side*(b.w/2+22),y:limit(cy+dy*.12,b.y+18,b.y+b.h-18)};
+  }
+  const side=dy>=0?1:-1;
+  return{x:limit(cx+dx*.12,b.x+18,b.x+b.w-18),y:cy+side*(b.h/2+22)};
+}
+function spawnBug(){
+  if(!state.machines.length)return;
+  const r=ws.getBoundingClientRect();
+  const edge=Math.floor(Math.random()*4),pad=26;
+  let x,y;
+  if(edge===0){x=Math.random()*r.width;y=-pad}else if(edge===1){x=r.width+pad;y=Math.random()*r.height}else if(edge===2){x=Math.random()*r.width;y=r.height+pad}else{x=-pad;y=Math.random()*r.height}
+  const wave=Math.max(1,state.bugAttack.wave||1);
+  const armor=Math.min(4,1+Math.floor((wave-1)/3)+Math.floor(Math.log2(Math.max(1,bestValue()))/7));
+  const maxHp=2+wave*.55+armor*1.5;
+  const target=state.machines[Math.floor(Math.random()*state.machines.length)];
+  state.bugs.push({id:state.nextBugId++,x,y,hp:maxHp,maxHp,armor,targetId:target.id,speed:34+wave*2.4,damage:3.2+armor*.9});
+}
+function damageBug(bug,amount,manual=false){
+  const multiplier=manual?1:.95;
+  bug.hp-=amount*multiplier;
+  const el=bugLayer?.querySelector(`[data-bug="${bug.id}"]`);
+  if(el){el.classList.remove('hit');void el.offsetWidth;el.classList.add('hit')}
+  if(bug.hp<=0)destroyBug(bug);
+  else renderBugs();
+}
+function destroyBug(bug){
+  state.bugs=state.bugs.filter(b=>b!==bug);
+  state.bugAttack.kills=(state.bugAttack.kills||0)+1;
+  renderBugs();
+  updateBugBanner(performance.now());
+}
+function showLaserShot(laser,bug){
+  if(!bugVfx)return;
+  const dx=bug.x-laser.x,dy=bug.y-laser.y,dist=Math.hypot(dx,dy);
+  const line=document.createElement('div');
+  line.className='hm-shot';
+  line.style.left=laser.x+'px';
+  line.style.top=laser.y+'px';
+  line.style.width=dist+'px';
+  line.style.transform='rotate('+Math.atan2(dy,dx)+'rad)';
+  bugVfx.appendChild(line);
+  setTimeout(()=>line.remove(),150);
+}
+function updateLasers(now){
+  for(const laser of state.lasers){
+    const type=laserType(laser.typeId);
+    if(now-(laser.lastShot||0)<type.cooldown)continue;
+    let best=null,bestDist=Infinity;
+    for(const bug of state.bugs){
+      const d=Math.hypot(bug.x-laser.x,bug.y-laser.y);
+      if(d<type.range&&d<bestDist){best=bug;bestDist=d}
+    }
+    if(!best)continue;
+    laser.lastShot=now;
+    const resistance=type.tier>=best.armor?1:(type.tier+1>=best.armor?0.45:0.22);
+    showLaserShot(laser,best);
+    damageBug(best,type.damage*resistance,false);
+  }
+}
+function updateBugs(dt){
+  let damaged=false;
+  for(const bug of [...state.bugs]){
+    const target=bugTargetMachine(bug);
+    if(!target){destroyBug(bug);continue}
+    const goal=bugAttackPoint(bug,target),dx=goal.x-bug.x,dy=goal.y-bug.y,dist=Math.hypot(dx,dy);
+    if(dist>4){
+      const step=Math.min(dist,bug.speed*dt);
+      bug.x+=dx/dist*step;bug.y+=dy/dist*step;
+    }else{
+      target.hp=Math.max(0,target.hp-bug.damage*dt);
+      damaged=true;
+      if(target.hp<=1&&state.machines.length>1)bug.targetId=0;
+    }
+  }
+  if(damaged)refreshMachineDisplays();
+}
+function repairMachines(dt){
+  if(state.bugs.length)return;
+  let repaired=false;
+  for(const m of state.machines){
+    normaliseMachine(m);
+    if(m.hp<MACHINE_HP){m.hp=Math.min(MACHINE_HP,m.hp+dt*4);repaired=true}
+  }
+  if(repaired)refreshMachineDisplays();
+}
+function startBugAttack(now){
+  state.bugAttack.phase='active';
+  state.bugAttack.wave=(state.bugAttack.wave||0)+1;
+  state.bugAttack.activeUntil=now+BUG_ACTIVE_MS;
+  state.bugAttack.lastSpawnAt=now-5000;
+  const burst=Math.min(4+Math.floor(state.bugAttack.wave/2),9);
+  for(let i=0;i<burst;i++)spawnBug();
+  renderBugs();
+}
+function finishBugAttack(){
+  ws.classList.remove('bug-raid');
+  scheduleBugAttack(randomBugDelay());
+  saveLocalNow();
+}
+function updateBugBanner(now){
+  let text='';
+  const attack=state.bugAttack;
+  const hasBugs=state.bugs.length>0;
+  if(attack.phase==='warning'){
+    const seconds=Math.max(0,Math.ceil((attack.nextAt-now)/1000));
+    text='Bugs approaching in '+seconds+' seconds. Open Defence to place lasers.';
+  }else if((attack.phase==='active'||attack.phase==='cleanup')&&hasBugs){
+    text='Bug attack! Click bugs to destroy them. Lasers fire automatically.';
+  }else if(state.placingLaser){
+    text='Click an empty space in the workspace to place the laser. Press Escape to cancel.';
+  }else if(state.tempBanner&&state.tempBanner.until>now){
+    text=state.tempBanner.text;
+  }
+  if(text){bugMessage.textContent=text;bugBanner.classList.add('show')}else{bugBanner.classList.remove('show')}
+  ws.classList.toggle('bug-raid',(attack.phase==='active'||attack.phase==='cleanup')&&hasBugs);
+}
+function updateBugSystem(now){
+  const dt=Math.min(.35,Math.max(.01,(now-lastBugTick)/1000));lastBugTick=now;
+  ensureBugSchedule(now);
+  if(state.bugAttack.phase==='idle'&&now>=state.bugAttack.nextAt-BUG_WARNING_MS)state.bugAttack.phase='warning';
+  if(state.bugAttack.phase==='warning'&&now>=state.bugAttack.nextAt)startBugAttack(now);
+  if(state.bugAttack.phase==='active'){
+    const maxBugs=Math.min(18,5+Math.floor(state.bugAttack.wave*1.4));
+    const spawnDelay=Math.max(900,2300-state.bugAttack.wave*90);
+    if(now-state.bugAttack.lastSpawnAt>=spawnDelay&&state.bugs.length<maxBugs){
+      state.bugAttack.lastSpawnAt=now;
+      spawnBug();
+    }
+    if(now>=state.bugAttack.activeUntil)state.bugAttack.phase='cleanup';
+  }
+  updateBugs(dt);
+  updateLasers(now);
+  repairMachines(dt);
+  if(state.bugAttack.phase==='cleanup'&&!state.bugs.length)finishBugAttack();
+  renderBugs();
+  updateBugBanner(now);
+}
+function showDefenceMenu(){
+  const cards=LASER_TYPES.map(type=>{
+    const owned=state.lasers.filter(l=>l.typeId===type.id).length;
+    const can=state.money>=type.cost;
+    return `<div class="defence-card"><b>${htmlEscape(type.name)}</b><small>Tier ${type.tier} • range ${type.range} • damage ${type.damage}</small><small>Owned: ${owned}</small><button class="hm-btn" data-laser-type="${type.id}" ${can?'':'disabled'}>${money(type.cost)} - Place</button></div>`;
+  }).join('');
+  openModal('Defence','<div class="hm-status" id="hm-modal-status">Buy lasers, then click an empty space in the workspace to place them.</div><div class="defence-grid">'+cards+'</div><div class="defence-stats"><span>Wave '+Math.max(0,state.bugAttack.wave||0)+'</span><span>Bugs destroyed '+Math.max(0,state.bugAttack.kills||0)+'</span></div>');
+  H('hm-modal-body').querySelectorAll('[data-laser-type]').forEach(button=>{
+    button.onclick=()=>startLaserPlacement(button.dataset.laserType);
+  });
+}
+function startLaserPlacement(typeId){
+  const type=laserType(typeId);
+  if(state.money<type.cost){setModalStatus('Not enough funds for '+type.name+'.','#7a2a2a');return}
+  state.placingLaser={typeId};
+  closeModal();
+  showTemporaryBanner('Click an empty space to place '+type.name+'.',5000);
+}
+function placePendingLaser(event){
+  if(!state.placingLaser)return false;
+  const type=laserType(state.placingLaser.typeId),r=ws.getBoundingClientRect();
+  const x=event.clientX-r.left,y=event.clientY-r.top;
+  if(pointHitsBoardObject(x,y)){
+    showTemporaryBanner('Place lasers in empty space so bugs cannot hide behind machines.',3500);
+    return true;
+  }
+  if(state.money<type.cost){
+    state.placingLaser=null;
+    showTemporaryBanner('Not enough funds for that laser now.',3000);
+    return true;
+  }
+  state.money-=type.cost;
+  state.lasers.push({id:state.nextLaserId++,typeId:type.id,x:limit(x,LASER_RADIUS,r.width-LASER_RADIUS),y:limit(y,LASER_RADIUS,r.height-LASER_RADIUS),lastShot:0});
+  state.placingLaser=null;
+  setMainframeMoney(state.money);
+  renderShop();
+  renderLasers();
+  saveLocalNow();
+  syncLeaderboard();
+  return true;
 }
 function retargetRopeLength(m, immediate=false){
   const rope=ropes.get(m.id); if(!rope)return;
@@ -682,25 +970,39 @@ function htmlEscape(value){return String(value==null?'':value).replace(/[&<>"']/
 function isStaffUser(){const ps=parentState();return !!(ps&&(ps.isAdmin||ps.isTeacher))}
 function studentCode(){const ps=parentState();return ps&&ps.uid?String(ps.uid):''}
 function bestValue(){return Math.max(1,...state.machines.map(m=>Number(m.value)||0),...[...state.unlocked].map(v=>Number(v)||0))}
-function snapshotState(){return{money:Math.max(0,Number(state.money)||0),machines:state.machines.map(m=>({id:Number(m.id)||0,value:Math.max(1,Math.floor(Number(m.value)||1)),x:Math.round(Number(m.x)||0),y:Math.round(Number(m.y)||0)})),nextId:Math.max(1,Math.floor(Number(state.nextId)||1)),unlocked:[...state.unlocked].map(v=>Math.max(1,Math.floor(Number(v)||1))).filter(Boolean),purchaseCounts:[...state.purchaseCounts.entries()].map(([k,v])=>[Math.max(1,Math.floor(Number(k)||1)),Math.max(0,Math.floor(Number(v)||0))])}}
+function snapshotState(){return{money:Math.max(0,Number(state.money)||0),machines:state.machines.map(m=>{const hpNumber=Number(m.hp);return{id:Number(m.id)||0,value:Math.max(1,Math.floor(Number(m.value)||1)),x:Math.round(Number(m.x)||0),y:Math.round(Number(m.y)||0),hp:Math.max(0,Math.min(MACHINE_HP,Number.isFinite(hpNumber)?hpNumber:MACHINE_HP))}}),nextId:Math.max(1,Math.floor(Number(state.nextId)||1)),unlocked:[...state.unlocked].map(v=>Math.max(1,Math.floor(Number(v)||1))).filter(Boolean),purchaseCounts:[...state.purchaseCounts.entries()].map(([k,v])=>[Math.max(1,Math.floor(Number(k)||1)),Math.max(0,Math.floor(Number(v)||0))]),lasers:state.lasers.map(l=>({id:Number(l.id)||0,typeId:String(l.typeId||'basic'),x:Math.round(Number(l.x)||0),y:Math.round(Number(l.y)||0)})),nextLaserId:Math.max(1,Math.floor(Number(state.nextLaserId)||1)),bugStats:{wave:Math.max(0,Math.floor(Number(state.bugAttack.wave)||0)),kills:Math.max(0,Math.floor(Number(state.bugAttack.kills)||0))}}}
 function applySnapshot(raw){
   if(!raw||typeof raw!=='object')throw new Error('Save file is empty.');
   removeAmberDragRope();removeStationCables();document.getElementById('mergeStation')?.remove();
-  state.merge=null;state.phase=0;state.solved={};state.dragCable=null;
+  state.merge=null;state.phase=0;state.solved={};state.dragCable=null;state.placingLaser=null;state.bugs=[];state.nextBugId=1;
   state.money=Math.max(0,Number(raw.money)||0);
   state.nextId=Math.max(1,Math.floor(Number(raw.nextId)||1));
+  state.nextLaserId=Math.max(1,Math.floor(Number(raw.nextLaserId)||1));
   state.unlocked=new Set((Array.isArray(raw.unlocked)?raw.unlocked:[]).map(v=>Math.max(1,Math.floor(Number(v)||1))).filter(Boolean));
   state.purchaseCounts=new Map((Array.isArray(raw.purchaseCounts)?raw.purchaseCounts:[]).map(pair=>[Math.max(1,Math.floor(Number(pair[0])||1)),Math.max(0,Math.floor(Number(pair[1])||0))]));
+  state.lasers=(Array.isArray(raw.lasers)?raw.lasers:[]).map((l,i)=>({
+    id:Math.max(1,Math.floor(Number(l.id)||i+1)),
+    typeId:LASER_TYPES.some(t=>t.id===l.typeId)?l.typeId:'basic',
+    x:Math.round(Number(l.x)||48),
+    y:Math.round(Number(l.y)||48),
+    lastShot:0
+  }));
+  state.nextLaserId=Math.max(state.nextLaserId,...state.lasers.map(l=>l.id+1),1);
+  const bugStats=raw.bugStats||{};
+  state.bugAttack.wave=Math.max(0,Math.floor(Number(bugStats.wave)||0));
+  state.bugAttack.kills=Math.max(0,Math.floor(Number(bugStats.kills)||0));
   state.machines=(Array.isArray(raw.machines)?raw.machines:[]).map((m,i)=>({
     id:Math.max(1,Math.floor(Number(m.id)||i+1)),
     value:Math.max(1,Math.floor(Number(m.value)||1)),
     x:Math.round(Number(m.x)||24),
-    y:Math.round(Number(m.y)||80)
+    y:Math.round(Number(m.y)||80),
+    hp:Math.max(0,Math.min(MACHINE_HP,Number.isFinite(Number(m.hp))?Number(m.hp):MACHINE_HP))
   })).filter(m=>m.value>0);
-  if(!state.machines.length){const r=ws.getBoundingClientRect();const y=Math.max(50,r.height/2-63);state.machines=[{id:1,value:1,x:Math.max(24,r.width*.18-95),y},{id:2,value:1,x:Math.min(r.width-214,r.width*.82-95),y}];state.nextId=3}
+  if(!state.machines.length){const r=ws.getBoundingClientRect();const y=Math.max(50,r.height/2-63);state.machines=[{id:1,value:1,x:Math.max(24,r.width*.18-95),y,hp:MACHINE_HP},{id:2,value:1,x:Math.min(r.width-214,r.width*.82-95),y,hp:MACHINE_HP}];state.nextId=3}
   state.machines.forEach(m=>state.unlocked.add(m.value));
   state.nextId=Math.max(state.nextId,...state.machines.map(m=>m.id+1));
-  renderMachines();renderShop();setMainframeMoney(state.money);H('rate').textContent=money(totalRate())+' / second';
+  renderMachines();renderLasers();renderBugs();renderShop();setMainframeMoney(state.money);H('rate').textContent=money(totalRate())+' / second';
+  scheduleBugAttack(randomBugDelay());
   scheduleWorkspaceResize();fitMainframeMoney();saveLocalNow();syncLeaderboard();
 }
 function saveLocalNow(){try{localStorage.setItem(LOCAL_SAVE_KEY,JSON.stringify(snapshotState()))}catch(_e){}}
@@ -766,11 +1068,13 @@ function fullscreenDocument(){const target=fullscreenTarget();return (target&&ta
 function toggleFullscreen(){const target=fullscreenTarget(),doc=fullscreenDocument();if(doc.fullscreenElement){doc.exitFullscreen&&doc.exitFullscreen();return}if(target&&target.requestFullscreen)target.requestFullscreen()}
 function setupPlatformControls(){
   H('hm-modal-close').onclick=closeModal;H('hm-platform-modal').addEventListener('click',e=>{if(e.target===H('hm-platform-modal'))closeModal()});
-  H('hm-save').onclick=()=>driveSaveOrLoad('save');H('hm-load').onclick=()=>driveSaveOrLoad('load');H('hm-leaderboard').onclick=showLeaderboard;H('hm-fullscreen').onclick=toggleFullscreen;
+  H('hm-save').onclick=()=>driveSaveOrLoad('save');H('hm-load').onclick=()=>driveSaveOrLoad('load');H('hm-leaderboard').onclick=showLeaderboard;H('hm-defence').onclick=showDefenceMenu;H('hm-fullscreen').onclick=toggleFullscreen;
+  ws.addEventListener('pointerdown',e=>{if(!state.placingLaser)return;if(placePendingLaser(e)){e.preventDefault();e.stopPropagation()}},true);
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.placingLaser){state.placingLaser=null;showTemporaryBanner('Laser placement cancelled.',2200);updateBugBanner(performance.now())}});
   fullscreenDocument().addEventListener('fullscreenchange',()=>{const b=H('hm-fullscreen');if(b)b.textContent=fullscreenDocument().fullscreenElement?'Exit Fullscreen':'Fullscreen';scheduleWorkspaceResize()});
 }
-function seed(){const r=ws.getBoundingClientRect();state.unlocked.clear();state.purchaseCounts.clear();state.machines=[];state.nextId=1;const y=Math.max(50,r.height/2-63);addMachine(1,Math.max(24,r.width*.18-95),y);addMachine(1,Math.min(r.width-214,r.width*.82-95),y);renderShop();saveLocalNow();syncLeaderboard()}
-function bootHexMachine(){setupPlatformControls();document.getElementById('legend').innerHTML=Array.from({length:16},(_,i)=>'<div><b>'+HEX[i]+'</b>'+bin(i,4)+'</div>').join('');window.addEventListener('resize',()=>{scheduleWorkspaceResize();fitMainframeMoney()});resizeCableCanvas();workspaceSize={width:ws.clientWidth,height:ws.clientHeight};requestAnimationFrame(cableLoop);requestAnimationFrame(()=>{if(!loadLocal())seed();syncLeaderboard()});let shopTick=0;setInterval(()=>{state.money+=totalRate()/10;setMainframeMoney(state.money);shopTick++;if(shopTick%5===0)renderShop();if(shopTick%20===0){saveLocalNow();syncLeaderboard()}},100)}
+function seed(){const r=ws.getBoundingClientRect();state.unlocked.clear();state.purchaseCounts.clear();state.machines=[];state.lasers=[];state.bugs=[];state.nextId=1;state.nextLaserId=1;state.nextBugId=1;state.bugAttack.wave=0;state.bugAttack.kills=0;const y=Math.max(50,r.height/2-63);addMachine(1,Math.max(24,r.width*.18-95),y);addMachine(1,Math.min(r.width-214,r.width*.82-95),y);renderLasers();renderBugs();renderShop();scheduleBugAttack(randomBugDelay());saveLocalNow();syncLeaderboard()}
+function bootHexMachine(){setupPlatformControls();document.getElementById('legend').innerHTML=Array.from({length:16},(_,i)=>'<div><b>'+HEX[i]+'</b>'+bin(i,4)+'</div>').join('');window.addEventListener('resize',()=>{scheduleWorkspaceResize();fitMainframeMoney()});resizeCableCanvas();workspaceSize={width:ws.clientWidth,height:ws.clientHeight};requestAnimationFrame(cableLoop);requestAnimationFrame(()=>{if(!loadLocal())seed();ensureBugSchedule();syncLeaderboard()});let shopTick=0;setInterval(()=>{const now=performance.now();state.money+=totalRate()/10;updateBugSystem(now);setMainframeMoney(state.money);shopTick++;if(shopTick%5===0)renderShop();if(shopTick%20===0){saveLocalNow();syncLeaderboard()}},100)}
 bootHexMachine();
 (function stationCableAnimation(){
   updateStationCables();
