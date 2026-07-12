@@ -7,11 +7,11 @@
 <style>
 :root{--bg:#050b13;--panel:#0d1929;--panel2:#12243a;--line:#2a4565;--text:#eef7ff;--muted:#8fa8c2;--cyan:#59d8ff;--green:#5be39f;--amber:#ffd166;--red:#ff7183;--cell:44px}
 *{box-sizing:border-box}html{color-scheme:dark}body{margin:0;overflow:hidden;background:radial-gradient(circle at 50% 40%,#112a45 0,#07111d 42%,#03070d 100%);color:var(--text);font:500 16px/1.4 Inter,system-ui,sans-serif;user-select:none}button,input{font:inherit}
-#game{height:100vh;display:grid;grid-template-columns:240px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.hud{grid-column:1/-1;height:70px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #203a56;background:#07111dcc;backdrop-filter:blur(14px);z-index:20}.brand small{display:block;color:var(--cyan);font-weight:900;letter-spacing:.16em;text-transform:uppercase}.brand b{font-size:1.25rem}.help{color:var(--muted);font-size:.85rem;text-align:right}.workspace{position:relative;overflow:hidden;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:32px 32px;touch-action:none}.workspace:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 0 32%,#02060b88 100%)}
+#game{height:100vh;display:grid;grid-template-columns:240px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.hud{grid-column:1/-1;height:70px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #203a56;background:#07111dcc;backdrop-filter:blur(14px);z-index:20}.brand small{display:block;color:var(--cyan);font-weight:900;letter-spacing:.16em;text-transform:uppercase}.brand b{font-size:1.25rem}.help{color:var(--muted);font-size:.85rem;text-align:right}.workspace{position:relative;overflow:hidden;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:32px 32px;touch-action:none}.world-layer{position:absolute;inset:0;width:100%;height:100%;transform-origin:0 0;will-change:transform}.workspace.panning{cursor:grabbing}.workspace:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 0 32%,#02060b88 100%)}
 canvas.physics-cables{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}svg.cables{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}.drag-cables{display:none}.amber-physics-cable{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:100}.power-cable{fill:none;stroke:#55728e;stroke-width:12;stroke-linecap:round;filter:drop-shadow(0 4px 2px #0008)}.power-cable-core{fill:none;stroke:#9bdfff;stroke-width:3;stroke-dasharray:10 12;stroke-linecap:round;animation:flow 1.2s linear infinite}.merge-cable{fill:none;stroke:var(--amber);stroke-width:6;stroke-linecap:round;filter:drop-shadow(0 0 8px #ffd16666)}@keyframes flow{to{stroke-dashoffset:-22}}
 .mainframe{position:absolute;left:50%;top:50%;width:270px;height:210px;transform:translate(-50%,-50%);z-index:4;border:2px solid #3b5e7e;border-radius:28px;background:linear-gradient(145deg,#172d45,#091522 60%);box-shadow:0 28px 70px #000b,inset 0 0 0 7px #0b1826}.mainframe:before,.mainframe:after{content:"";position:absolute;top:38px;width:18px;height:134px;background:repeating-linear-gradient(#5b7188 0 5px,#1b2c3f 5px 10px)}.mainframe:before{left:-12px;border-radius:7px 0 0 7px}.mainframe:after{right:-12px;border-radius:0 7px 7px 0}.screen{margin:30px 28px 14px;height:100px;border:3px solid #31526c;border-radius:15px;background:radial-gradient(circle,#163c35,#061713);display:grid;place-items:center;text-align:center;box-shadow:inset 0 0 30px #000}.screen small{color:#7fc9aa;letter-spacing:.15em}.money{font:900 clamp(1.7rem,4vw,2.5rem) ui-monospace,monospace;color:#a8ffd0;text-shadow:0 0 14px #5be39f55}.rate{color:#94b9cb;font:800 .86rem ui-monospace,monospace;text-align:center}.mainframe .title{text-align:center;color:#b9cfe0;font-weight:900;letter-spacing:.12em;font-size:.75rem}
 .machine{position:absolute;width:190px;min-height:126px;z-index:5;border:1px solid #3b5a78;border-radius:19px;background:linear-gradient(145deg,#18314c,#0a1726 68%);box-shadow:0 16px 35px #0008;cursor:grab;touch-action:none;transition:box-shadow .2s,border-color .2s,transform .2s}.machine:hover{border-color:#6d91b5;box-shadow:0 18px 42px #0009,0 0 0 2px #59d8ff14}.machine.dragging{cursor:grabbing;transform:scale(1.025);z-index:10}.machine-head{padding:10px 13px 8px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2c4864}.machine-name{font-weight:900}.machine-level{color:var(--cyan);font:900 1.1rem ui-monospace,monospace}.machine-body{padding:12px}.machine-rate{font:900 1rem ui-monospace,monospace}.machine-rate span{color:var(--green)}.machine-note{color:var(--muted);font-size:.74rem;margin-top:6px}.port{position:absolute;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:3px solid #20354a;background:#07111d;box-shadow:0 0 0 3px #0a1726;z-index:2}.port:after{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}.power-port{color:var(--cyan);transition:left .12s,right .12s,top .12s,bottom .12s}.power-port.side-right{right:-14px;left:auto;top:50%;bottom:auto;transform:translateY(-50%)}.power-port.side-left{left:-14px;right:auto;top:50%;bottom:auto;transform:translateY(-50%)}.power-port.side-top{top:-14px;bottom:auto;left:50%;right:auto;transform:translateX(-50%)}.power-port.side-bottom{bottom:-14px;top:auto;left:50%;right:auto;transform:translateX(-50%)}.merge-port{left:50%;bottom:-14px;transform:translateX(-50%);color:var(--amber);cursor:crosshair}.merge-port:hover,.merge-port.hot{box-shadow:0 0 0 4px #ffd16633,0 0 20px #ffd16688}.machine.ready{border-color:var(--amber)}
-.tip{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:8;padding:8px 12px;border:1px solid #2c4763;border-radius:12px;background:#081522dd;color:var(--muted);font-size:.82rem;backdrop-filter:blur(10px)}
+.tip{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:8;padding:8px 12px;border:1px solid #2c4763;border-radius:12px;background:#081522dd;color:var(--muted);font-size:.82rem;backdrop-filter:blur(10px);pointer-events:none}
 .defence-layer,.bug-layer,.bug-vfx,.bug-banner{position:absolute;inset:0;pointer-events:none}
 .defence-layer{z-index:3}.bug-vfx{z-index:79}.bug-layer{z-index:80}
 .hm-laser{position:absolute;width:42px;height:42px;margin:-21px 0 0 -21px;pointer-events:auto;z-index:3;border:5px solid #d9c99b;background:#1e5261;box-shadow:-3px -3px 0 #17333e,4px 4px 0 #5f7980;display:grid;place-items:center;font:900 .68rem ui-monospace,monospace;color:#102027;cursor:grab}
@@ -166,12 +166,12 @@ html{color-scheme:light}body{background:linear-gradient(135deg,#7f989f 0,#617d86
 </style>
 </head>
 <body>
-<div id="game"><header class="hud"><div class="brand"><small>Hex Systems Lab</small></div><div class="platform-controls"><button class="hm-btn" id="hm-save">Save</button><button class="hm-btn" id="hm-load">Load</button><button class="hm-btn" id="hm-leaderboard">Leaderboard</button><button class="hm-btn" id="hm-defence">Defence</button><button class="hm-btn" id="hm-fullscreen">Fullscreen</button></div><div class="help">Drag machines anywhere.<br>Drag one amber merge port onto another.</div></header><aside class="shop-panel" id="shopPanel"><div class="shop-head"><b>MACHINE STORE</b><small>Merged tiers unlock here</small></div><div class="shop-list" id="shopList"></div></aside><main class="workspace" id="workspace"><canvas class="physics-cables" id="physicsCables"></canvas><svg class="cables" id="cables"></svg><canvas class="amber-physics-cable" id="amberCableCanvas" aria-hidden="true"></canvas><div class="defence-layer" id="defenceLayer"></div><div class="bug-vfx" id="bugVfx"></div><div class="bug-layer" id="bugLayer"></div><div class="bug-banner" id="bugBanner"><div class="bug-message" id="bugMessage"></div></div><section class="mainframe" id="mainframe"><div class="title">CENTRAL MAINFRAME</div><div class="screen"><div><small>AVAILABLE FUNDS</small><div class="money" id="money">£0</div></div></div><div class="rate" id="rate">£0 / second</div></section><div class="tip">Drag the amber socket from one machine onto another to merge them.</div></main></div>
+<div id="game"><header class="hud"><div class="brand"><small>Hex Systems Lab</small></div><div class="platform-controls"><button class="hm-btn" id="hm-save">Save</button><button class="hm-btn" id="hm-load">Load</button><button class="hm-btn" id="hm-leaderboard">Leaderboard</button><button class="hm-btn" id="hm-defence">Defence</button><button class="hm-btn" id="hm-reset-view">Reset View</button><button class="hm-btn" id="hm-fullscreen">Fullscreen</button></div><div class="help">Drag machines anywhere.<br>Drag one amber merge port onto another.</div></header><aside class="shop-panel" id="shopPanel"><div class="shop-head"><b>MACHINE STORE</b><small>Merged tiers unlock here</small></div><div class="shop-list" id="shopList"></div></aside><main class="workspace" id="workspace"><div class="world-layer" id="worldLayer"><canvas class="physics-cables" id="physicsCables"></canvas><svg class="cables" id="cables"></svg><canvas class="amber-physics-cable" id="amberCableCanvas" aria-hidden="true"></canvas><div class="defence-layer" id="defenceLayer"></div><div class="bug-vfx" id="bugVfx"></div><div class="bug-layer" id="bugLayer"></div><section class="mainframe" id="mainframe"><div class="title">CENTRAL MAINFRAME</div><div class="screen"><div><small>AVAILABLE FUNDS</small><div class="money" id="money">£0</div></div></div><div class="rate" id="rate">£0 / second</div></section></div><div class="tip">Drag the amber socket from one machine onto another to merge them.</div><div class="bug-banner" id="bugBanner"><div class="bug-message" id="bugMessage"></div></div></main></div>
 <div class="hm-modal" id="hm-platform-modal"><section class="hm-card"><div class="hm-card-head"><div class="hm-card-title" id="hm-modal-title">Hex Machine</div><button class="hm-btn" id="hm-modal-close">Close</button></div><div id="hm-modal-body"></div></section></div>
 <div class="overlay" id="overlay"><section class="console"><header class="console-head"><div><small style="color:var(--cyan);font-weight:900;letter-spacing:.14em">MERGE CONSOLE</small><h2 id="mergeTitle">Merge machines</h2><p>Convert both machines, add them in binary, then compress the result back to hex.</p></div><button class="close" id="close">Close</button></header><div class="flow" id="flow"></div><div class="legend" id="legend"></div></section></div>
 <script>
 (()=>{
-const HEX='0123456789ABCDEF', ws=document.getElementById('workspace'), svg=document.getElementById('cables'), cableCanvas=document.getElementById('physicsCables'), cableCtx=cableCanvas.getContext('2d'), amberCanvas=document.getElementById('amberCableCanvas'), amberCtx=amberCanvas.getContext('2d'), defenceLayer=document.getElementById('defenceLayer'), bugLayer=document.getElementById('bugLayer'), bugVfx=document.getElementById('bugVfx'), bugBanner=document.getElementById('bugBanner'), bugMessage=document.getElementById('bugMessage');
+const HEX='0123456789ABCDEF', ws=document.getElementById('workspace'), world=document.getElementById('worldLayer'), svg=document.getElementById('cables'), cableCanvas=document.getElementById('physicsCables'), cableCtx=cableCanvas.getContext('2d'), amberCanvas=document.getElementById('amberCableCanvas'), amberCtx=amberCanvas.getContext('2d'), defenceLayer=document.getElementById('defenceLayer'), bugLayer=document.getElementById('bugLayer'), bugVfx=document.getElementById('bugVfx'), bugBanner=document.getElementById('bugBanner'), bugMessage=document.getElementById('bugMessage');
 const {Engine,World,Bodies,Body,Constraint}=Matter;
 const cableEngine=Engine.create({gravity:{x:0,y:1,scale:0.00135}});
 const ropes=new Map();
@@ -185,6 +185,35 @@ const LASER_TYPES=[
   {id:'prism',name:'Prism Laser',tier:4,cost:5000,range:255,damage:5,cooldown:520}
 ];
 const state={money:0,machines:[],nextId:1,merge:null,phase:0,solved:{},dragCable:null,unlocked:new Set(),purchaseCounts:new Map(),lasers:[],nextLaserId:1,placingLaser:null,bugs:[],nextBugId:1,bugAttack:{phase:'idle',nextAt:0,activeUntil:0,lastSpawnAt:0,wave:0,kills:0}};
+const PAN_MARGIN=260;
+const camera={x:0,y:0,zoom:1,min:.7,max:2.1,panning:null};
+function viewportRect(){return ws.getBoundingClientRect()}
+function screenToWorld(clientX,clientY){
+  const r=viewportRect();
+  return{x:(clientX-r.left-camera.x)/camera.zoom,y:(clientY-r.top-camera.y)/camera.zoom};
+}
+function clampCamera(){
+  const r=viewportRect(),scaledW=r.width*camera.zoom,scaledH=r.height*camera.zoom;
+  camera.x=Math.min(PAN_MARGIN,Math.max(r.width-scaledW-PAN_MARGIN,camera.x));
+  camera.y=Math.min(PAN_MARGIN,Math.max(r.height-scaledH-PAN_MARGIN,camera.y));
+}
+function applyCamera(){
+  clampCamera();
+  world.style.transform=`translate(${camera.x}px,${camera.y}px) scale(${camera.zoom})`;
+  syncRopeAnchors();
+  updateStationCables();
+}
+function resetCamera(){camera.zoom=1;camera.x=0;camera.y=0;applyCamera()}
+function zoomCameraAt(clientX,clientY,factor){
+  const before=screenToWorld(clientX,clientY);
+  const next=Math.max(camera.min,Math.min(camera.max,camera.zoom*factor));
+  if(Math.abs(next-camera.zoom)<.001)return;
+  const r=viewportRect();
+  camera.zoom=next;
+  camera.x=clientX-r.left-before.x*camera.zoom;
+  camera.y=clientY-r.top-before.y*camera.zoom;
+  applyCamera();
+}
 const LARGE_NUMBER_NAMES=[
   '', 'thousand', 'million', 'billion', 'trillion', 'quadrillion',
   'quintillion', 'sextillion', 'septillion', 'octillion', 'nonillion',
@@ -311,7 +340,7 @@ function machineRate(m){normaliseMachine(m);return m.value*Math.max(.12,m.hp/MAC
 function machineHealthMarkup(m){const pct=Math.max(0,Math.min(100,Math.round(normaliseMachine(m).hp)));return `<div class="machine-health" title="Machine health"><span style="width:${pct}%"></span></div>`}
 function addMachine(value,x,y){state.machines.push({id:state.nextId++,value,x,y,hp:MACHINE_HP});renderMachines()}
 function totalRate(){return state.machines.reduce((s,m)=>s+machineRate(m),0)}
-function renderMachines(){ws.querySelectorAll('.machine').forEach(e=>e.remove());clearRopes();for(const m of state.machines){normaliseMachine(m);const el=document.createElement('article');el.className='machine'+(m.hp<MACHINE_HP*.98?' damaged':'')+(m.hp<=1?' offline':'');el.dataset.id=m.id;el.style.left=m.x+'px';el.style.top=m.y+'px';el.innerHTML=`<div class="machine-head"><span class="machine-name">${glyphMarkup(m.value,'machine-glyph')}</span><span class="machine-level">0x${hex(m.value)}</span></div><div class="machine-body"><div class="machine-rate"><span>${money(machineRate(m))}</span> / second</div><div class="machine-note">${m.hp<MACHINE_HP*.98?'Damaged by bugs':'Connected to central mainframe'}</div>${machineHealthMarkup(m)}</div><div class="port power-port side-right"></div><div class="port merge-port" title="Drag to another machine"></div>`;ws.appendChild(el);bindMachine(el,m);createRope(m)} resizeCableCanvas();syncRopeAnchors();document.getElementById('rate').textContent=money(totalRate())+' / second'}
+function renderMachines(){ws.querySelectorAll('.machine').forEach(e=>e.remove());clearRopes();for(const m of state.machines){normaliseMachine(m);const el=document.createElement('article');el.className='machine'+(m.hp<MACHINE_HP*.98?' damaged':'')+(m.hp<=1?' offline':'');el.dataset.id=m.id;el.style.left=m.x+'px';el.style.top=m.y+'px';el.innerHTML=`<div class="machine-head"><span class="machine-name">${glyphMarkup(m.value,'machine-glyph')}</span><span class="machine-level">0x${hex(m.value)}</span></div><div class="machine-body"><div class="machine-rate"><span>${money(machineRate(m))}</span> / second</div><div class="machine-note">${m.hp<MACHINE_HP*.98?'Damaged by bugs':'Connected to central mainframe'}</div>${machineHealthMarkup(m)}</div><div class="port power-port side-right"></div><div class="port merge-port" title="Drag to another machine"></div>`;world.appendChild(el);bindMachine(el,m);createRope(m)} resizeCableCanvas();syncRopeAnchors();document.getElementById('rate').textContent=money(totalRate())+' / second'}
 function resizeCableCanvas(){
   const r=ws.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);
   for(const [canvas,ctx] of [[cableCanvas,cableCtx],[amberCanvas,amberCtx]]){
@@ -324,12 +353,12 @@ function clearRopes(){
   for(const rope of ropes.values()) World.remove(cableEngine.world,[...rope.bodies,...rope.constraints]);
   ropes.clear();
 }
-function pointForElement(el){const a=el.getBoundingClientRect(),r=ws.getBoundingClientRect();return{x:a.left-r.left+a.width/2,y:a.top-r.top+a.height/2}}
+function pointForElement(el){const a=el.getBoundingClientRect();return screenToWorld(a.left+a.width/2,a.top+a.height/2)}
 function updateMachinePowerSide(m){
   const el=ws.querySelector(`.machine[data-id="${m.id}"]`); if(!el)return;
-  const power=el.querySelector('.power-port'),merge=el.querySelector('.merge-port'),er=el.getBoundingClientRect(),mf=document.getElementById('mainframe').getBoundingClientRect();
-  const dx=(mf.left+mf.width/2)-(er.left+er.width/2),dy=(mf.top+mf.height/2)-(er.top+er.height/2);
-  const side=Math.abs(dx/er.width)>Math.abs(dy/er.height)?(dx>0?'right':'left'):(dy>0?'bottom':'top');
+  const power=el.querySelector('.power-port'),merge=el.querySelector('.merge-port'),er=machineBounds(m),mf=workspaceRectForElement(document.getElementById('mainframe'));
+  const dx=(mf.left+mf.right)/2-(er.x+er.w/2),dy=(mf.top+mf.bottom)/2-(er.y+er.h/2);
+  const side=Math.abs(dx/er.w)>Math.abs(dy/er.h)?(dx>0?'right':'left'):(dy>0?'bottom':'top');
   power.classList.remove('side-left','side-right','side-top','side-bottom');
   power.classList.add('side-'+side);
   if(merge){
@@ -341,11 +370,11 @@ function updateMachinePowerSide(m){
 }
 function machinePowerPoint(m){const el=ws.querySelector(`.machine[data-id="${m.id}"]`);updateMachinePowerSide(m);return pointForElement(el.querySelector('.power-port'))}
 function mainframePointFor(machinePoint){
-  const mf=document.getElementById('mainframe').getBoundingClientRect(),r=ws.getBoundingClientRect();
-  const cx=mf.left-r.left+mf.width/2,cy=mf.top-r.top+mf.height/2;
+  const mf=workspaceRectForElement(document.getElementById('mainframe'));
+  const width=mf.right-mf.left,height=mf.bottom-mf.top,cx=mf.left+width/2,cy=mf.top+height/2;
   const dx=machinePoint.x-cx,dy=machinePoint.y-cy;
-  if(Math.abs(dx/(mf.width/2))>Math.abs(dy/(mf.height/2))) return{x:cx+Math.sign(dx||1)*mf.width/2,y:cy+Math.max(-mf.height*.34,Math.min(mf.height*.34,dy))};
-  return{x:cx+Math.max(-mf.width*.34,Math.min(mf.width*.34,dx)),y:cy+Math.sign(dy||1)*mf.height/2};
+  if(Math.abs(dx/(width/2))>Math.abs(dy/(height/2))) return{x:cx+Math.sign(dx||1)*width/2,y:cy+Math.max(-height*.34,Math.min(height*.34,dy))};
+  return{x:cx+Math.max(-width*.34,Math.min(width*.34,dx)),y:cy+Math.sign(dy||1)*height/2};
 }
 function cableDimensions(direct){
   const slack=Math.max(24,Math.min(72,direct*.12));
@@ -412,6 +441,7 @@ function handleWorkspaceResize(){
       requestAnimationFrame(clampMergeStation);
     }
   }
+  applyCamera();
 }
 function scheduleWorkspaceResize(){
   cancelAnimationFrame(resizeFrame);
@@ -438,13 +468,13 @@ function machineBounds(m){
 function machineCenter(m){const b=machineBounds(m);return{x:b.x+b.w/2,y:b.y+b.h/2,b}}
 function rectsOverlap(a,b){return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top}
 function workspaceRectForElement(el,pad=0){
-  const wr=ws.getBoundingClientRect(),r=el.getBoundingClientRect();
-  return{left:r.left-wr.left-pad,top:r.top-wr.top-pad,right:r.right-wr.left+pad,bottom:r.bottom-wr.top+pad};
+  const r=el.getBoundingClientRect(),topLeft=screenToWorld(r.left,r.top),bottomRight=screenToWorld(r.right,r.bottom);
+  return{left:Math.min(topLeft.x,bottomRight.x)-pad,top:Math.min(topLeft.y,bottomRight.y)-pad,right:Math.max(topLeft.x,bottomRight.x)+pad,bottom:Math.max(topLeft.y,bottomRight.y)+pad};
 }
 function pointHitsBoardObject(x,y,radius=LASER_RADIUS){
   const footprint={left:x-radius,top:y-radius,right:x+radius,bottom:y+radius};
-  const mf=document.getElementById('mainframe').getBoundingClientRect(),wr=ws.getBoundingClientRect();
-  if(rectsOverlap(footprint,{left:mf.left-wr.left-12,top:mf.top-wr.top-12,right:mf.right-wr.left+12,bottom:mf.bottom-wr.top+12}))return true;
+  const mf=workspaceRectForElement(document.getElementById('mainframe'),12);
+  if(rectsOverlap(footprint,mf))return true;
   const station=document.getElementById('mergeStation');
   if(station&&rectsOverlap(footprint,workspaceRectForElement(station,12)))return true;
   return state.machines.some(m=>{const b=machineBounds(m);return rectsOverlap(footprint,{left:b.x-12,top:b.y-12,right:b.x+b.w+12,bottom:b.y+b.h+12})});
@@ -649,8 +679,8 @@ function startLaserPlacement(typeId){
 }
 function placePendingLaser(event){
   if(!state.placingLaser)return false;
-  const type=laserType(state.placingLaser.typeId),r=ws.getBoundingClientRect();
-  const x=event.clientX-r.left,y=event.clientY-r.top;
+  const type=laserType(state.placingLaser.typeId),r=ws.getBoundingClientRect(),point=screenToWorld(event.clientX,event.clientY);
+  const x=point.x,y=point.y;
   if(pointHitsBoardObject(x,y)){
     showTemporaryBanner('Place lasers in empty space so bugs cannot hide behind machines.',3500);
     return true;
@@ -707,7 +737,38 @@ let lastPhysics=performance.now();
 function cableLoop(now){
   const dt=Math.min(33,now-lastPhysics||16.7);lastPhysics=now;syncRopeAnchors();syncAmberDragRope();Engine.update(cableEngine,dt);drawRopes();drawAmberDragRope();requestAnimationFrame(cableLoop)
 }
-function bindMachine(el,m){let sx,sy,ox,oy,moving=false;el.addEventListener('pointerdown',e=>{if(e.target.closest('.merge-port,.bit,button,input,.table-wrap,.machine-inline'))return;sx=e.clientX;sy=e.clientY;ox=m.x;oy=m.y;moving=true;el.classList.add('dragging');el.setPointerCapture(e.pointerId)});el.addEventListener('pointermove',e=>{if(!moving)return;const r=ws.getBoundingClientRect();m.x=Math.max(8,Math.min(r.width-el.offsetWidth-8,ox+e.clientX-sx));m.y=Math.max(8,Math.min(r.height-el.offsetHeight-8,oy+e.clientY-sy));el.style.left=m.x+'px';el.style.top=m.y+'px';retargetRopeLength(m,false);syncRopeAnchors();updateStationCables()});el.addEventListener('pointerup',()=>{if(!moving)return;moving=false;el.classList.remove('dragging');retargetRopeLength(m,true);syncRopeAnchors();updateStationCables()});el.addEventListener('pointercancel',()=>{if(!moving)return;moving=false;el.classList.remove('dragging');retargetRopeLength(m,true);syncRopeAnchors();updateStationCables()});const port=el.querySelector('.merge-port');port.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(state.merge)return;const wr=ws.getBoundingClientRect(),pr=port.getBoundingClientRect();state.dragCable={from:m,sourcePort:port,pointerId:e.pointerId,start:{x:pr.left+pr.width/2-wr.left,y:pr.top+pr.height/2-wr.top},target:null};port.setPointerCapture?.(e.pointerId);createAmberDragRope(state.dragCable.start,{x:e.clientX-wr.left,y:e.clientY-wr.top});updateMergeDrag(e.clientX,e.clientY)})}
+function bindMachine(el,m){
+  let start,ox,oy,moving=false;
+  el.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.merge-port,.bit,button,input,.table-wrap,.machine-inline'))return;
+    start=screenToWorld(e.clientX,e.clientY);ox=m.x;oy=m.y;moving=true;
+    el.classList.add('dragging');el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!moving)return;
+    const r=ws.getBoundingClientRect(),point=screenToWorld(e.clientX,e.clientY);
+    m.x=Math.max(8,Math.min(r.width-el.offsetWidth-8,ox+point.x-start.x));
+    m.y=Math.max(8,Math.min(r.height-el.offsetHeight-8,oy+point.y-start.y));
+    el.style.left=m.x+'px';el.style.top=m.y+'px';
+    retargetRopeLength(m,false);syncRopeAnchors();updateStationCables();
+  });
+  const finish=()=>{
+    if(!moving)return;
+    moving=false;el.classList.remove('dragging');
+    retargetRopeLength(m,true);syncRopeAnchors();updateStationCables();
+  };
+  el.addEventListener('pointerup',finish);
+  el.addEventListener('pointercancel',finish);
+  const port=el.querySelector('.merge-port');
+  port.addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();
+    if(state.merge)return;
+    state.dragCable={from:m,sourcePort:port,pointerId:e.pointerId,start:pointForElement(port),target:null};
+    port.setPointerCapture?.(e.pointerId);
+    createAmberDragRope(state.dragCable.start,screenToWorld(e.clientX,e.clientY));
+    updateMergeDrag(e.clientX,e.clientY);
+  });
+}
 
 function cablePath(start,end){
   if(!start||!end||![start.x,start.y,end.x,end.y].every(Number.isFinite))return '';
@@ -761,8 +822,8 @@ function drawAmberDragRope(){
   amberCtx.save();amberCtx.lineCap='round';amberCtx.lineJoin='round';amberCtx.shadowColor='#0009';amberCtx.shadowBlur=5;amberCtx.shadowOffsetY=4;trace();amberCtx.strokeStyle='#5c4613';amberCtx.lineWidth=11;amberCtx.stroke();
   amberCtx.shadowColor='transparent';trace();amberCtx.strokeStyle='#d59a19';amberCtx.lineWidth=7;amberCtx.stroke();trace();amberCtx.strokeStyle='#f2c75b';amberCtx.lineWidth=2;amberCtx.stroke();amberCtx.restore();
 }
-function nearestMergePort(clientX,clientY,sourcePort){let best=null,bestDist=Infinity;document.querySelectorAll('.merge-port').forEach(port=>{if(port===sourcePort)return;const r=port.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2,d=Math.hypot(clientX-x,clientY-y);if(d<bestDist){bestDist=d;best=port}});return bestDist<=38?best:null}
-function updateMergeDrag(clientX,clientY){const drag=state.dragCable;if(!drag)return;const r=ws.getBoundingClientRect(),end={x:clientX-r.left,y:clientY-r.top};if(!amberDragRope)createAmberDragRope(pointForElement(drag.sourcePort),end);else amberDragRope.end=end;document.querySelectorAll('.merge-port').forEach(p=>p.classList.remove('hot'));drag.target=nearestMergePort(clientX,clientY,drag.sourcePort);if(drag.target)drag.target.classList.add('hot')}
+function nearestMergePort(clientX,clientY,sourcePort){let best=null,bestDist=Infinity;document.querySelectorAll('.merge-port').forEach(port=>{if(port===sourcePort)return;const r=port.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2,d=Math.hypot(clientX-x,clientY-y);if(d<bestDist){bestDist=d;best=port}});return bestDist<=42?best:null}
+function updateMergeDrag(clientX,clientY){const drag=state.dragCable;if(!drag)return;const end=screenToWorld(clientX,clientY);if(!amberDragRope)createAmberDragRope(pointForElement(drag.sourcePort),end);else amberDragRope.end=end;document.querySelectorAll('.merge-port').forEach(p=>p.classList.remove('hot'));drag.target=nearestMergePort(clientX,clientY,drag.sourcePort);if(drag.target)drag.target.classList.add('hot')}
 function finishMergeDrag(clientX,clientY){const drag=state.dragCable;if(!drag)return;updateMergeDrag(clientX,clientY);const target=drag.target;removeAmberDragRope();document.querySelectorAll('.merge-port').forEach(p=>p.classList.remove('hot'));state.dragCable=null;if(target){const machineEl=target.closest('.machine'),other=state.machines.find(x=>x.id===Number(machineEl.dataset.id));if(other&&other!==drag.from)startMerge(drag.from,other)}}
 document.addEventListener('pointermove',e=>{if(state.dragCable)updateMergeDrag(e.clientX,e.clientY)});
 document.addEventListener('pointerup',e=>{if(state.dragCable)finishMergeDrag(e.clientX,e.clientY)});
@@ -856,7 +917,7 @@ function createMergeStation(){
   const layout=stationLayout();
   el.style.setProperty('--station-width',layout.width+'px');
   el.style.setProperty('--station-cell',layout.cell+'px');
-  ws.appendChild(el);state.merge.station=el;
+  world.appendChild(el);state.merge.station=el;
   ws.querySelector(`.machine[data-id="${state.merge.a.id}"]`)?.classList.add('station-linked');
   ws.querySelector(`.machine[data-id="${state.merge.b.id}"]`)?.classList.add('station-linked');
   ensureStationCables();
@@ -881,8 +942,8 @@ function removeStationCables(){
   document.getElementById('stationCableBFlow')?.remove();
 }
 function pointInWorkspace(el){
-  const wr=ws.getBoundingClientRect(),r=el.getBoundingClientRect();
-  return{x:r.left+r.width/2-wr.left,y:r.top+r.height/2-wr.top};
+  const r=el.getBoundingClientRect();
+  return screenToWorld(r.left+r.width/2,r.top+r.height/2);
 }
 function updateStationCables(){
   if(!state.merge?.station)return;
@@ -1080,9 +1141,41 @@ function syncLeaderboard(){
 function fullscreenTarget(){return (window.frameElement&&window.frameElement.parentElement)||document.getElementById('game')}
 function fullscreenDocument(){const target=fullscreenTarget();return (target&&target.ownerDocument)||document}
 function toggleFullscreen(){const target=fullscreenTarget(),doc=fullscreenDocument();if(doc.fullscreenElement){doc.exitFullscreen&&doc.exitFullscreen();return}if(target&&target.requestFullscreen)target.requestFullscreen()}
+function eventStartsOnBoardControl(e){
+  return e.target.closest('.machine,.mainframe,.merge-station,.hm-laser,.hm-bug,.bug-banner,.tip,button,input,.bit,.table-wrap,.machine-inline,.merge-port,.port');
+}
+function setupCameraControls(){
+  ws.addEventListener('wheel',e=>{
+    if(e.target.closest('.table-wrap')||state.placingLaser)return;
+    e.preventDefault();
+    zoomCameraAt(e.clientX,e.clientY,Math.exp(-e.deltaY*.0012));
+  },{passive:false});
+  ws.addEventListener('pointerdown',e=>{
+    if(e.button!==0||state.dragCable||state.placingLaser||eventStartsOnBoardControl(e))return;
+    camera.panning={id:e.pointerId,startX:e.clientX,startY:e.clientY,cameraX:camera.x,cameraY:camera.y};
+    ws.classList.add('panning');
+    ws.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+  ws.addEventListener('pointermove',e=>{
+    const pan=camera.panning;
+    if(!pan||pan.id!==e.pointerId)return;
+    camera.x=pan.cameraX+e.clientX-pan.startX;
+    camera.y=pan.cameraY+e.clientY-pan.startY;
+    applyCamera();
+  });
+  const endPan=e=>{
+    if(!camera.panning||camera.panning.id!==e.pointerId)return;
+    camera.panning=null;
+    ws.classList.remove('panning');
+    ws.releasePointerCapture?.(e.pointerId);
+  };
+  ws.addEventListener('pointerup',endPan);
+  ws.addEventListener('pointercancel',endPan);
+}
 function setupPlatformControls(){
   H('hm-modal-close').onclick=closeModal;H('hm-platform-modal').addEventListener('click',e=>{if(e.target===H('hm-platform-modal'))closeModal()});
-  H('hm-save').onclick=()=>driveSaveOrLoad('save');H('hm-load').onclick=()=>driveSaveOrLoad('load');H('hm-leaderboard').onclick=showLeaderboard;H('hm-defence').onclick=showDefenceMenu;H('hm-fullscreen').onclick=toggleFullscreen;
+  H('hm-save').onclick=()=>driveSaveOrLoad('save');H('hm-load').onclick=()=>driveSaveOrLoad('load');H('hm-leaderboard').onclick=showLeaderboard;H('hm-defence').onclick=showDefenceMenu;H('hm-reset-view').onclick=resetCamera;H('hm-fullscreen').onclick=toggleFullscreen;setupCameraControls();
   ws.addEventListener('pointerdown',e=>{if(!state.placingLaser)return;if(placePendingLaser(e)){e.preventDefault();e.stopPropagation()}},true);
   window.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.placingLaser){state.placingLaser=null;showTemporaryBanner('Laser placement cancelled.',2200);updateBugBanner(performance.now())}});
   fullscreenDocument().addEventListener('fullscreenchange',()=>{const b=H('hm-fullscreen');if(b)b.textContent=fullscreenDocument().fullscreenElement?'Exit Fullscreen':'Fullscreen';scheduleWorkspaceResize()});
