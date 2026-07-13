@@ -876,11 +876,16 @@ function bindInlineControls(){
   ws.querySelectorAll('.inline-check').forEach(b=>b.onclick=()=>checkInlineMachine(b.dataset.owner));
 }
 function inlineFeedback(owner,msg,type){const e=ws.querySelector(`.machine-inline[data-owner="${owner}"] .feedback`);if(e){e.textContent=msg;e.className='feedback '+type}}
+function flashWrongAttempt(elements){
+  const items=[...elements];
+  items.forEach(item=>item.classList.add('bad'));
+  setTimeout(()=>items.forEach(item=>item.classList.remove('bad')),480);
+}
 function checkInlineMachine(owner){
   const m=owner==='A'?state.merge.a:state.merge.b;
   const els=[...ws.querySelectorAll(`.machine-inline .bit[data-owner="${owner}"]`)];
   const want=bin(m.value,els.length),got=els.map(x=>x.dataset.bit).join('');
-  if(got!==want){els.forEach((x,i)=>x.classList.toggle('bad',x.dataset.bit!==want[i]));inlineFeedback(owner,'Check highlighted bits.','bad');return}
+  if(got!==want){flashWrongAttempt(els);inlineFeedback(owner,'Not quite. Recheck each hex digit as a group of four bits, then try again.','bad');return}
   state.solved[owner]=true;
   const el=ws.querySelector(`.machine[data-id="${m.id}"]`);el.classList.add('merge-solved');el.querySelector('.machine-body').innerHTML=inlineMachineMarkup(owner,m);
   if(state.solved.A&&state.solved.B){state.phase=1;createMergeStation()}
@@ -1002,12 +1007,12 @@ function renderMergeStation(){
 function stationFeedback(msg,type){const e=document.querySelector('#mergeStation .feedback');if(e){e.textContent=msg;e.className='feedback '+type}}
 function checkInlineSum(){
   const {a,b}=state.merge,els=[...document.querySelectorAll('#mergeStation .bit[data-owner="SUM"]')],want=bin(a.value+b.value,els.length),got=els.map(x=>x.dataset.bit).join('');
-  if(got!==want){els.forEach((x,i)=>x.classList.toggle('bad',x.dataset.bit!==want[i]));stationFeedback('Check highlighted columns.','bad');return}
+  if(got!==want){flashWrongAttempt(els);stationFeedback('Not quite. Work from the right-hand side and remember any carry before trying again.','bad');return}
   state.phase=2;state.merge.station?.classList.remove('build-stage-1');state.merge.station?.classList.add('build-stage-2');renderMergeStation();
 }
 function checkInlineHex(){
   const {a,b}=state.merge,inputs=[...document.querySelectorAll('#mergeStation .hex-input')],want=hex(a.value+b.value).padStart(inputs.length,'0'),got=inputs.map(x=>x.value).join('');
-  if(got!==want){inputs.forEach((x,i)=>x.classList.toggle('bad',x.value!==want[i]));stationFeedback('Check highlighted hex digit.','bad');return}
+  if(got!==want){flashWrongAttempt(inputs);stationFeedback('Not quite. Split the binary into groups of four, then convert each group to one hex digit.','bad');return}
   const station=state.merge?.station;
   station?.classList.remove('build-stage-2');station?.classList.add('build-stage-3','build-complete');
   stationFeedback('Machine complete.','good');
