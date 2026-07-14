@@ -187,6 +187,12 @@
               "title": "L5: Byte Brawlers Practice",
               "file": "lessons/year8-tshirt-contest.json",
               "order": 5
+            },
+            {
+              "id": "year8-binary-mine-3d",
+              "title": "L6: 3D Binary Mine",
+              "file": "lessons/year8-binary-mine-3d.json",
+              "order": 6
             }
           ]
         }
