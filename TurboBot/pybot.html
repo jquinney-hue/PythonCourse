@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Lightbot 3D</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulkt-stdlib.js"></script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { display: flex; flex-direction: column; height: 100vh; background-color: #1e1e1e; color: white; overflow: hidden; }
+        
+        /* Top Bar */
+        #top-bar { display: flex; justify-content: space-between; align-items: center; background: #333; padding: 10px 20px; border-bottom: 2px solid #444; z-index: 10; }
+        .bar-group { display: flex; align-items: center; gap: 15px; }
+        button { background: #4caf50; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #45a049; }
+        #btn-stop, #btn-home { background: #f44336; }
+        #btn-stop:hover, #btn-home:hover { background: #d32f2f; }
+        #speed-slider { vertical-align: middle; }
+
+        /* Main Area */
+        #main-area { display: flex; flex: 1; height: calc(100vh - 50px); position: relative; }
+        
+        /* Left Pane - Code Editor */
+        #left-pane { width: 33.33%; min-width: 250px; max-width: 70%; resize: horizontal; overflow: hidden; display: flex; flex-direction: column; background: #282a36; border-right: 4px solid #444; }
+        .editor-header { padding: 10px; background: #21222c; font-size: 14px; color: #f8f8f2; }
+        #editor-container { flex: 1; overflow: auto; }
+        .CodeMirror { height: 100% !important; font-size: 16px; }
+
+        /* Right Pane - 3D View */
+        #right-pane { flex: 1; position: relative; background: #87CEEB; }
+        #canvas-container { width: 100%; height: 100%; display: block; }
+
+        /* UI Overlays */
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .modal { background: #2a2a2a; padding: 30px; border-radius: 8px; text-align: center; max-width: 600px; width: 90%; max-height: 90%; overflow-y: auto; }
+        .level-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1px)); gap: 15px; margin-top: 20px; justify-content: center; }
+        .level-card { background: #444; padding: 15px; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+        .level-card:hover { background: #555; transform: scale(1.05); }
+        .hidden { display: none !important; }
+
+        /* Example mode */
+        #example-code-display {
+            flex: 1; overflow: auto; padding: 16px; background: #282a36;
+            font-family: 'Courier New', monospace; font-size: 15px; line-height: 1.7;
+            color: #f8f8f2; white-space: pre;
+            user-select: none; -webkit-user-select: none; -moz-user-select: none;
+            pointer-events: none;
+        }
+        #example-code-display .kw  { color: #ff79c6; }
+        #example-code-display .fn  { color: #50fa7b; }
+        #example-code-display .num { color: #bd93f9; }
+        #example-code-display .cmt { color: #6272a4; font-style: italic; }
+        #example-mode-badge {
+            display: none; background: #6272a4; color: #f8f8f2;
+            font-size: 11px; font-weight: bold; letter-spacing: 0.05em;
+            padding: 3px 10px; border-radius: 3px; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div class="bar-group">
+            <button id="btn-home">🏠 Menu</button>
+            <span id="level-title">Level 1</span>
+        </div>
+        <div class="bar-group">
+            <span>Lines: <span id="line-count">0</span></span>
+            <span>Time: <span id="time-elapsed">0.0</span>s</span>
+        </div>
+        <div class="bar-group">
+            <label for="speed-slider">Speed:</label>
+            <input type="range" id="speed-slider" min="0.5" max="4" step="0.5" value="1">
+            <span id="speed-display">1.0x</span>
+            <button id="btn-play">▶ Play</button>
+            <button id="btn-stop">⏹ Stop / Reset</button>
+        </div>
+        <button id="btn-help" onclick="document.getElementById('help-modal').classList.remove('hidden')">
+    ❓ Help & Syntax
+        </button>
+    </div>
+
+    <div id="main-area">
+        <div id="left-pane">
+            <div class="editor-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Python Code | Medals - 🥇: <span id="gold-req"></span> 🥈: <span id="silver-req"></span> 🥉: <span id="bronze-req"></span></span>
+                <span id="example-mode-badge">Example</span>
+            </div>
+            <div id="editor-container"></div>
+            <div id="example-code-display"></div>
+        </div>
+        <div id="right-pane">
+            <div id="canvas-container"></div>
+        </div>
+    </div>
+
+    <div id="menu-modal" class="modal-overlay">
+        <div class="modal">
+            <h2>Python Lightbot 3D</h2>
+            <p>Select a level to begin</p>
+            <div id="level-container" class="level-grid"></div>
+            <br><br>
+            <button onclick="clearSaveData()" style="background:#f44336; font-size:12px;">Clear All Save Data</button>
+        </div>
+    </div>
+
+    <div id="win-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Level Complete! 🎉</h2>
+            <p id="win-medal" style="font-size: 3rem; margin: 10px 0;">🥇</p>
+            <p>Lines used: <span id="win-lines"></span></p>
+            <p>Time: <span id="win-time"></span>s</p>
+            <br>
+            <button id="btn-restart-level">↺ Restart</button>
+            <button id="btn-next-level">Next Level</button>
+            <button id="btn-close-win">Close</button>
+        </div>
+    </div>
+
+    <div id="help-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; display: flex; justify-content: center; align-items: center; font-family: sans-serif;">
+        <div style="background: #282a36; padding: 30px; border-radius: 10px; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; position: relative; color: #f8f8f2; border: 2px solid #44475a;">
+            
+            <button onclick="document.getElementById('help-modal').classList.add('hidden')" style="position: absolute; top: 15px; right: 15px; background: #ff5555; color: white; border: none; padding: 5px 12px; cursor: pointer; border-radius: 5px; font-weight: bold; font-size: 16px;">X</button>
+            
+            <h2 style="margin-top: 0; color: #50fa7b; border-bottom: 1px solid #44475a; padding-bottom: 10px;">Python Lightbot Dictionary</h2>
+
+            <h3 style="color: #8be9fd; margin-bottom: 5px;">🤖 Robot Commands</h3>
+            <p style="font-size: 14px; color: #bfbfbf; margin-top: 0;">These are the specific functions you can use to control Wall-E.</p>
+            <ul style="line-height: 1.8; background: #1e1f29; padding: 15px 20px 15px 40px; border-radius: 5px; font-family: monospace; font-size: 15px;">
+                <li><span style="color: #ffb86c">walk_forward()</span> - Moves forward 1 space.</li>
+                <li><span style="color: #ffb86c">turn_left()</span>    - Turns 90 degrees to the left.</li>
+                <li><span style="color: #ffb86c">turn_right()</span>   - Turns 90 degrees to the right.</li>
+                <li><span style="color: #ffb86c">jump()</span>         - Jumps up or down a ledge while moving forward.</li>
+                <li><span style="color: #ffb86c">light()</span>        - Lights up a blue tile (or turns it off). Light them all to win!</li>
+            </ul>
+
+            <h3 style="color: #bd93f9; margin-bottom: 5px; margin-top: 25px;">🔁 For Loops</h3>
+            <p style="font-size: 14px; margin-top: 0; color: #bfbfbf;">Use a <code>for</code> loop when you know exactly how many times to repeat an action. The <code>i</code> acts as the iterator (a built-in counter).</p>
+            <pre style="background: #1e1f29; padding: 15px; border-radius: 5px; color: #f8f8f2; border-left: 4px solid #bd93f9; margin-top: 10px;"><code><span style="color: #ff79c6">for</span> i <span style="color: #ff79c6">in</span> <span style="color: #8be9fd">range</span>(4):
+    walk_forward()
+    light()</code></pre>
+
+            <h3 style="color: #ff79c6; margin-bottom: 5px; margin-top: 25px;">🔄 While Loops</h3>
+            <p style="font-size: 14px; margin-top: 0; color: #bfbfbf;">Use a <code>while</code> loop to keep repeating as long as a condition is true. You must manually increase your iterator (<code>i</code>) so the loop eventually finishes, otherwise your game will freeze in an infinite loop!</p>
+            <pre style="background: #1e1f29; padding: 15px; border-radius: 5px; color: #f8f8f2; border-left: 4px solid #ff79c6; margin-top: 10px;"><code>i = 0
+<span style="color: #ff79c6">while</span> i < 3:
+    jump()
+    i += 1</code></pre>
+
+        </div>
+    </div>
+
+<script>
+// --- Game Data & Levels ---
+const rawLevels = [
+`Gold: 3
+Silver: 4
+Bronze: 5
+Dir: 1
+
+Height map:
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+
+Item map:
+000000000
+000000000
+0000P0000
+000000000
+0000L0000
+000000000
+000000000
+000000000`,
+`Gold: 5
+Silver: 7
+Bronze: 11
+Dir: 1
+
+Height map:
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+
+Item map:
+000000000
+000000000
+00P000L00
+000000000
+000000000
+000000000
+00L000L00
+000000000`,
+`Gold: 6
+Silver: 8
+Bronze: 11
+Dir: 1
+
+Height map:
+411111114
+311111113
+211111112
+211111112
+211141112
+211111112
+311111113
+411111114
+
+Item map:
+000000000
+0000P0000
+000000000
+000000000
+000000000
+000000000
+0000L0000
+000000000`,
+`Gold: 4
+Silver: 5
+Bronze: 6
+Dir: 1
+
+Height map:
+111111111
+111111111
+222222222
+111111111
+111111111
+111111111
+111111111
+111111111
+
+Item map:
+0000P0000
+000000000
+000000000
+000000000
+0000L0000
+000000000
+000000000
+000000000`,
+`Gold: 7
+Silver: 8
+Bronze: 11
+Dir: 0
+
+Height map:
+1111111
+1112331
+1111131
+1111131
+1111131
+1111131
+1111131
+
+Item map:
+0000000
+0P00000
+0000000
+0000000
+0000000
+0000000
+00000L0`,
+`Gold: 7
+Silver: 10
+Bronze: 13
+Dir: 1
+
+Height map:
+11111111
+11111111
+11111111
+11111161
+11211151
+11311141
+11333331
+11111111
+
+Item map:
+00000000
+00000000
+00000000
+00P000L0
+00000000
+00000000
+00000000
+00000000`,
+`Gold: 10
+Silver: 17
+Bronze: 22
+Dir: 0
+
+Height map:
+111111111
+111111111
+111231111
+111141111
+111151111
+133333331
+111111111
+111111111
+
+Item map:
+000000000
+000000000
+0P0000000
+000000000
+0000L0000
+0L00000L0
+000000000
+000000000`,
+`Gold: 16
+Silver: 25
+Bronze: 26
+Dir: 0
+
+Height map:
+1113111
+1113111
+1113111
+1115511
+1123411
+1114511
+1113311
+1111311
+
+Item map:
+000L000
+0000000
+0000000
+0000000
+0P00000
+0000000
+0000000
+0000L00`,
+`Gold: 3
+Silver: 14
+Bronze: 15
+Dir: 1
+
+Height map:
+332111233
+311111113
+211111112
+211111112
+211111112
+211111112
+211111112
+211111112
+
+Item map:
+0000P0000
+0000L0000
+0000L0000
+0000L0000
+0000L0000
+0000L0000
+0000L0000
+0000L0000`,
+`Gold: 3
+Silver: 7
+Bronze: 13
+Dir: 1
+
+Height map:
+332111233
+311121113
+211131112
+211141112
+211111112
+211121112
+211131112
+211141112
+
+Item map:
+0000P0000
+0000L0000
+0000L0000
+0000L0000
+000000000
+0000L0000
+0000L0000
+0000L0000`,
+`Gold: 7
+Silver: 9
+Bronze: 11
+Dir: 1
+
+Height map:
+21111112
+11111111
+21111112
+11111111
+21111112
+11111111
+21111112
+11111111
+
+Item map:
+0000P000
+000LL000
+000LL000
+000LL000
+000LL000
+000LL000
+000LL000
+000LL000`,
+`Gold: 13
+Silver: 33
+Bronze: 104
+Dir: 1
+
+Height map:
+11212123
+11212123
+11212123
+11212123
+11212123
+11212123
+11212123
+11212123
+
+Item map:
+0PLLLLL0
+0LLLLLL0
+0LLLLLL0
+0LLLLLL0
+0LLLLLL0
+0LLLLLL0
+0LLLLLL0
+0LLLLLL0`,
+`Gold: 11
+Silver: 29
+Bronze: 29
+Dir: 1
+
+Height map:
+11111111
+11211211
+12322321
+11211211
+11211211
+12322321
+11211211
+11111111
+
+Item map:
+00000000
+0P000000
+00LLLL00
+00L00L00
+00L00L00
+00LLLL00
+00000000
+00000000`,
+`Gold: 7
+Silver: 24
+Bronze: 28
+Dir: 0
+
+Height map:
+1111111
+1122221
+1112121
+1222221
+1212121
+1222221
+1111111
+
+Item map:
+0000000
+0P0L0L0
+0000000
+0L0L0L0
+0000000
+0L0L0L0
+0000000`,
+`Gold: 13
+Silver: 16
+Bronze: 26
+Dir: 0
+
+Height map:
+111111111
+111543211
+111411311
+111311411
+111234511
+111311411
+111411311
+111543211
+111111111
+
+Item map:
+000000000
+000LLLL00
+000L00L00
+000L00L00
+0P0LLLL00
+000L00L00
+000L00L00
+000LLLL00
+000000000`,
+`Gold: 10
+Silver: 32
+Bronze: 43
+Dir: 0
+
+Height map:
+1111111
+1222221
+1233321
+1234321
+1233321
+1222221
+1111111
+
+Item map:
+0000000
+0L000L0
+00L0L00
+0P0L000
+00L0L00
+0L000L0
+0000000`
+];
+
+// --- Global Variables ---
+let currentLevelIndex = 0;
+let levelData = {};
+let editor;
+let isPlaying = false;
+let commandQueue = [];
+let savedData = JSON.parse(localStorage.getItem('lightbotSave')) || { levels: {} };
+let timerInterval;
+let timeElapsed = 0;
+let isLevelActive = false;
+
+// --- Embed API State ---
+let isCustomLevel = false;       // True when a level was injected via postMessage
+let isExampleMode = false;       // True when running in read-only demo loop mode
+let customLevelString = null;    // Stored so Restart can reload the same string
+
+// Three.js Variables
+let scene, camera, renderer, controls;
+let gridGroup, playerMesh;
+let gridTiles = [];
+let lightsRemaining = 0;
+let clock = new THREE.Clock();
+
+const tileVisuals = {
+    normalMat: new THREE.MeshStandardMaterial({ color: 0x888888 }),
+    edgeGrey: new THREE.LineBasicMaterial({ color: 0x555555 }),
+    lightOff: 0x0055ff,
+    lightOn: 0xffff99,
+    lightEdgeOff: 0x0000aa,
+    lightEdgeOn: 0xccaa00,
+    lightEmissive: 0xffee66
+};
+
+function createLightTileMaterial() {
+    return new THREE.MeshStandardMaterial({
+        color: tileVisuals.lightOff,
+        emissive: 0x000000,
+        emissiveIntensity: 0
+    });
+}
+
+function createLightEdgeMaterial() {
+    return new THREE.LineBasicMaterial({ color: tileVisuals.lightEdgeOff });
+}
+
+// Player State
+let playerState = {
+    x: 0, z: 0, h: 0,
+    dir: 2,
+    animating: false,
+    animProgress: 0,
+    currentAction: null,
+    startX: 0, startZ: 0, startH: 0, startDir: 0,
+    targetX: 0, targetZ: 0, targetH: 0, targetDir: 0
+};
+
+// --- Embed API: postMessage bridge ---
+
+function postToParent(payload) {
+    if (window.parent !== window) {
+        window.parent.postMessage(payload, '*');
+    }
+}
+
+function initEmbedListener() {
+    window.addEventListener('message', (e) => {
+        const { type, data } = e.data || {};
+        switch (type) {
+            case 'LOAD_LEVEL':
+                loadLevel(parseInt(data.id, 10));
+                break;
+            case 'LOAD_CUSTOM_LEVEL':
+                loadCustomLevel(data.levelString);
+                break;
+            case 'LOAD_EXAMPLE':
+                loadExampleMode(data.levelString, data.code);
+                break;
+            case 'RESET':
+                resetLevel();
+                break;
+            case 'SET_CODE':
+                editor.setValue(data.code || '');
+                updateLineCount();
+                break;
+            case 'RUN_CODE':
+                runInjectedCode(data.code || '');
+                break;
+            case 'TURBOBOT_MODE':
+                applyTurboBotLayout(data || {});
+                break;
+            case 'SHOW_MENU':
+                showMenu();
+                break;
+            case 'GET_STATE':
+                postToParent({
+                    type: 'STATE_RESPONSE',
+                    level: currentLevelIndex,
+                    isCustomLevel,
+                    isPlaying,
+                    lightsRemaining,
+                    timeElapsed
+                });
+                break;
+        }
+    });
+}
+
+function applyTurboBotLayout(options = {}) {
+    document.body.classList.add('turbobot-embed');
+    if (!document.getElementById('turbobot-layout-style')) {
+        const style = document.createElement('style');
+        style.id = 'turbobot-layout-style';
+        style.textContent = `
+            body.turbobot-embed #left-pane { display: none !important; }
+            body.turbobot-embed #right-pane { width: 100% !important; max-width: none !important; flex: 1 1 auto !important; }
+            body.turbobot-embed #main-area { height: 100vh !important; }
+            body.turbobot-embed #canvas-container { width: 100% !important; height: 100% !important; }
+            body.turbobot-embed #turbobot-levels-button {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 80;
+                background: rgba(31, 41, 55, 0.92);
+                border: 1px solid rgba(255,255,255,0.35);
+                box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+            }
+            body.turbobot-embed #turbobot-medal-requirements {
+                position: fixed;
+                top: 10px;
+                left: 10px;
+                z-index: 80;
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 10px;
+                max-width: calc(100vw - 120px);
+                background: rgba(31, 41, 55, 0.92);
+                border: 1px solid rgba(255,255,255,0.35);
+                box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+                border-radius: 4px;
+                padding: 8px 12px;
+                color: #f8f8f2;
+                font-size: 14px;
+                font-weight: 700;
+                pointer-events: none;
+            }
+            body.turbobot-embed #turbobot-medal-requirements .medal-label {
+                color: #cbd5e1;
+                font-weight: 600;
+            }
+            body.turbobot-embed #turbobot-medal-requirements .gold { color: #facc15; }
+            body.turbobot-embed #turbobot-medal-requirements .silver { color: #e5e7eb; }
+            body.turbobot-embed #turbobot-medal-requirements .bronze { color: #fdba74; }
+        `;
+        document.head.appendChild(style);
+    }
+    const params = new URLSearchParams(window.location.search);
+    const shouldShowLevelsButton = options.showLevelsButton !== false && params.get('hideMenu') !== 'true';
+    const existingButton = document.getElementById('turbobot-levels-button');
+    if (!shouldShowLevelsButton && existingButton) {
+        existingButton.remove();
+    }
+    if (shouldShowLevelsButton && !existingButton) {
+        const button = document.createElement('button');
+        button.id = 'turbobot-levels-button';
+        button.type = 'button';
+        button.textContent = 'Levels';
+        button.addEventListener('click', showMenu);
+        document.body.appendChild(button);
+    }
+    ensureTurboBotMedalBadge();
+    updateMedalDisplay();
+    setSpeedMultiplier(3);
+    setTimeout(resizeCanvas, 0);
+    setTimeout(resizeCanvas, 250);
+}
+
+function ensureTurboBotMedalBadge() {
+    if (document.getElementById('turbobot-medal-requirements')) return;
+    const badge = document.createElement('div');
+    badge.id = 'turbobot-medal-requirements';
+    badge.hidden = true;
+    badge.innerHTML = `
+        <span class="medal-label">Medals</span>
+        <span class="gold">Gold: <span data-medal="gold">-</span></span>
+        <span class="silver">Silver: <span data-medal="silver">-</span></span>
+        <span class="bronze">Bronze: <span data-medal="bronze">-</span></span>
+    `;
+    document.body.appendChild(badge);
+}
+
+function updateMedalDisplay() {
+    const badge = document.getElementById('turbobot-medal-requirements');
+    if (!badge) return;
+
+    const hasRequirements = isLevelActive && levelData && Number.isFinite(levelData.gold) && Number.isFinite(levelData.silver) && Number.isFinite(levelData.bronze);
+    badge.hidden = !hasRequirements;
+    if (!hasRequirements) return;
+
+    badge.querySelector('[data-medal="gold"]').textContent = `${levelData.gold} blocks`;
+    badge.querySelector('[data-medal="silver"]').textContent = `${levelData.silver} blocks`;
+    badge.querySelector('[data-medal="bronze"]').textContent = `${levelData.bronze} blocks`;
+}
+
+function setSpeedMultiplier(value) {
+    const slider = document.getElementById('speed-slider');
+    const display = document.getElementById('speed-display');
+    if (!slider || !display) return;
+    slider.value = String(value);
+    display.innerText = parseFloat(slider.value).toFixed(1) + 'x';
+}
+
+function restoreEditableRunUi() {
+    isExampleMode = false;
+    document.getElementById('editor-container').style.display = '';
+    document.getElementById('example-code-display').style.display = 'none';
+    document.getElementById('example-mode-badge').style.display = 'none';
+    document.getElementById('btn-play').style.display = '';
+    document.getElementById('btn-stop').style.display = '';
+}
+
+function runInjectedCode(code) {
+    if (!isLevelActive || !levelData || !Array.isArray(levelData.height)) {
+        showMenu();
+        postToParent({ type: 'LEVEL_REQUIRED' });
+        return;
+    }
+    restoreEditableRunUi();
+    editor.setValue(code || '');
+    updateLineCount();
+    document.getElementById("win-modal").classList.add("hidden");
+    playCode();
+}
+
+// --- Initialization ---
+function init() {
+    // Setup CodeMirror
+    editor = CodeMirror(document.getElementById("editor-container"), {
+        mode: "python",
+        theme: "dracula",
+        lineNumbers: true,
+        indentUnit: 4,
+        extraKeys: { 
+            "Tab": "indentMore", 
+            "Shift-Tab": "indentLess",
+            "Backspace": function(cm) {
+                if (cm.somethingSelected()) {
+                    cm.execCommand("delCharBefore");
+                    return;
+                }
+                const pos = cm.getCursor();
+                const line = cm.getLine(pos.line);
+                const indentUnit = cm.getOption("indentUnit");
+                if (pos.ch > 0 && line.slice(0, pos.ch).trim() === "") {
+                    const spacesToDelete = pos.ch % indentUnit || indentUnit;
+                    cm.replaceRange("", {line: pos.line, ch: pos.ch - spacesToDelete}, pos);
+                } else {
+                    cm.execCommand("delCharBefore");
+                }
+            }
+        }
+    });
+
+    editor.on("change", updateLineCount);
+
+    // Setup UI Listeners
+    document.getElementById("btn-play").addEventListener("click", playCode);
+    document.getElementById("btn-stop").addEventListener("click", resetLevel);
+    document.getElementById("btn-home").addEventListener("click", showMenu);
+    document.getElementById("btn-restart-level").addEventListener("click", () => {
+        document.getElementById("win-modal").classList.add("hidden");
+        resetLevel();
+    });
+    document.getElementById("btn-close-win").addEventListener("click", () => {
+        document.getElementById("win-modal").classList.add("hidden");
+    });
+    document.getElementById("btn-next-level").addEventListener("click", () => {
+        document.getElementById("win-modal").classList.add("hidden");
+        loadLevel(currentLevelIndex + 1);
+    });
+    document.getElementById("speed-slider").addEventListener("input", (e) => {
+        document.getElementById("speed-display").innerText = parseFloat(e.target.value).toFixed(1) + "x";
+    });
+
+    // Resize handler for Three.js
+    new ResizeObserver(resizeCanvas).observe(document.getElementById('right-pane'));
+
+    initThreeJS();
+    initEmbedListener();
+
+    // --- URL param handling ---
+    const params = new URLSearchParams(window.location.search);
+    const embedLevel = params.get('level');
+    const hideMenu   = params.get('hideMenu') === 'true';
+    const hideNav    = params.get('hideNav')  === 'true';
+    const turboBotMode = params.get('turbobot') === 'true';
+
+    if (hideNav)  document.getElementById('top-bar').style.display = 'none';
+    if (hideMenu) document.getElementById('btn-home').style.display = 'none';
+    if (turboBotMode) applyTurboBotLayout();
+
+    if (embedLevel !== null) {
+        loadLevel(parseInt(embedLevel, 10));
+    } else if (hideMenu) {
+        // Embedded with hideMenu=true but no level — wait silently for LOAD_CUSTOM_LEVEL
+        // Don't show the menu; the parent will inject a level via postMessage
+        document.getElementById('menu-modal').classList.add('hidden');
+    } else {
+        buildMenu();
+    }
+}
+
+// --- Level Parsing ---
+function parseLevelString(str) {
+    const lines = str.split('\n').map(l => l.trim());
+    let data = { gold: 0, silver: 0, bronze: 0, startDir: 1, height: [], items: [], startX: 0, startZ: 0, startH: 0 };
+    
+    let mode = 'meta';
+    for (let line of lines) {
+        if (line === '') continue;
+        if (line.startsWith('Height map:')) { mode = 'height'; continue; }
+        if (line.startsWith('Item map:')) { mode = 'items'; continue; }
+
+        if (mode === 'meta') {
+            if (line.startsWith('Gold:')) data.gold = parseInt(line.split(':')[1]);
+            if (line.startsWith('Silver:')) data.silver = parseInt(line.split(':')[1]);
+            if (line.startsWith('Bronze:')) data.bronze = parseInt(line.split(':')[1]);
+            if (line.startsWith('Dir:')) data.startDir = parseInt(line.split(':')[1]);
+        } else if (mode === 'height') {
+            data.height.push(line.split('').map(Number));
+        } else if (mode === 'items') {
+            let row = line.split('');
+            data.items.push(row);
+            let pIndex = row.indexOf('P');
+            if (pIndex !== -1) {
+                data.startX = pIndex;
+                data.startZ = data.items.length - 1;
+            }
+        }
+    }
+    
+    if (data.height[data.startZ] !== undefined && data.height[data.startZ][data.startX] !== undefined) {
+        data.startH = data.height[data.startZ][data.startX];
+    }
+    
+    return data;
+}
+
+// --- Menu & Storage ---
+function buildMenu() {
+    const container = document.getElementById('level-container');
+    container.innerHTML = '';
+    rawLevels.forEach((level, index) => {
+        const saved = savedData.levels[index] || {};
+        const div = document.createElement('div');
+        div.className = 'level-card';
+        div.innerHTML = `
+            <h3>Level ${index}</h3> 
+            <p>${saved.medal || '❌'}</p>
+            <p style="font-size:12px">Lines: ${saved.lines || '-'}</p>
+        `;
+        div.onclick = () => { loadLevel(index); document.getElementById('menu-modal').classList.add('hidden'); };
+        container.appendChild(div);
+    });
+}
+
+function showMenu() {
+    if (isLevelActive && levelData && Array.isArray(levelData.height)) {
+        resetLevel();
+    }
+    saveCurrentCode();
+    isLevelActive = false;
+    document.getElementById('menu-modal').classList.remove('hidden');
+    buildMenu();
+    postToParent({ type: 'MENU_OPENED' });
+}
+
+function clearSaveData() {
+    if(confirm("Are you sure? This will delete all progress and code.")) {
+        localStorage.removeItem('lightbotSave');
+        savedData = { levels: {} };
+        buildMenu();
+    }
+}
+
+function saveCurrentCode() {
+    if (!isLevelActive || isCustomLevel) return;
+    if (!savedData.levels[currentLevelIndex]) savedData.levels[currentLevelIndex] = {};
+    savedData.levels[currentLevelIndex].code = editor.getValue();
+    localStorage.setItem('lightbotSave', JSON.stringify(savedData));
+}
+
+// --- Level Logic ---
+function loadLevel(index) {
+    if (index >= rawLevels.length) {
+        alert("You finished all available levels!");
+        showMenu();
+        return;
+    }
+    
+    saveCurrentCode();
+    
+    // Clear any custom level state
+    isCustomLevel = false;
+    customLevelString = null;
+
+    currentLevelIndex = index;
+    isLevelActive = true;
+    
+    levelData = parseLevelString(rawLevels[index]);
+    
+    document.getElementById("level-title").innerText = `Level ${index}`;
+    document.getElementById("gold-req").innerText = levelData.gold;
+    document.getElementById("silver-req").innerText = levelData.silver;
+    document.getElementById("bronze-req").innerText = levelData.bronze;
+    updateMedalDisplay();
+
+    // Show native-level win buttons, hide restart-only mode
+    document.getElementById("btn-next-level").style.display = '';
+    document.getElementById("btn-close-win").style.display  = '';
+
+    const saved = savedData.levels[index] || {};
+    editor.setValue(saved.code || "");
+    updateLineCount();
+
+    build3DLevel();
+    resetLevel();
+
+    postToParent({ type: 'LEVEL_LOADED', level: index });
+}
+
+function loadCustomLevel(levelString) {
+    saveCurrentCode();
+
+    isCustomLevel = true;
+    customLevelString = levelString;
+    currentLevelIndex = 'custom';
+    isLevelActive = true;
+
+    // Always hide the menu when a custom level is injected
+    document.getElementById('menu-modal').classList.add('hidden');
+
+    levelData = parseLevelString(levelString);
+
+    document.getElementById("level-title").innerText = 'Custom Level';
+    document.getElementById("gold-req").innerText  = levelData.gold;
+    document.getElementById("silver-req").innerText = levelData.silver;
+    document.getElementById("bronze-req").innerText = levelData.bronze;
+    updateMedalDisplay();
+
+    // Custom levels: only show Restart, hide Next Level and Close
+    document.getElementById("btn-next-level").style.display = 'none';
+    document.getElementById("btn-close-win").style.display  = 'none';
+
+    editor.setValue('');
+    updateLineCount();
+    build3DLevel();
+    resetLevel();
+
+    postToParent({ type: 'LEVEL_LOADED', level: 'custom' });
+}
+
+// --- Example mode: read-only demo that loops automatically ---
+function loadExampleMode(levelString, code) {
+    isExampleMode = true;
+    isCustomLevel = true;
+    currentLevelIndex = 'custom';
+    isLevelActive = true;
+
+    document.getElementById('menu-modal').classList.add('hidden');
+
+    // Hide the editable editor, show the read-only display panel
+    document.getElementById('editor-container').style.display = 'none';
+    document.getElementById('example-code-display').style.display = 'block';
+    document.getElementById('example-mode-badge').style.display = 'inline-block';
+
+    // Hide play/stop controls — example runs itself
+    document.getElementById('btn-play').style.display = 'none';
+    document.getElementById('btn-stop').style.display = 'none';
+
+    // Render code with simple syntax highlighting (no copy-paste possible)
+    document.getElementById('example-code-display').innerHTML = highlightPython(code);
+
+    // Store code for the auto-loop
+    window._exampleCode = code;
+
+    levelData = parseLevelString(levelString);
+    document.getElementById("level-title").innerText = 'Example';
+    document.getElementById("gold-req").innerText  = levelData.gold;
+    document.getElementById("silver-req").innerText = levelData.silver;
+    document.getElementById("bronze-req").innerText = levelData.bronze;
+    updateMedalDisplay();
+    document.getElementById("btn-next-level").style.display = 'none';
+    document.getElementById("btn-close-win").style.display  = 'none';
+
+    build3DLevel();
+    resetLevel();
+
+    // Auto-play after a short pause so the level has time to render
+    setTimeout(() => examplePlay(), 800);
+
+    postToParent({ type: 'LEVEL_LOADED', level: 'example' });
+}
+
+function examplePlay() {
+    if (!isExampleMode) return;
+    resetLevel();
+
+    const prog = window._exampleCode || '';
+    Sk.configure({ output: outf, read: builtinRead });
+    Sk.builtins.walk_forward = new Sk.builtin.func(() => { commandQueue.push('walk_forward'); });
+    Sk.builtins.turn_right   = new Sk.builtin.func(() => { commandQueue.push('turn_right'); });
+    Sk.builtins.turn_left    = new Sk.builtin.func(() => { commandQueue.push('turn_left'); });
+    Sk.builtins.jump         = new Sk.builtin.func(() => { commandQueue.push('jump'); });
+    Sk.builtins.light        = new Sk.builtin.func(() => { commandQueue.push('light'); });
+
+    Sk.misceval.asyncToPromise(() => Sk.importMainWithBody('<stdin>', false, prog, true))
+        .then(() => { isPlaying = true; })
+        .catch(() => {});
+}
+
+function highlightPython(code) {
+    // Escape HTML first
+    let escaped = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Apply syntax highlighting spans (order matters — most specific first)
+    escaped = escaped
+        // Comments
+        .replace(/(#[^\n]*)/g, '<span class="cmt">$1</span>')
+        // Keywords (only outside comments — simplified, good enough for lesson code)
+        .replace(/\b(for|in|range|while|if|elif|else|def|return|and|or|not|True|False)\b/g,
+                 '<span class="kw">$1</span>')
+        // Built-in functions
+        .replace(/\b(walk_forward|turn_right|turn_left|jump|light|print|len|int|str|float)\b/g,
+                 '<span class="fn">$1</span>')
+        // Numbers
+        .replace(/\b(\d+)\b/g, '<span class="num">$1</span>')
+        // Newlines to <br> while preserving indentation
+        .replace(/\n/g, '\n');
+
+    return escaped;
+}
+
+function updateLineCount() {
+    const code = editor.getValue();
+    const lines = code.split('\n').filter(l => l.trim() !== '' && !l.trim().startsWith('#')).length;
+    document.getElementById("line-count").innerText = lines;
+    return lines;
+}
+
+// --- Three.js Setup & Building ---
+function initThreeJS() {
+    const container = document.getElementById("canvas-container");
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+
+    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    gridGroup = new THREE.Group();
+    scene.add(gridGroup);
+
+    // --- Wall-E Robot Mesh Construction ---
+    playerMesh = new THREE.Group();
+    
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xdca822 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#222'; ctx.fillRect(0,0,64,128);
+    ctx.fillStyle = '#555';
+    for(let i=0; i<128; i+=16) ctx.fillRect(0, i, 64, 8);
+    
+    const trackTex = new THREE.CanvasTexture(canvas);
+    trackTex.wrapS = THREE.RepeatWrapping;
+    trackTex.wrapT = THREE.RepeatWrapping;
+    const trackMat = new THREE.MeshStandardMaterial({ map: trackTex });
+
+    const trackGeo = new THREE.BoxGeometry(0.15, 0.2, 0.5);
+    const trackL = new THREE.Mesh(trackGeo, trackMat);
+    trackL.position.set(-0.25, 0.1, 0);
+    const trackR = new THREE.Mesh(trackGeo, trackMat);
+    trackR.position.set(0.25, 0.1, 0);
+    playerMesh.add(trackL, trackR);
+
+    const bodyGeo = new THREE.BoxGeometry(0.4, 0.35, 0.4);
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(0, 0.35, 0);
+    playerMesh.add(body);
+
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.6, 0);
+    const headGeo = new THREE.BoxGeometry(0.3, 0.15, 0.2);
+    const head = new THREE.Mesh(headGeo, darkMat);
+    
+    const eyeGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.05, 8);
+    eyeGeo.rotateX(Math.PI/2);
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(-0.08, 0, 0.1);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeR.position.set(0.08, 0, 0.1);
+    headGroup.add(head, eyeL, eyeR);
+    playerMesh.add(headGroup);
+
+    const createArm = (isLeft) => {
+        const armGroup = new THREE.Group();
+        armGroup.position.set(isLeft ? -0.22 : 0.22, 0.45, 0);
+        
+        const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.25, 0.06), bodyMat);
+        upperArm.position.set(0, -0.125, 0);
+        armGroup.add(upperArm);
+        
+        const elbowGroup = new THREE.Group();
+        elbowGroup.position.set(0, -0.25, 0);
+        
+        const lowerArm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.05), darkMat);
+        lowerArm.position.set(0, -0.1, 0);
+        elbowGroup.add(lowerArm);
+        
+        const grabberGeo = new THREE.BoxGeometry(0.08, 0.05, 0.1);
+        const grabber = new THREE.Mesh(grabberGeo, darkMat);
+        grabber.position.set(0, -0.2, 0.02);
+        elbowGroup.add(grabber);
+        
+        armGroup.add(elbowGroup);
+        return { arm: armGroup, elbow: elbowGroup };
+    };
+
+    const leftArm = createArm(true);
+    const rightArm = createArm(false);
+    playerMesh.add(leftArm.arm, rightArm.arm);
+
+    playerMesh.userData = {
+        trackMat: trackMat,
+        shoulders: [leftArm.arm, rightArm.arm],
+        elbows: [leftArm.elbow, rightArm.elbow]
+    };
+
+    playerMesh.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    scene.add(playerMesh);
+
+    requestAnimationFrame(animate);
+}
+
+function build3DLevel() {
+    while(gridGroup.children.length > 0){ gridGroup.remove(gridGroup.children[0]); }
+    gridTiles = [];
+    lightsRemaining = 0;
+
+    const heightScale = 0.5;
+    const boxGeo = new THREE.BoxGeometry(1, heightScale, 1);
+    const edgesGeo = new THREE.EdgesGeometry(boxGeo);
+    
+    const h = levelData.height;
+    const items = levelData.items;
+    const rows = h.length;
+    const cols = h[0].length;
+
+    const offsetX = -cols / 2 + 0.5;
+    const offsetZ = -rows / 2 + 0.5;
+
+    for (let z = 0; z < rows; z++) {
+        gridTiles[z] = [];
+        for (let x = 0; x < cols; x++) {
+            const tile = gridTiles[z][x] = {
+                height: h[z][x],
+                item: items[z][x],
+                isLit: false,
+                meshes: [],
+                topMesh: null,
+                topEdges: null,
+                topMaterial: null,
+                edgeMaterial: null
+            };
+            
+            let height = h[z][x];
+
+            for (let y = 0; y <= height; y++) {
+                let isTop = (y === height);
+                let mat = tileVisuals.normalMat;
+                let edgeMat = tileVisuals.edgeGrey;
+                
+                if (isTop && items[z][x] === 'L') {
+                    mat = createLightTileMaterial();
+                    edgeMat = createLightEdgeMaterial();
+                    lightsRemaining++;
+                }
+
+                let mesh = new THREE.Mesh(boxGeo, mat);
+                mesh.position.set(x + offsetX, (y * heightScale) - (heightScale / 2), z + offsetZ);
+                mesh.scale.set(0.95, 1, 0.95);
+                mesh.receiveShadow = true;
+                mesh.castShadow = true;
+
+                let edges = new THREE.LineSegments(edgesGeo, edgeMat);
+                mesh.add(edges);
+
+                if (isTop && items[z][x] === 'L') {
+                    tile.topMesh = mesh;
+                    tile.topEdges = edges;
+                    tile.topMaterial = mat;
+                    tile.edgeMaterial = edgeMat;
+                }
+
+                gridGroup.add(mesh);
+                tile.meshes.push(mesh);
+            }
+        }
+    }
+
+    camera.position.set(0, 10, 15);
+    camera.lookAt(0, 0, 0);
+    controls.target.set(0, 0, 0);
+    controls.update();
+}
+
+function resizeCanvas() {
+    const container = document.getElementById("canvas-container");
+    if(camera && renderer) {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+}
+
+function setTileLit(tile, isLit) {
+    if (!tile || tile.item !== 'L') return;
+    tile.isLit = isLit;
+
+    const topMesh = tile.topMesh || tile.meshes[tile.meshes.length - 1];
+    const topMaterial = tile.topMaterial || (topMesh && topMesh.material);
+    const edgeMaterial = tile.edgeMaterial || (tile.topEdges && tile.topEdges.material);
+
+    if (topMaterial) {
+        topMaterial.color.setHex(isLit ? tileVisuals.lightOn : tileVisuals.lightOff);
+        if (topMaterial.emissive) {
+            topMaterial.emissive.setHex(isLit ? tileVisuals.lightEmissive : 0x000000);
+            topMaterial.emissiveIntensity = isLit ? 0.45 : 0;
+        }
+    }
+
+    if (edgeMaterial && edgeMaterial.color) {
+        edgeMaterial.color.setHex(isLit ? tileVisuals.lightEdgeOn : tileVisuals.lightEdgeOff);
+    }
+}
+
+// --- Game Logic & Python Bridge ---
+
+function resetLevel() {
+    isPlaying = false;
+    commandQueue = [];
+    clearInterval(timerInterval);
+    timeElapsed = 0;
+    document.getElementById("time-elapsed").innerText = "0.0";
+    
+    playerState.x = levelData.startX;
+    playerState.z = levelData.startZ;
+    playerState.h = levelData.startH;
+    playerState.dir = levelData.startDir; 
+    playerState.animating = false;
+    playerState.currentAction = null;
+    
+    updatePlayerTransform(true);
+
+    lightsRemaining = 0;
+    for (let z = 0; z < levelData.height.length; z++) {
+        for (let x = 0; x < levelData.height[0].length; x++) {
+            let tile = gridTiles[z][x];
+            if (tile.item === 'L' && tile.meshes.length > 0) {
+                setTileLit(tile, false);
+                lightsRemaining++;
+            }
+        }
+    }
+}
+
+function updatePlayerTransform(instant = false) {
+    const heightScale = 0.5;
+    const cols = levelData.height[0].length;
+    const rows = levelData.height.length;
+    const offsetX = -cols / 2 + 0.5;
+    const offsetZ = -rows / 2 + 0.5;
+
+    let targetWorldX = playerState.x + offsetX;
+    let targetWorldZ = playerState.z + offsetZ;
+    let targetWorldY = playerState.h * heightScale;
+    
+    let targetRotY = 0;
+    if (playerState.dir === 0) targetRotY = Math.PI / 2;
+    else if (playerState.dir === 1) targetRotY = 0;
+    else if (playerState.dir === 2) targetRotY = -Math.PI / 2;
+    else if (playerState.dir === 3) targetRotY = Math.PI;
+
+    if (instant) {
+        playerMesh.position.set(targetWorldX, targetWorldY, targetWorldZ);
+        playerMesh.rotation.y = targetRotY;
+    }
+}
+
+// Skulpt setup
+function outf(text) { console.log(text); }
+function builtinRead(x) {
+    if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
+            throw "File not found: '" + x + "'";
+    return Sk.builtinFiles["files"][x];
+}
+
+function playCode() {
+    if (isPlaying) return;
+    resetLevel();
+    saveCurrentCode();
+    
+    const prog = editor.getValue();
+    Sk.configure({ output: outf, read: builtinRead });
+    
+    Sk.builtins.walk_forward = new Sk.builtin.func(() => { commandQueue.push('walk_forward'); });
+    Sk.builtins.turn_right = new Sk.builtin.func(() => { commandQueue.push('turn_right'); });
+    Sk.builtins.turn_left = new Sk.builtin.func(() => { commandQueue.push('turn_left'); });
+    Sk.builtins.jump = new Sk.builtin.func(() => { commandQueue.push('jump'); });
+    Sk.builtins.light = new Sk.builtin.func(() => { commandQueue.push('light'); });
+
+    try {
+        Sk.misceval.asyncToPromise(() => Sk.importMainWithBody("<stdin>", false, prog, true))
+        .then(() => {
+            isPlaying = true;
+            timerInterval = setInterval(() => {
+                timeElapsed += 0.1;
+                document.getElementById("time-elapsed").innerText = timeElapsed.toFixed(1);
+            }, 100);
+        })
+        .catch(err => {
+            alert(err.toString());
+        });
+    } catch (e) {
+        alert(e.toString());
+    }
+}
+
+// --- Animation Loop ---
+function animate() {
+    requestAnimationFrame(animate);
+    let dt = clock.getDelta();
+    
+    if (isPlaying) {
+        const speedMultiplier = parseFloat(document.getElementById("speed-slider").value);
+        
+        if (!playerState.animating && commandQueue.length > 0) {
+            startAction(commandQueue.shift());
+        } else if (!playerState.animating && commandQueue.length === 0) {
+            isPlaying = false;
+            clearInterval(timerInterval);
+            if (lightsRemaining === 0 && levelData.items.flat().includes('L')) {
+                if (isExampleMode) {
+                    // In example mode: pause briefly then loop again
+                    setTimeout(() => examplePlay(), 1200);
+                } else {
+                    handleWin();
+                }
+            } else if (isExampleMode) {
+                // Ran out of commands but didn't win — still loop
+                setTimeout(() => examplePlay(), 1200);
+            }
+        }
+
+        if (playerState.animating) {
+            playerState.animProgress += dt * speedMultiplier;
+            if (playerState.animProgress >= 1.0) {
+                playerState.animProgress = 1.0;
+                playerState.animating = false;
+                applyActionFinal();
+            }
+            applyAnimationState();
+        }
+    }
+    
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+// --- Action Logic ---
+function getForwardCoords() {
+    let nx = playerState.x;
+    let nz = playerState.z;
+    if (playerState.dir === 0) nx++;
+    if (playerState.dir === 1) nz++;
+    if (playerState.dir === 2) nx--;
+    if (playerState.dir === 3) nz--;
+    return { x: nx, z: nz };
+}
+
+function isValidTile(x, z) {
+    return x >= 0 && x < levelData.height[0].length && z >= 0 && z < levelData.height.length;
+}
+
+function startAction(action) {
+    playerState.currentAction = action;
+    playerState.animating = true;
+    playerState.animProgress = 0;
+
+    playerState.startX = playerState.x;
+    playerState.startZ = playerState.z;
+    playerState.startH = playerState.h;
+    playerState.startDir = playerState.dir;
+
+    playerState.targetX = playerState.x;
+    playerState.targetZ = playerState.z;
+    playerState.targetH = playerState.h;
+    playerState.targetDir = playerState.dir;
+
+    const rows = levelData.height.length;
+    const cols = levelData.height[0].length;
+
+    let dx = 0, dz = 0;
+    if (playerState.dir === 0) dx = 1;
+    else if (playerState.dir === 1) dz = 1;
+    else if (playerState.dir === 2) dx = -1;
+    else if (playerState.dir === 3) dz = -1;
+
+    let nextX = playerState.x + dx;
+    let nextZ = playerState.z + dz;
+    
+    let isValidMove = (nextX >= 0 && nextX < cols && nextZ >= 0 && nextZ < rows);
+
+    switch (action) {
+        case 'walk_forward':
+            if (isValidMove && levelData.height[nextZ][nextX] === playerState.h) {
+                playerState.targetX = nextX;
+                playerState.targetZ = nextZ;
+            }
+            break;
+            
+        case 'jump':
+            if (isValidMove) {
+                let nextH = levelData.height[nextZ][nextX];
+                if (nextH === playerState.h + 1 || nextH < playerState.h) {
+                    playerState.targetX = nextX;
+                    playerState.targetZ = nextZ;
+                    playerState.targetH = nextH;
+                }
+            }
+            break;
+
+        case 'turn_right':
+            playerState.targetDir = (playerState.dir + 1) % 4; 
+            break;
+            
+        case 'turn_left':
+            playerState.targetDir = (playerState.dir + 3) % 4; 
+            break;
+            
+        case 'light':
+            break;
+    }
+}
+
+function applyAnimationState() {
+    const heightScale = 0.5;
+    let p = playerState.animProgress;
+    let ease = p; 
+    
+    const cols = levelData.height[0].length;
+    const rows = levelData.height.length;
+    const offsetX = -cols / 2 + 0.5;
+    const offsetZ = -rows / 2 + 0.5;
+
+    let curX = playerState.startX + (playerState.targetX - playerState.startX) * ease;
+    let curZ = playerState.startZ + (playerState.targetZ - playerState.startZ) * ease;
+    let logicalH = playerState.startH + (playerState.targetH - playerState.startH) * ease;
+    let curH = logicalH * heightScale; 
+    
+    if (playerState.currentAction === 'jump' && (playerState.targetX !== playerState.startX || playerState.targetZ !== playerState.startZ)) {
+        curH += Math.sin(p * Math.PI) * (1.0 * heightScale);
+    }
+    playerMesh.position.set(curX + offsetX, curH, curZ + offsetZ);
+
+    let startRot = getRotationForDir(playerState.startDir);
+    let targetRot = getRotationForDir(playerState.targetDir);
+    
+    if (Math.abs(targetRot - startRot) > Math.PI) {
+        if (targetRot > startRot) startRot += Math.PI * 2;
+        else targetRot += Math.PI * 2;
+    }
+    playerMesh.rotation.y = startRot + (targetRot - startRot) * ease;
+
+    const rig = playerMesh.userData;
+    
+    let shoulderX = -Math.PI / 4;
+    let elbowX = -Math.PI / 4;
+
+    const action = playerState.currentAction;
+    
+    if (action === 'walk_forward' || action === 'jump' || action === 'turn_right' || action === 'turn_left') {
+        const speedMultiplier = parseFloat(document.getElementById("speed-slider").value);
+        rig.trackMat.map.offset.y -= 0.05 * speedMultiplier; 
+    }
+
+    if (action === 'light') {
+        shoulderX -= Math.sin(p * Math.PI) * (Math.PI / 1.5);
+        elbowX += Math.sin(p * Math.PI) * (Math.PI / 4);
+    } else if (action === 'jump') {
+        shoulderX += Math.sin(p * Math.PI) * (Math.PI / 4);
+    } else if (action === 'walk_forward') {
+        shoulderX += Math.sin(p * Math.PI * 2) * 0.1;
+    }
+
+    rig.shoulders.forEach(s => s.rotation.x = shoulderX);
+    rig.elbows.forEach(e => e.rotation.x = elbowX);
+}
+
+function applyActionFinal() {
+    playerState.x = playerState.targetX;
+    playerState.z = playerState.targetZ;
+    playerState.h = playerState.targetH;
+    playerState.dir = playerState.targetDir;
+    
+    if (playerState.currentAction === 'light') {
+        let tile = gridTiles[playerState.z][playerState.x];
+        if (tile.item === 'L') {
+            const wasLit = tile.isLit;
+            setTileLit(tile, !wasLit);
+            lightsRemaining += wasLit ? 1 : -1;
+        }
+    }
+
+    if (playerMesh && playerMesh.userData.shoulders) {
+        playerMesh.userData.shoulders.forEach(s => s.rotation.x = -Math.PI / 4);
+        playerMesh.userData.elbows.forEach(e => e.rotation.x = -Math.PI / 4);
+    }
+    
+    updatePlayerTransform(true);
+}
+
+function getRotationForDir(dir) {
+    if (dir === 0) return Math.PI / 2;
+    if (dir === 1) return 0;
+    if (dir === 2) return -Math.PI / 2;
+    return Math.PI;
+}
+
+function handleWin() {
+    const linesUsed = updateLineCount();
+    let medal = '🤷‍♂️';
+    if (linesUsed <= levelData.gold) medal = '🥇';
+    else if (linesUsed <= levelData.silver) medal = '🥈';
+    else if (linesUsed <= levelData.bronze) medal = '🥉';
+    
+    document.getElementById("win-medal").innerText = medal;
+    document.getElementById("win-lines").innerText = linesUsed;
+    document.getElementById("win-time").innerText = timeElapsed.toFixed(1);
+    document.getElementById("win-modal").classList.remove("hidden");
+
+    // Save progress for native levels only
+    if (!isCustomLevel) {
+        if (!savedData.levels[currentLevelIndex]) savedData.levels[currentLevelIndex] = {};
+        savedData.levels[currentLevelIndex].lines = linesUsed;
+        savedData.levels[currentLevelIndex].medal = medal;
+        localStorage.setItem('lightbotSave', JSON.stringify(savedData));
+    }
+
+    postToParent({
+        type: 'LEVEL_COMPLETE',
+        level: currentLevelIndex,
+        medal,
+        lines: linesUsed,
+        time: timeElapsed
+    });
+}
+
+// Start
+window.onload = init;
+
+</script>
+</body>
+</html>
