@@ -186,7 +186,19 @@
   function ownedPickPowers() {
     return Object.keys(g.picks).map(Number).sort(function (a, b) { return a - b; });
   }
-  function pickCanMine(power, v) { return v === 1 || power === v || bits(power) >= bits(v) + BRUTE_BITS; }
+  function weakerElementBitsForPick(power) {
+    return Math.max(0, bits(power) - BRUTE_BITS);
+  }
+  function minPickBitsForElement(v) {
+    return bits(v) + BRUTE_BITS;
+  }
+  function minPowerForBits(bitLength) {
+    bitLength = Math.max(1, bitLength | 0);
+    return Math.pow(2, bitLength - 1);
+  }
+  function pickCanMine(power, v) {
+    return v === 1 || power === v || bits(v) <= weakerElementBitsForPick(power);
+  }
   function anyPickCanMine(v) {
     var ps = ownedPickPowers();
     for (var i = 0; i < ps.length; i++) if (pickCanMine(ps[i], v)) return true;
@@ -1047,12 +1059,11 @@
   var HELD_PICK_SWING_MS = 260;
   var HELD_PICK_TUNE_STEP = 0.08;
 
-  // Live element-symbol labels (billboarded sprites). One small texture per
-  // SYMBOL (bounded, shared across all element values) instead of baking a
-  // unique symbol texture into every element block. Only ore within LABEL_RADIUS
-  // of the player is labelled; the meshes themselves are flat-coloured.
-  var LABEL_RADIUS = 6, LABEL_R2 = LABEL_RADIUS * LABEL_RADIUS, MAX_LABELS = 220;
-  var labelGroup = null, labelPool = [], labelActive = 0, symSpriteCache = {};
+  // Face-mounted element-symbol labels. One small texture per SYMBOL (bounded,
+  // shared across all element values); label planes sit just outside exposed
+  // ore faces and use the face normal for their angle.
+  var LABEL_RADIUS = 6, LABEL_R2 = LABEL_RADIUS * LABEL_RADIUS, MAX_LABELS = 420;
+  var labelGroup = null, labelPool = [], labelActive = 0, symSpriteCache = {}, labelGeometry = null;
 
   // First-person player: ~1.8 blocks tall, ~0.75 wide, eye near the top of the
   // space it occupies. Position is the FEET (bottom-centre); the camera sits at
@@ -1180,40 +1191,57 @@
   }
   function acquireLabel(i) {
     if (labelPool[i]) return labelPool[i];
-    var sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: true, depthWrite: false }));
-    sp.scale.set(0.66, 0.66, 0.66);
-    if (labelGroup) labelGroup.add(sp);
-    labelPool[i] = sp;
-    return sp;
+    if (!labelGeometry) labelGeometry = new THREE.PlaneGeometry(0.62, 0.62);
+    var mat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      depthTest: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    var mesh = new THREE.Mesh(labelGeometry, mat);
+    mesh.renderOrder = 2;
+    if (labelGroup) labelGroup.add(mesh);
+    labelPool[i] = mesh;
+    return mesh;
+  }
+  function placeLabelOnFace(mesh, it) {
+    var def = FACE_DEFS[it.face] || FACE_DEFS[2];
+    var n = def.n;
+    var off = 0.514;
+    mesh.position.set(it.x + n[0] * off, it.y + n[1] * off, it.z + n[2] * off);
+    if (n[0] === 1) mesh.rotation.set(0, Math.PI / 2, 0);
+    else if (n[0] === -1) mesh.rotation.set(0, -Math.PI / 2, 0);
+    else if (n[1] === 1) mesh.rotation.set(-Math.PI / 2, 0, 0);
+    else if (n[1] === -1) mesh.rotation.set(Math.PI / 2, 0, 0);
+    else if (n[2] === -1) mesh.rotation.set(0, Math.PI, 0);
+    else mesh.rotation.set(0, 0, 0);
   }
   function updateOreLabels(list) {
     ensureLabelGroup();
     if (!labelGroup) return;
+    list.sort(function (a, b) { return (a.dist2 || 0) - (b.dist2 || 0); });
     labelActive = Math.min(list.length, MAX_LABELS);
     for (var i = 0; i < labelActive; i++) {
-      var it = list[i], sp = acquireLabel(i);
-      sp.material.map = symbolSpriteTexture(elementSymbol(it.value));
-      sp.material.needsUpdate = true;
-      sp.userData.cx = it.x; sp.userData.cy = it.y; sp.userData.cz = it.z;
-      sp.visible = true;
+      var it = list[i], mesh = acquireLabel(i);
+      mesh.material.map = symbolSpriteTexture(elementSymbol(it.value));
+      mesh.material.needsUpdate = true;
+      placeLabelOnFace(mesh, it);
+      mesh.visible = true;
     }
     for (var j = labelActive; j < labelPool.length; j++) labelPool[j].visible = false;
   }
-  // Nudge each label toward the camera so it floats just off the nearest face
-  // (and stays properly occluded by closer blocks via depthTest).
+  // Labels are face-mounted, so no per-frame camera-facing adjustment is needed.
   function updateOreLabelPositions() {
-    if (!labelGroup || !camera || !labelActive) return;
-    var px = camera.position.x, py = camera.position.y, pz = camera.position.z;
-    for (var i = 0; i < labelActive; i++) {
-      var sp = labelPool[i]; if (!sp || !sp.visible) continue;
-      var dx = px - sp.userData.cx, dy = py - sp.userData.cy, dz = pz - sp.userData.cz;
-      var d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1, k = 0.56 / d;
-      sp.position.set(sp.userData.cx + dx * k, sp.userData.cy + dy * k, sp.userData.cz + dz * k);
-    }
   }
   function disposeLabels() {
-    labelPool.forEach(function (sp) { if (sp.material) { try { sp.material.dispose(); } catch (e) {} } });
+    labelPool.forEach(function (mesh) { if (mesh.material) { try { mesh.material.dispose(); } catch (e) {} } });
+    if (labelGeometry) { try { labelGeometry.dispose(); } catch (e) {} }
+    if (labelGroup && labelGroup.parent) { try { labelGroup.parent.remove(labelGroup); } catch (e) {} }
     labelPool = []; labelActive = 0; labelGroup = null;
+    labelGeometry = null;
     Object.keys(symSpriteCache).forEach(function (kk) { try { symSpriteCache[kk].dispose(); } catch (e) {} });
     symSpriteCache = {};
   }
@@ -1847,6 +1875,18 @@
       if (mask & (1 << i)) list.push({ key: key, x: x, y: y, z: z, face: i });
     }
   }
+  function addFaceLabels(labelList, x, y, z, value, mask, cx, py, cz) {
+    if (typeof value !== 'number' || labelList.length >= MAX_LABELS * 2) return;
+    var dx = x - cx, dy = y - py, dz = z - cz;
+    var dist2 = dx * dx + dy * dy + dz * dz;
+    if (dist2 > LABEL_R2) return;
+    for (var i = 0; i < FACE_DEFS.length; i++) {
+      if (mask & (1 << i)) {
+        labelList.push({ x: x, y: y, z: z, value: value, face: i, dist2: dist2 });
+        if (labelList.length >= MAX_LABELS * 2) return;
+      }
+    }
+  }
   function buildFaceMesh(id, faces) {
     var positions = [], normals = [], uvs = [], indices = [], faceCells = [];
     var uv = [[0, 0], [1, 0], [1, 1], [0, 1]];
@@ -1903,10 +1943,7 @@
           if (!mask) continue;
           var cid = contentIdAt(x, y, z);
           addCellFaces(groups, renderIdForContentId(cid), key, x, y, z, mask);
-          if (typeof cid === 'number' && labelList.length < MAX_LABELS) {
-            var ly = y - py;
-            if (dx * dx + ly * ly + dz * dz <= LABEL_R2) labelList.push({ x: x, y: y, z: z, value: cid });
-          }
+          addFaceLabels(labelList, x, y, z, cid, mask, cx, py, cz);
         }
       }
     }
@@ -1917,10 +1954,7 @@
         if (!mask) return;
         addCellFaces(groups, g.placed[key], key, w.x, w.y, w.z, mask);
         var pv = g.placed[key];
-        if (typeof pv === 'number' && labelList.length < MAX_LABELS) {
-          var pdx = w.x - cx, pdy = w.y - py, pdz = w.z - cz;
-          if (pdx * pdx + pdy * pdy + pdz * pdz <= LABEL_R2) labelList.push({ x: w.x, y: w.y, z: w.z, value: pv });
-        }
+        addFaceLabels(labelList, w.x, w.y, w.z, pv, mask, cx, py, cz);
       }
     });
 
@@ -2049,10 +2083,11 @@
       var meta = GENERIC[c.gen];
       if (!canMineGeneric(c.gen)) {
         if (meta && (meta.bits || 0) > 0 && ownedPickPowers().length === 0 && !tutorialSeen('need-pickaxe') && !activeTut) { startTutorial('need-pickaxe'); return; }
-        var need = meta && meta.bits ? meta.bits : 0;
         var terrainPick = ownedPickForGeneric(c.gen);
         if (terrainPick) toast(equipPickMessage(terrainPick, meta.name), '#a35a1a');
-        else toast(meta.name + ' needs a pickaxe with bit-length ' + need + '+.', '#a35a1a');
+        else {
+          showTerrainHint(c.gen);
+        }
         return;
       }
       g.mined[key] = true;
@@ -2068,13 +2103,15 @@
     var layerType = genericTypeAt(w.x, w.y, w.z);
     var layerMeta = GENERIC[layerType];
     if (!canMineGeneric(layerType)) {
-      var layerNeed = layerMeta && layerMeta.bits ? layerMeta.bits : 0;
       var layerPick = ownedPickForGeneric(layerType);
       if (layerPick) toast(equipPickMessage(layerPick, 'ore in ' + layerMeta.name), '#a35a1a');
-      else toast(layerMeta.name + ' needs a pickaxe with bit-length ' + layerNeed + '+.', '#a35a1a');
+      else {
+        showTerrainHint(layerType);
+      }
       return;
     }
     if (!canMine(v) && !anyPickCanMine(v) && !hasCraftableRecipeFor(v) && !tutorialSeen('missing-ingredients') && !activeTut) {
+      showHint(v);
       startTutorial('missing-ingredients', { value: v });
       return;
     }
@@ -2093,18 +2130,42 @@
       showHint(v);
     }
   }
-  function recipePairs(v) {
+  function recipePairs(v, includeUnknown) {
     var pairs = [];
-    for (var a = 1; a <= Math.floor(v / 2); a++) {
+    var seen = {};
+    function addPair(a) {
+      a = Math.max(1, Math.floor(+a || 1));
       var b = v - a;
-      if (g.discovered[a] && g.discovered[b]) pairs.push([a, b]);
+      if (b < 1) return;
+      var lo = Math.min(a, b), hi = Math.max(a, b);
+      var k = lo + ':' + hi;
+      if (seen[k]) return;
+      if (includeUnknown || (g.discovered[lo] && g.discovered[hi])) {
+        seen[k] = true;
+        pairs.push([lo, hi]);
+      }
+    }
+    if (v <= 240) {
+      for (var a = 1; a <= Math.floor(v / 2); a++) addPair(a);
+    } else {
+      addPair(Math.floor(v / 2));
+      addPair(1);
+      addPair(2);
+      addPair(minPowerForBits(Math.max(1, bits(v) - 1)));
+      ownedValues().forEach(addPair);
+      Object.keys(g.discovered || {}).forEach(function (k) { addPair(+k); });
     }
     function craftable(p) {
       return (p[0] === p[1]) ? (g.inv[p[0]] || 0) >= 2 : have(p[0]) && have(p[1]);
     }
+    function known(p) {
+      return (g.discovered[p[0]] ? 1 : 0) + (g.discovered[p[1]] ? 1 : 0);
+    }
     pairs.sort(function (p, q) {
       var pc = craftable(p) ? 0 : 1, qc = craftable(q) ? 0 : 1;
       if (pc !== qc) return pc - qc;
+      var pk = known(p), qk = known(q);
+      if (pk !== qk) return qk - pk;
       return (q[0] * q[1]) - (p[0] * p[1]);
     });
     return { pairs: pairs, craftable: craftable };
@@ -2114,44 +2175,82 @@
     for (var i = 0; i < rp.pairs.length; i++) if (rp.craftable(rp.pairs[i])) return true;
     return false;
   }
-  function showHint(v) {
-    var el = G('bmg3-hint'); if (!el) return;
-    var wasOpen = isInventoryOpen();
-    var target = (v === 1) ? 2 : v;
-    var rp = recipePairs(target);
-    var list = rp.pairs.slice(0, 5).map(function (p) {
-      var ok = rp.craftable(p);
-      var info = pickInfoFor(p[0], p[1]);
-      return '<button class="bmg3-recipe" data-a="' + p[0] + '" data-b="' + p[1] + '" ' +
-        'style="display:block;width:100%;text-align:left;padding:5px 7px;margin-top:4px;border-radius:5px;cursor:pointer;' +
-        'border:1px solid ' + (ok ? '#16a34a' : '#334155') + ';background:' + (ok ? '#0f2417' : '#0f172a') + '">' +
-        '<span style="font-family:monospace;font-size:0.78rem;color:#e2e8f0">' +
-          binStr(p[0]) + ' + ' + binStr(p[1]) + '</span>' +
-        '<span style="display:block;font-size:0.68rem;color:' + (ok ? '#86efac' : '#64748b') + '">' +
-          esc(info.name) + (ok ? ' - you have both' : ' - need ' +
-            (have(p[0]) ? esc(elementName(p[1])) : esc(elementName(p[0])))) + '</span>' +
-      '</button>';
-    }).join('');
-    if (!list) list = '<div style="font-size:0.72rem;color:#64748b;margin-top:4px">No known pickaxe recipes yet - discover more elements by mining softer ore.</div>';
-    el.innerHTML =
-      '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#f87171;font-weight:700">Too tough</span>' +
-        '<button id="bmg3-hint-x" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:0.9rem">x</button>' +
-      '</div>' +
-      '<div style="font-size:0.78rem;color:#cbd5e1;margin:4px 0 2px">' +
-        'Craft and equip a pickaxe that can mine <b>' + esc(elementName(v)) + '</b>:' +
-      '</div>' + list +
-      '<div style="font-size:0.68rem;color:#64748b;margin-top:6px">Pick a recipe, work out the binary sum below, then select the pickaxe on the hotbar.</div>';
-    el.style.display = 'block';
-    if (!wasOpen) toast('Too tough - press E to craft a stronger pickaxe.', '#a35a1a');
-    G('bmg3-hint-x').onclick = clearHint;
-    Array.prototype.forEach.call(el.querySelectorAll('.bmg3-recipe'), function (btn) {
+  function missingForPair(p) {
+    if (p[0] === p[1]) {
+      var count = g.inv[p[0]] || 0;
+      return count >= 2 ? '' : (count === 1 ? 'need one more ' : 'need two ') + elementName(p[0]);
+    }
+    var missing = [];
+    if (!have(p[0])) missing.push(elementName(p[0]));
+    if (!have(p[1])) missing.push(elementName(p[1]));
+    return missing.length ? 'need ' + missing.join(' and ') : '';
+  }
+  function recipeButtonHTML(p, rp) {
+    var ok = rp.craftable(p);
+    var info = pickInfoFor(p[0], p[1]);
+    var missing = missingForPair(p);
+    return '<button class="bmg3-recipe" data-a="' + p[0] + '" data-b="' + p[1] + '" ' +
+      'style="display:block;width:100%;text-align:left;padding:6px 8px;margin-top:5px;border-radius:5px;cursor:pointer;' +
+      'border:1px solid ' + (ok ? '#16a34a' : '#334155') + ';background:' + (ok ? '#0f2417' : '#0f172a') + '">' +
+      '<span style="font-family:monospace;font-size:0.78rem;color:#e2e8f0">' +
+        esc(elementName(p[0])) + ' + ' + esc(elementName(p[1])) +
+        ' <span style="color:#94a3b8">(' + binStr(p[0]) + ' + ' + binStr(p[1]) + ' = ' + binStr(p[0] + p[1]) + ')</span></span>' +
+      '<span style="display:block;font-size:0.68rem;color:' + (ok ? '#86efac' : '#94a3b8') + '">' +
+        esc(info.name) + (ok ? ' - you have both' : ' - ' + esc(missing || 'not discovered yet')) + '</span>' +
+    '</button>';
+  }
+  function wireHintRecipeButtons(el) {
+    var buttons = el.querySelectorAll('.bmg3-recipe');
+    Array.prototype.forEach.call(buttons, function (btn) {
       btn.onclick = function () {
         g.slotA = +btn.dataset.a; g.slotB = +btn.dataset.b; g.craftGuess = null; g.craftCarry = null;
         renderCraft();
         var sa = G('bmg3-slotA'); if (sa) sa.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
     });
+  }
+  function showPickPowerHint(power, title, message, footer) {
+    var el = G('bmg3-hint'); if (!el) return;
+    var wasOpen = isInventoryOpen();
+    var rp = recipePairs(power, true);
+    var firstPair = rp.pairs[0] || null;
+    var list = rp.pairs.slice(0, 6).map(function (p) { return recipeButtonHTML(p, rp); }).join('');
+    if (!list) list = '<div style="font-size:0.72rem;color:#94a3b8;margin-top:4px">No recipe could be generated for this target yet.</div>';
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#f87171;font-weight:700">Too tough</span>' +
+        '<button id="bmg3-hint-x" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:0.9rem">x</button>' +
+      '</div>' +
+      '<div style="font-size:0.78rem;color:#cbd5e1;margin:4px 0 2px">' +
+        '<b>' + esc(title) + '</b><br>' + message +
+      '</div>' + list +
+      '<div style="font-size:0.68rem;color:#94a3b8;margin-top:6px">' + footer + '</div>';
+    el.style.display = 'block';
+    if (!wasOpen) {
+      toast(firstPair
+        ? 'Too tough - combine ' + elementSymbol(firstPair[0]) + ' + ' + elementSymbol(firstPair[1]) + '. Press E.'
+        : 'Too tough - press E to craft a stronger pickaxe.', '#a35a1a');
+    }
+    G('bmg3-hint-x').onclick = clearHint;
+    wireHintRecipeButtons(el);
+  }
+  function showHint(v) {
+    var exactPower = (v === 1) ? 2 : v;
+    var minBits = minPickBitsForElement(v);
+    var brutePower = minPowerForBits(minBits);
+    var message =
+      'To break <b>' + esc(elementName(v)) + '</b>, craft a pickaxe with power <b>' + exactPower + '</b> using two elements that add to it.' +
+      '<br><span style="color:#94a3b8">A larger shortcut also works: any <b>' + minBits + '-bit</b> pickaxe or better can mine this because a pickaxe mines elements up to <b>its bit-length - ' + BRUTE_BITS + '</b>.</span>';
+    var footer = 'The recipes above make the exact pickaxe. As a shortcut, a ' + minBits + '-bit pickaxe starts at power ' + brutePower + ' (' + binStr(brutePower) + '). Work out the binary sum, then equip the pickaxe.';
+    showPickPowerHint(exactPower, 'Craft the right pickaxe', message, footer);
+  }
+  function showTerrainHint(type) {
+    var meta = GENERIC[type]; if (!meta) return;
+    var need = meta.bits || 0;
+    var target = minPowerForBits(need);
+    var message = '<b>' + esc(meta.name) + '</b> needs a pickaxe with at least <b>' + need + ' bits</b>. Combine two elements to make any pickaxe that reaches that bit-length.';
+    var footer = 'A ' + need + '-bit pickaxe starts at power ' + target + ' (' + binStr(target) + '). Work out the binary sum, then equip it on the hotbar.';
+    showPickPowerHint(target, 'Craft a pickaxe for ' + meta.name, message, footer);
   }
   function clearHint() { var el = G('bmg3-hint'); if (el) { el.style.display = 'none'; el.innerHTML = ''; } }
 
@@ -2746,11 +2845,16 @@
     }
     if (id === 'missing-ingredients') {
       var mv = (ctx && ctx.value) || 1;
+      var targetPower = (mv === 1) ? 2 : mv;
+      var rp = recipePairs(targetPower, true);
+      var p = rp.pairs[0] || [1, Math.max(1, targetPower - 1)];
+      var minBits = minPickBitsForElement(mv);
       return [
         { title: 'Not the right ingredients', final: true,
           html: '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' + tutElTile(mv) +
             '<div>This ore is <b>' + esc(elementName(mv)) + '</b> (<code>' + binStr(mv) + '</code>), but you do not have the right element values to craft a pickaxe for it yet.</div></div>' +
-            'Leave this one for now and look for other, softer elements first. Each new element gives you more possible binary sums for stronger pickaxes.' }
+            'A matching pickaxe could be made from <b>' + esc(elementName(p[0])) + '</b> + <b>' + esc(elementName(p[1])) + '</b>. ' +
+            'A stronger shortcut also works: any <b>' + minBits + '-bit</b> pickaxe or better can mine it. If you do not have those ingredients yet, look for softer elements first.' }
       ];
     }
     if (id === 'shop-after-sale') {
