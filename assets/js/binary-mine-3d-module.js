@@ -1427,6 +1427,49 @@
     });
   }
 
+  function cleanupBinaryMine3D() {
+    if (window._bmg3LbTimer) { clearInterval(window._bmg3LbTimer); window._bmg3LbTimer = null; }
+    if (window._bmg3FsResize) {
+      try { document.removeEventListener('fullscreenchange', window._bmg3FsResize); } catch (e) {}
+      window._bmg3FsResize = null;
+    }
+    try {
+      var fs = document.fullscreenElement;
+      if (fs && (fs.id === 'bmg3-gamebox' || (fs.closest && fs.closest('.bmg3-wrap')))) {
+        document.exitFullscreen();
+      }
+    } catch (e) {}
+    suppressPauseOnUnlock = true;
+    teardownInput();
+    if (controls) {
+      try { if (controls.isLocked) controls.unlock(); } catch (e) {}
+      try { controls.dispose && controls.dispose(); } catch (e) {}
+      controls = null;
+    }
+    if (renderer) {
+      try { renderer.setAnimationLoop(null); } catch (e) {}
+      try { renderer.dispose(); } catch (e) {}
+      try {
+        if (renderer.domElement && renderer.domElement.parentNode) {
+          renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+      } catch (e) {}
+      renderer = null;
+    }
+    if (resizeObs) { try { resizeObs.disconnect(); } catch (e) {} resizeObs = null; }
+    if (heldPickGroup) {
+      try { if (camera) camera.remove(heldPickGroup); } catch (e) {}
+      disposeHeldPickaxe(heldPickGroup);
+    }
+    disposeLabels();
+    activeTut = null;
+    TUT_HIGHLIGHTS = [];
+    scene = null; camera = null; worldGroup = null; raycaster = null;
+    canvasWrap = null; player = null; keys = null; heldPickGroup = null;
+    heldPickSel = null; heldPickSwingStart = 0; inputHandlers = null;
+    document.body.style.overflow = '';
+  }
+
   // Highest solid surface (incl. bedrock) in the column under (px,pz).
   function surfaceTop(px, pz) {
     var ix = Math.round(px), iz = Math.round(pz);
@@ -1666,6 +1709,7 @@
     function resetKeys() { resetMovementKeys(); }
     function key(down) {
       return function (e) {
+        if (!canvasWrap || !canvasWrap.isConnected) { teardownInput(); return; }
         if (down && e.code === 'Escape' && !e.repeat) {
           if (G('bmg3-shop') || G('bmg3-journal') || G('bmg3-drive') || G('bmg3-gameover')) return;
           if (activeTut) {
@@ -1728,6 +1772,7 @@
     var kd = key(true), ku = key(false);
     function tryLock() { if (controls && !controls.isLocked) { try { controls.lock(); } catch (e) {} } }
     function onMouseDown(e) {
+      if (!canvasWrap || !canvasWrap.isConnected) { teardownInput(); return; }
       if (!controls) return;
       if (activeTut) return;      // tutorial owns the cursor; interact via its card / inventory
       if (isPauseOpen()) return;
@@ -1736,13 +1781,18 @@
       if (e.button === 0) { triggerHeldPickSwing(); fpsAction('mine'); }
       else if (e.button === 2) toast('Building is turned off for this lesson.', '#7a5a10');
     }
-    function onContext(e) { e.preventDefault(); }
+    function onContext(e) {
+      if (!canvasWrap || !canvasWrap.isConnected) { teardownInput(); return; }
+      e.preventDefault();
+    }
     function onDoubleClick(e) {
+      if (!canvasWrap || !canvasWrap.isConnected) { teardownInput(); return; }
       e.preventDefault();
       e.stopPropagation();
       if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     }
     function onWheel(e) {
+      if (!canvasWrap || !canvasWrap.isConnected) { teardownInput(); return; }
       if (!(controls && controls.isLocked)) return;
       e.preventDefault();
       var delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
@@ -2945,8 +2995,12 @@
   }
 
   // ── Mount ──────────────────────────────────────────────────────
+  window.cleanupBinaryMine3D = cleanupBinaryMine3D;
+
   window.initBinaryMine3D = function (containerId) {
     var wrap = G(containerId); if (!wrap) return;
+    cleanupBinaryMine3D();
+    if (window.__registerLessonCleanup) window.__registerLessonCleanup(cleanupBinaryMine3D);
     injectStyle();
     activeTut = null; TUT_HIGHLIGHTS = [];
 
@@ -3148,6 +3202,7 @@
 
     // Load Three.js on demand, then build the voxel world.
     loadThree().then(function (mods) {
+      if (!G('bmg3-canvas')) return;
       THREE = mods.THREE; PointerLockControls = mods.PointerLockControls;
       initScene();
       rebuildWorld();

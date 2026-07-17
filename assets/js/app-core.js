@@ -41,7 +41,53 @@ var state = {
     }
   })(),
   nameMap: (function(){ try { return JSON.parse(localStorage.getItem('pylearn_name_map')) || {}; } catch(e) { return {}; } })(),
+  lessonCleanupFns: [],
 };
+
+function registerLessonCleanup(fn) {
+  if (typeof fn !== 'function') return;
+  if (!state.lessonCleanupFns) state.lessonCleanupFns = [];
+  if (state.lessonCleanupFns.indexOf(fn) === -1) state.lessonCleanupFns.push(fn);
+}
+
+function removeGlobalHandler(name, target, eventName) {
+  var fn = window[name];
+  if (typeof fn !== 'function') return;
+  try { target.removeEventListener(eventName, fn); } catch (e) {}
+  window[name] = null;
+}
+
+function runLessonCleanups() {
+  var fns = state.lessonCleanupFns || [];
+  state.lessonCleanupFns = [];
+  fns.forEach(function(fn) {
+    try { fn(); } catch (e) { console.warn('[lesson cleanup]', e); }
+  });
+
+  if (window.cleanupBinaryMine3D) {
+    try { window.cleanupBinaryMine3D(); } catch (e) { console.warn('[binary mine cleanup]', e); }
+  }
+  if (window._bmg3LbTimer) { clearInterval(window._bmg3LbTimer); window._bmg3LbTimer = null; }
+  if (window._y7LoadPoll) { clearInterval(window._y7LoadPoll); window._y7LoadPoll = null; }
+  if (window._y7LoadTimeout) { clearTimeout(window._y7LoadTimeout); window._y7LoadTimeout = null; }
+
+  [
+    ['_y7r', window, 'resize'], ['_y7k', document, 'keydown'],
+    ['_y7Resize', window, 'resize'], ['_y7Key', document, 'keydown'],
+    ['_sfR', window, 'resize'], ['_sfK', document, 'keydown'],
+    ['_psR', window, 'resize'], ['_psK', document, 'keydown'],
+    ['_bbR', window, 'resize'], ['_bbK', document, 'keydown'],
+    ['_bmg3FsResize', document, 'fullscreenchange']
+  ].forEach(function(item) { removeGlobalHandler(item[0], item[1], item[2]); });
+
+  try {
+    if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+  } catch (e) {}
+  document.body.style.overflow = '';
+}
+
+window.__registerLessonCleanup = registerLessonCleanup;
+window.__runLessonCleanups = runLessonCleanups;
 
 // ── Utilities ────────────────────────────────────────────────
 // ── Word bank for memorable codes ─────────────────────────────
@@ -551,6 +597,8 @@ function applyHashToCurrentCourse(parsed) {
 }
 
 async function loadStep(lessonIdx, stepIdx) {
+  runLessonCleanups();
+
   state.currentLessonIdx = lessonIdx;
   state.currentStepIdx   = stepIdx;
   renderStepBar();

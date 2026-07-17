@@ -619,6 +619,7 @@ function normaliseScratchCheckAlternatives(checkAlternatives) {
 }
 
 function showQuizHostScreen() {
+  if (window.__runLessonCleanups) window.__runLessonCleanups();
   document.getElementById('quiz-host-screen').classList.remove('hidden');
   document.getElementById('qh-lobby-code').textContent = quiz.lobbyCode;
   document.getElementById('qh-lobby-code-big').textContent = quiz.lobbyCode;

@@ -168,6 +168,11 @@
     }
     function keyHandler(e) {
       if (!document.body.contains(el)) { document.removeEventListener('keydown', keyHandler); return; }
+      var target = e.target;
+      var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (target && target.isContentEditable)) return;
+      var quizScreen = document.getElementById('quiz-student-screen');
+      if (quizScreen && !quizScreen.classList.contains('hidden') && !quizScreen.contains(el)) return;
       if (e.key === '0' || e.key === '1') { e.preventDefault(); pushBit(e.key); }
       else if (e.key === 'Backspace') { e.preventDefault(); buffer = buffer.slice(0, -1); renderBinary(); }
     }
@@ -463,6 +468,7 @@
       }
     };
     el._tshirt = api;
+    if (window.__registerLessonCleanup) window.__registerLessonCleanup(api.destroy);
     return api;
   };
 

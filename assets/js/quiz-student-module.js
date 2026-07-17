@@ -173,6 +173,7 @@ function showQuizDisplacedMessage() {
 
 
 function showStudentScreen(lobbyCode, questions, opts) {
+  if (window.__runLessonCleanups) window.__runLessonCleanups();
   opts = opts || {};
   quiz.questions = questions;
   quiz.forced = !!opts.forced;
